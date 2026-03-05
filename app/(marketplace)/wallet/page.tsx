@@ -32,6 +32,7 @@ interface User {
   phone: string
   email?: string
   hasFaceId: boolean
+  hasWithdrawalPin: boolean
 }
 
 interface Bank {
@@ -135,6 +136,9 @@ const TX_LABEL: Record<string, { label: string; color: string; bg: string; sign:
   ESCROW:     { label: 'Escrow',     color: 'text-amber-700',   bg: 'bg-amber-50',    sign: '' },
 }
 
+// ── Auth method for current withdrawal attempt ────────────────────────────────
+type AuthMethod = 'face' | 'pin'
+
 export default function WalletPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -143,6 +147,7 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true)
   const [withdrawing, setWithdrawing] = useState(false)
 
+  // ── Withdraw form state ───────────────────────────────────────────────────
   const [showWithdrawModal, setShowWithdrawModal] = useState(false)
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
@@ -152,17 +157,34 @@ export default function WalletPage() {
   const [showBankDropdown, setShowBankDropdown] = useState(false)
   const bankRef = useRef<HTMLDivElement>(null)
 
+  // ── Face verification state ───────────────────────────────────────────────
   const [showFaceVerify, setShowFaceVerify] = useState(false)
   const [faceError, setFaceError] = useState('')
   const [pendingWithdrawal, setPendingWithdrawal] = useState<{
     amount: number; accountNumber: string; accountName: string; bankCode: string
   } | null>(null)
 
+  // ── Face registration state ───────────────────────────────────────────────
   const [showFaceIdRequired, setShowFaceIdRequired] = useState(false)
   const [showFaceRegister, setShowFaceRegister] = useState(false)
   const [faceRegisterLoading, setFaceRegisterLoading] = useState(false)
   const [faceRegisterError, setFaceRegisterError] = useState('')
   const [faceRegisterSuccess, setFaceRegisterSuccess] = useState(false)
+
+  // ── PIN state ─────────────────────────────────────────────────────────────
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('face')
+  const [showPinEntry, setShowPinEntry] = useState(false)
+  const [pinValue, setPinValue] = useState('')
+  const [pinError, setPinError] = useState('')
+  const [pinLoading, setPinLoading] = useState(false)
+
+  // ── Set PIN modal state ───────────────────────────────────────────────────
+  const [showSetPin, setShowSetPin] = useState(false)
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [setPinLoading, setSetPinLoading] = useState(false)
+  const [setPinError, setSetPinError] = useState('')
+  const [setPinSuccess, setSetPinSuccess] = useState(false)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -206,28 +228,31 @@ export default function WalletPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        // Sync local user state so hasFaceId is always fresh
         setUser(data.user)
 
         if (!data.user.hasFaceId) {
-          // No face saved → show registration flow first, don't open withdraw modal
-          setFaceRegisterSuccess(false)
-          setFaceRegisterError('')
-          setShowFaceIdRequired(true)
-          return
+          // No face AND no PIN → must register face first
+          if (!data.user.hasWithdrawalPin) {
+            setFaceRegisterSuccess(false)
+            setFaceRegisterError('')
+            setShowFaceIdRequired(true)
+            return
+          }
+          // Has PIN but no face → can still proceed, will use PIN
         }
       }
     } catch {
-      // Network hiccup — fall through; backend will reject if face is truly missing
+      // Network hiccup — fall through
     }
 
-    // Face confirmed (or check failed gracefully) → open withdraw form
     setWithdrawAmount('')
     setAccountNumber('')
     setAccountName('')
     setSelectedBank(NIGERIAN_BANKS[0])
     setBankSearch('')
     setFaceError('')
+    setPinError('')
+    setAuthMethod('face')
     setShowWithdrawModal(true)
   }
 
@@ -239,12 +264,23 @@ export default function WalletPage() {
     if (!accountNumber || !accountName) { alert('Please fill all fields'); return }
     setPendingWithdrawal({ amount, accountNumber, accountName, bankCode: selectedBank.code })
     setFaceError('')
-    setShowFaceVerify(true)
+    setPinError('')
+
+    if (authMethod === 'pin') {
+      setPinValue('')
+      setShowPinEntry(true)
+    } else {
+      setShowFaceVerify(true)
+    }
   }
 
+  // ── Face verified successfully ────────────────────────────────────────────
   const handleFaceVerified = async (descriptor?: Float32Array) => {
     setShowFaceVerify(false)
-    if (!descriptor) { setFaceError('Could not capture face. Please try again.'); return }
+    if (!descriptor) {
+      setFaceError('Could not capture face. Please try again.')
+      return
+    }
     try {
       const token = localStorage.getItem('token')
       const vr = await fetch('/api/auth/verify-face', {
@@ -253,11 +289,69 @@ export default function WalletPage() {
         body: JSON.stringify({ descriptor: Array.from(descriptor) }),
       })
       const vd = await vr.json()
-      if (!vr.ok) { setFaceError(vd.error || 'Face verification failed.'); setPendingWithdrawal(null); return }
+      if (!vr.ok) {
+        setFaceError(vd.error || 'Face verification failed.')
+        setPendingWithdrawal(null)
+        return
+      }
+      // ✅ Face passed — prompt to set PIN if they don't have one yet
+      if (!user?.hasWithdrawalPin) {
+        setShowWithdrawModal(false)
+        setShowSetPin(true)
+        // Execute withdrawal in parallel — don't block on PIN setup
+        executeWithdrawal()
+        return
+      }
       await executeWithdrawal()
-    } catch { setFaceError('Verification error. Please try again.'); setPendingWithdrawal(null) }
+    } catch {
+      setFaceError('Verification error. Please try again.')
+      setPendingWithdrawal(null)
+    }
   }
 
+  // ── Face failed — offer PIN fallback ─────────────────────────────────────
+  const handleFaceCancelled = () => {
+    setShowFaceVerify(false)
+    if (user?.hasWithdrawalPin) {
+      // Offer PIN as fallback
+      setFaceError('')
+      setAuthMethod('pin')
+      setPinValue('')
+      setShowPinEntry(true)
+    } else {
+      setPendingWithdrawal(null)
+      setFaceError('Verification cancelled. Please try again.')
+    }
+  }
+
+  // ── PIN entry submitted ───────────────────────────────────────────────────
+  const handlePinSubmit = async () => {
+    if (pinValue.length !== 6) { setPinError('Enter your 6-digit PIN'); return }
+    setPinLoading(true)
+    setPinError('')
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/wallet/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pin: pinValue }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setPinError(data.error || 'Incorrect PIN')
+        setPinValue('')
+        return
+      }
+      setShowPinEntry(false)
+      await executeWithdrawal()
+    } catch {
+      setPinError('Network error. Please try again.')
+    } finally {
+      setPinLoading(false)
+    }
+  }
+
+  // ── Execute the actual withdrawal ─────────────────────────────────────────
   const executeWithdrawal = async () => {
     if (!pendingWithdrawal) return
     setWithdrawing(true)
@@ -270,8 +364,6 @@ export default function WalletPage() {
       })
       const d = await r.json()
 
-      // Safety-net: backend still returned FACE_ID_REQUIRED (should not happen now
-      // but handled defensively)
       if (!r.ok && d.error === 'FACE_ID_REQUIRED') {
         setShowWithdrawModal(false)
         setPendingWithdrawal(null)
@@ -283,6 +375,7 @@ export default function WalletPage() {
 
       if (r.ok) {
         setShowWithdrawModal(false)
+        setShowSetPin(false)
         setPendingWithdrawal(null)
         fetchWalletData()
         alert(`Withdrawal of ₦${pendingWithdrawal.amount.toLocaleString()} initiated.\nReference: ${d.reference}`)
@@ -294,6 +387,7 @@ export default function WalletPage() {
     finally { setWithdrawing(false) }
   }
 
+  // ── Face registration ─────────────────────────────────────────────────────
   const handleFaceRegisterSuccess = async (descriptor?: Float32Array) => {
     setShowFaceRegister(false)
     if (!descriptor) {
@@ -312,8 +406,6 @@ export default function WalletPage() {
       const data = await res.json()
       if (res.ok) {
         setFaceRegisterSuccess(true)
-        // ✅ Update local user state immediately so openWithdrawModal sees
-        // hasFaceId = true on the very next "Continue to Withdraw" click
         setUser(prev => prev ? { ...prev, hasFaceId: true } : prev)
       } else {
         setFaceRegisterError(data.error || 'Failed to save face data. Please try again.')
@@ -322,6 +414,39 @@ export default function WalletPage() {
       setFaceRegisterError('Network error. Please try again.')
     } finally {
       setFaceRegisterLoading(false)
+    }
+  }
+
+  // ── Set PIN submit ────────────────────────────────────────────────────────
+  const handleSetPinSubmit = async () => {
+    if (!/^\d{6}$/.test(newPin)) { setSetPinError('PIN must be exactly 6 digits'); return }
+    if (newPin !== confirmPin) { setSetPinError('PINs do not match'); return }
+    setSetPinLoading(true)
+    setSetPinError('')
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/wallet/set-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pin: newPin }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSetPinSuccess(true)
+        setUser(prev => prev ? { ...prev, hasWithdrawalPin: true } : prev)
+        setTimeout(() => {
+          setShowSetPin(false)
+          setSetPinSuccess(false)
+          setNewPin('')
+          setConfirmPin('')
+        }, 2000)
+      } else {
+        setSetPinError(data.error || 'Failed to set PIN')
+      }
+    } catch {
+      setSetPinError('Network error. Please try again.')
+    } finally {
+      setSetPinLoading(false)
     }
   }
 
@@ -364,15 +489,27 @@ export default function WalletPage() {
             </div>
             <h1 className="text-xl font-semibold text-gray-900">Wallet & Payouts</h1>
           </div>
-          <button
-            onClick={openWithdrawModal}
-            className="inline-flex items-center gap-2 bg-bata-primary hover:bg-bata-dark text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9l-5 5-5-5" />
-            </svg>
-            Withdraw Funds
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Set / Change PIN shortcut */}
+            <button
+              onClick={() => { setNewPin(''); setConfirmPin(''); setSetPinError(''); setSetPinSuccess(false); setShowSetPin(true) }}
+              className="inline-flex items-center gap-2 border border-gray-300 text-gray-600 hover:border-bata-primary hover:text-bata-primary text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              {user.hasWithdrawalPin ? 'Change PIN' : 'Set PIN'}
+            </button>
+            <button
+              onClick={openWithdrawModal}
+              className="inline-flex items-center gap-2 bg-bata-primary hover:bg-bata-dark text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9l-5 5-5-5" />
+              </svg>
+              Withdraw Funds
+            </button>
+          </div>
         </div>
       </div>
 
@@ -380,7 +517,6 @@ export default function WalletPage() {
 
         {/* Balance cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Available Balance</p>
             <p className="text-3xl font-bold text-gray-900 tabular-nums">
@@ -428,6 +564,15 @@ export default function WalletPage() {
                 <span className="text-sm font-bold text-gray-900">{wallet.completedOrders}</span>
               </div>
             </div>
+            {/* Security status pills */}
+            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${user.hasFaceId ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                {user.hasFaceId ? '✓' : '✗'} Face ID
+              </span>
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${user.hasWithdrawalPin ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                {user.hasWithdrawalPin ? '✓' : '!'} PIN
+              </span>
+            </div>
           </div>
         </div>
 
@@ -458,7 +603,6 @@ export default function WalletPage() {
                 <div className="col-span-2">Date</div>
                 <div className="col-span-3 text-right">Amount</div>
               </div>
-
               {transactions.map((tx) => {
                 const meta = TX_LABEL[tx.type] || TX_LABEL.CREDIT
                 return (
@@ -501,7 +645,6 @@ export default function WalletPage() {
       {showWithdrawModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
-
             <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Withdraw Funds</h3>
@@ -509,11 +652,11 @@ export default function WalletPage() {
                   <svg className="w-3 h-3 text-bata-primary" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
                   </svg>
-                  Face verification required to authorise
+                  Identity verification required
                 </p>
               </div>
               <button
-                onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setFaceError('') }}
+                onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setFaceError(''); setPinError('') }}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -523,6 +666,7 @@ export default function WalletPage() {
             </div>
 
             <div className="px-6 py-5">
+              {/* Face error with PIN fallback option */}
               {faceError && (
                 <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-5 text-sm">
                   <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -530,18 +674,55 @@ export default function WalletPage() {
                   </svg>
                   <div>
                     <p className="text-red-700 font-medium">{faceError}</p>
-                    <button
-                      onClick={() => { setFaceError(''); if (pendingWithdrawal) setShowFaceVerify(true) }}
-                      className="text-red-600 underline text-xs mt-1"
-                    >
-                      Try face scan again
-                    </button>
+                    <div className="flex gap-3 mt-1.5">
+                      <button
+                        onClick={() => { setFaceError(''); if (pendingWithdrawal) setShowFaceVerify(true) }}
+                        className="text-red-600 underline text-xs"
+                      >
+                        Try face scan again
+                      </button>
+                      {user.hasWithdrawalPin && (
+                        <button
+                          onClick={() => { setFaceError(''); setAuthMethod('pin'); setPinValue(''); setShowPinEntry(true) }}
+                          className="text-bata-primary underline text-xs font-semibold"
+                        >
+                          Use PIN instead
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
-              <form onSubmit={handleWithdrawSubmit} className="space-y-5">
+              {/* Auth method toggle — only show if user has PIN */}
+              {user.hasWithdrawalPin && (
+                <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-5">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMethod('face')}
+                    className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition ${
+                      authMethod === 'face'
+                        ? 'bg-bata-primary text-white'
+                        : 'bg-white text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span>👤</span> Face ID
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMethod('pin')}
+                    className={`flex-1 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition ${
+                      authMethod === 'pin'
+                        ? 'bg-bata-primary text-white'
+                        : 'bg-white text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span>🔢</span> PIN
+                  </button>
+                </div>
+              )}
 
+              <form onSubmit={handleWithdrawSubmit} className="space-y-5">
                 {/* Amount */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -577,7 +758,6 @@ export default function WalletPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Bank <span className="text-gray-400 font-normal">({NIGERIAN_BANKS.length} supported)</span>
                   </label>
-
                   {!showBankDropdown ? (
                     <button
                       type="button"
@@ -599,14 +779,14 @@ export default function WalletPage() {
                           type="text"
                           value={bankSearch}
                           onChange={(e) => setBankSearch(e.target.value)}
-                          placeholder="Search bank (e.g. opay, kuda, zenith...)"
+                          placeholder="Search bank..."
                           className="w-full pl-10 pr-4 py-3 border-2 border-bata-primary rounded-lg text-sm focus:outline-none"
                           autoFocus
                         />
                       </div>
                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
                         {filteredBanks.length === 0 ? (
-                          <p className="text-center text-gray-400 py-5 text-sm">No bank found for "{bankSearch}"</p>
+                          <p className="text-center text-gray-400 py-5 text-sm">No bank found</p>
                         ) : (
                           filteredBanks.map((bank) => (
                             <button
@@ -627,9 +807,6 @@ export default function WalletPage() {
                           ))
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-1.5">
-                        {filteredBanks.length} result{filteredBanks.length !== 1 ? 's' : ''}
-                      </p>
                     </div>
                   )}
                 </div>
@@ -693,14 +870,17 @@ export default function WalletPage() {
                   <svg className="w-4 h-4 flex-shrink-0 mt-0.5 text-bata-primary" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
                   </svg>
-                  <span>A face scan is required to authorise this withdrawal. You'll complete it in the next step.</span>
+                  <span>
+                    {authMethod === 'pin'
+                      ? 'Your 6-digit PIN will be required to authorise this withdrawal.'
+                      : 'A face scan will be required to authorise this withdrawal.'}
+                  </span>
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setFaceError('') }}
+                    onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setFaceError(''); setPinError('') }}
                     className="flex-1 py-3 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
                   >
                     Cancel
@@ -720,7 +900,7 @@ export default function WalletPage() {
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
                         </svg>
-                        Continue to Face Scan
+                        {authMethod === 'pin' ? 'Continue to PIN' : 'Continue to Face Scan'}
                       </>
                     )}
                   </button>
@@ -731,11 +911,157 @@ export default function WalletPage() {
         </div>
       )}
 
+      {/* ── PIN Entry Modal ── */}
+      {showPinEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-gradient-to-br from-bata-primary to-bata-dark px-6 py-8 text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">🔢</span>
+              </div>
+              <h3 className="text-xl font-bold text-white">Enter Withdrawal PIN</h3>
+              <p className="text-white/70 text-sm mt-1">Enter your 6-digit PIN to authorise</p>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              {/* PIN dots display */}
+              <div className="flex justify-center gap-3 mb-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-4 h-4 rounded-full border-2 transition-all ${
+                      i < pinValue.length
+                        ? 'bg-bata-primary border-bata-primary'
+                        : 'border-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={pinValue}
+                onChange={e => setPinValue(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-bata-primary focus:outline-none"
+                placeholder="••••••"
+                autoFocus
+              />
+              {pinError && (
+                <p className="text-sm text-red-600 text-center font-medium">{pinError}</p>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => { setShowPinEntry(false); setPinValue(''); setPinError(''); setPendingWithdrawal(null) }}
+                  className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePinSubmit}
+                  disabled={pinLoading || pinValue.length !== 6}
+                  className="flex-1 py-3 bg-bata-primary hover:bg-bata-dark text-white rounded-xl text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {pinLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : 'Confirm'}
+                </button>
+              </div>
+              {/* Switch to face */}
+              {user.hasFaceId && (
+                <button
+                  onClick={() => { setShowPinEntry(false); setPinValue(''); setAuthMethod('face'); setShowFaceVerify(true) }}
+                  className="w-full text-sm text-gray-400 hover:text-bata-primary transition text-center"
+                >
+                  Use Face ID instead →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Set / Change PIN Modal ── */}
+      {showSetPin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 px-6 py-8 text-center">
+              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">🔐</span>
+              </div>
+              <h3 className="text-xl font-bold text-white">
+                {user.hasWithdrawalPin ? 'Change Withdrawal PIN' : 'Set Withdrawal PIN'}
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">A 6-digit backup for when Face ID fails</p>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              {setPinSuccess ? (
+                <div className="text-center space-y-3 py-2">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                    <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+                    </svg>
+                  </div>
+                  <p className="font-bold text-gray-900">PIN {user.hasWithdrawalPin ? 'Updated' : 'Set'}!</p>
+                  <p className="text-sm text-gray-500">You can now use your PIN as a backup for withdrawals.</p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">New PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={newPin}
+                      onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-bata-primary focus:outline-none"
+                      placeholder="••••••"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={confirmPin}
+                      onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-bata-primary focus:outline-none"
+                      placeholder="••••••"
+                    />
+                  </div>
+                  {setPinError && (
+                    <p className="text-sm text-red-600 font-medium">{setPinError}</p>
+                  )}
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      onClick={() => { setShowSetPin(false); setNewPin(''); setConfirmPin(''); setSetPinError('') }}
+                      className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+                    >
+                      {pendingWithdrawal ? 'Skip for now' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={handleSetPinSubmit}
+                      disabled={setPinLoading || newPin.length !== 6 || confirmPin.length !== 6}
+                      className="flex-1 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center"
+                    >
+                      {setPinLoading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : 'Save PIN'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Face ID Required Modal ── */}
       {showFaceIdRequired && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-
             <div className="bg-gradient-to-br from-indigo-500 to-purple-600 px-6 py-8 text-center">
               <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-4xl">🔐</span>
@@ -743,7 +1069,6 @@ export default function WalletPage() {
               <h3 className="text-xl font-bold text-white">Face ID Required</h3>
               <p className="text-indigo-100 text-sm mt-1">Secure your withdrawals with Face ID</p>
             </div>
-
             <div className="px-6 py-6 space-y-4">
               {faceRegisterSuccess ? (
                 <div className="text-center space-y-4">
@@ -768,29 +1093,20 @@ export default function WalletPage() {
                   <p className="text-gray-600 text-sm text-center">
                     To protect your earnings, BATA requires a one-time Face ID registration before you can withdraw funds.
                   </p>
-
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 space-y-2">
                     <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">What you'll do:</p>
-                    {[
-                      'Look straight at the camera',
-                      'Turn your head right',
-                      'Turn your head left',
-                    ].map((step, i) => (
+                    {['Look straight at the camera', 'Turn your head right', 'Turn your head left'].map((step, i) => (
                       <div key={i} className="flex items-center gap-2.5">
-                        <span className="w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center text-indigo-800 font-bold text-xs flex-shrink-0">
-                          {i + 1}
-                        </span>
+                        <span className="w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center text-indigo-800 font-bold text-xs flex-shrink-0">{i + 1}</span>
                         <span className="text-sm text-indigo-800">{step}</span>
                       </div>
                     ))}
                   </div>
-
                   {faceRegisterError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
                       {faceRegisterError}
                     </div>
                   )}
-
                   {faceRegisterLoading ? (
                     <div className="flex items-center justify-center gap-3 py-2">
                       <div className="w-5 h-5 border-2 border-bata-primary border-t-transparent rounded-full animate-spin" />
@@ -802,13 +1118,9 @@ export default function WalletPage() {
                         onClick={() => { setFaceRegisterError(''); setShowFaceRegister(true) }}
                         className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2"
                       >
-                        <span>📸</span>
-                        Register Face ID Now
+                        <span>📸</span> Register Face ID Now
                       </button>
-                      <button
-                        onClick={closeFaceIdRequiredModal}
-                        className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition"
-                      >
+                      <button onClick={closeFaceIdRequiredModal} className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition">
                         Cancel
                       </button>
                     </div>
@@ -827,11 +1139,7 @@ export default function WalletPage() {
           title="Verify Your Identity"
           subtitle="Complete the 3 checks to authorise this withdrawal"
           onSuccess={handleFaceVerified}
-          onCancel={() => {
-            setShowFaceVerify(false)
-            setPendingWithdrawal(null)
-            setFaceError('Verification cancelled. Please try again.')
-          }}
+          onCancel={handleFaceCancelled}
         />
       )}
 

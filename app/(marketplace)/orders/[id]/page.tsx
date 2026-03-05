@@ -29,20 +29,49 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+// ── Statuses where the order is still actively moving ─────────────────────────
+const ACTIVE_STATUSES = [
+  'PENDING',
+  'PROCESSING',
+  'SHIPPED',
+  'RIDER_ASSIGNED',
+  'PICKED_UP',
+  'ON_THE_WAY',
+]
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
   const [reviewModal, setReviewModal] = useState<{
     isOpen: boolean;
     type: 'SELLER' | 'RIDER' | 'PRODUCT' | null;
   }>({ isOpen: false, type: null });
 
+  // ── Initial fetch ──────────────────────────────────────────────────────────
   useEffect(() => {
     fetchOrder();
   }, [params.id]);
+
+  // ── Polling: auto-refresh every 10s while order is in an active status ─────
+  useEffect(() => {
+    if (!order) return;
+
+    if (!ACTIVE_STATUSES.includes(order.status)) {
+      setIsPolling(false);
+      return;
+    }
+
+    setIsPolling(true);
+    const interval = setInterval(() => {
+      fetchOrder();
+    }, 10000); // every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [order?.status]);
 
   const fetchOrder = async () => {
     try {
@@ -105,35 +134,33 @@ export default function OrderDetailPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'PENDING':
-        return <Clock className="w-5 h-5 text-yellow-500" />;
-      case 'PROCESSING':
-        return <Package className="w-5 h-5 text-blue-500" />;
-      case 'SHIPPED':
-        return <Truck className="w-5 h-5 text-purple-500" />;
-      case 'DELIVERED':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'CANCELLED':
-        return <XCircle className="w-5 h-5 text-red-500" />;
-      default:
-        return <Clock className="w-5 h-5 text-gray-500" />;
+      case 'PENDING':        return <Clock className="w-5 h-5 text-yellow-500" />;
+      case 'PROCESSING':     return <Package className="w-5 h-5 text-blue-500" />;
+      case 'SHIPPED':        return <Truck className="w-5 h-5 text-purple-500" />;
+      case 'RIDER_ASSIGNED': return <Truck className="w-5 h-5 text-indigo-500" />;
+      case 'PICKED_UP':      return <Package className="w-5 h-5 text-orange-500" />;
+      case 'ON_THE_WAY':     return <Truck className="w-5 h-5 text-blue-500" />;
+      case 'DELIVERED':      return <CheckCircle className="w-5 h-5 text-green-500" />;
+      case 'COMPLETED':      return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'CANCELLED':      return <XCircle className="w-5 h-5 text-red-500" />;
+      case 'DISPUTED':       return <XCircle className="w-5 h-5 text-orange-500" />;
+      default:               return <Clock className="w-5 h-5 text-gray-500" />;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'PENDING':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'PROCESSING':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'SHIPPED':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'DELIVERED':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'CANCELLED':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'PENDING':        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'PROCESSING':     return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'SHIPPED':        return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'RIDER_ASSIGNED': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'PICKED_UP':      return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'ON_THE_WAY':     return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'DELIVERED':      return 'bg-green-100 text-green-800 border-green-200';
+      case 'COMPLETED':      return 'bg-green-100 text-green-900 border-green-300';
+      case 'CANCELLED':      return 'bg-red-100 text-red-800 border-red-200';
+      case 'DISPUTED':       return 'bg-orange-100 text-orange-800 border-orange-200';
+      default:               return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -145,8 +172,8 @@ export default function OrderDetailPage() {
 
     if (userRole === 'SELLER') {
       if (order.status === 'PENDING') {
-        actions.push({ label: 'Process Order', status: 'PROCESSING', variant: 'primary' });
-        actions.push({ label: 'Cancel Order', status: 'CANCELLED', variant: 'danger' });
+        actions.push({ label: 'Process Order',  status: 'PROCESSING', variant: 'primary' });
+        actions.push({ label: 'Cancel Order',   status: 'CANCELLED',  variant: 'danger'  });
       }
       if (order.status === 'PROCESSING') {
         actions.push({ label: 'Mark as Shipped', status: 'SHIPPED', variant: 'primary' });
@@ -170,29 +197,24 @@ export default function OrderDetailPage() {
 
   const getCurrentUserRole = () => {
     if (!order) return null;
-    
-    // Get current user ID from localStorage or auth context
     const currentUserId = localStorage.getItem('userId') || 'current-user-id';
-    
-    if (currentUserId === order.buyerId) return 'BUYER';
-    if (currentUserId === order.product?.sellerId) return 'SELLER';
-    if (currentUserId === order.riderId) return 'RIDER';
-    
+    if (currentUserId === order.buyerId)            return 'BUYER';
+    if (currentUserId === order.product?.sellerId)  return 'SELLER';
+    if (currentUserId === order.riderId)            return 'RIDER';
     return null;
   };
 
-  // Check if user can review product
-  const canReviewProduct = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') && 
+  const canReviewProduct = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') &&
     order?.productReviews?.length === 0;
 
-  // Check if user can review seller
-  const canReviewSeller = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') && 
+  const canReviewSeller = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') &&
     !order?.reviews?.some((r: any) => r.type === 'SELLER');
-  
-  const canReviewRider = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') && 
-    order?.rider && 
+
+  const canReviewRider = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') &&
+    order?.rider &&
     !order?.reviews?.some((r: any) => r.type === 'RIDER');
 
+  // ── Loading skeleton ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -217,19 +239,16 @@ export default function OrderDetailPage() {
         </Button>
       </div>
     );
-  };
+  }
 
   const statusActions = getStatusActions();
   const userRole = getCurrentUserRole();
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
+
       {/* Back button */}
-      <Button
-        variant="ghost"
-        onClick={() => router.push('/orders')}
-        className="mb-6"
-      >
+      <Button variant="ghost" onClick={() => router.push('/orders')} className="mb-6">
         <ArrowLeft className="w-4 h-4 mr-2" />
         Back to Orders
       </Button>
@@ -237,12 +256,23 @@ export default function OrderDetailPage() {
       {/* Order header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold mb-2">Order #{order.orderNumber || order.id.slice(-8)}</h1>
-          <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold mb-2">
+            Order #{order.orderNumber || order.id.slice(-8)}
+          </h1>
+          <div className="flex items-center gap-4 flex-wrap">
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${getStatusColor(order.status)}`}>
               {getStatusIcon(order.status)}
-              <span className="font-medium">{order.status.replace('_', ' ')}</span>
+              <span className="font-medium">{order.status.replace(/_/g, ' ')}</span>
             </div>
+
+            {/* ── Live polling indicator ─────────────────────────────────── */}
+            {isPolling && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                Live
+              </div>
+            )}
+
             <div className="flex items-center gap-2 text-gray-600">
               <Calendar className="w-4 h-4" />
               <span>{format(new Date(order.createdAt), 'MMM dd, yyyy h:mm a')}</span>
@@ -250,7 +280,7 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Status actions - FIXED: Changed 'destructive' to 'danger' and 'default' to 'primary' */}
+        {/* Status actions */}
         {statusActions.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
             {statusActions.map((action) => (
@@ -267,9 +297,60 @@ export default function OrderDetailPage() {
         )}
       </div>
 
+      {/* ── Order progress tracker ─────────────────────────────────────────── */}
+      {ACTIVE_STATUSES.includes(order.status) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Order Progress</h2>
+          <div className="flex items-center justify-between relative">
+            {/* Progress line */}
+            <div className="absolute left-0 right-0 top-4 h-0.5 bg-gray-200 z-0" />
+            <div
+              className="absolute left-0 top-4 h-0.5 bg-bata-primary z-0 transition-all duration-500"
+              style={{
+                width: `${
+                  order.status === 'PENDING'        ? 0   :
+                  order.status === 'PROCESSING'     ? 20  :
+                  order.status === 'SHIPPED'        ? 40  :
+                  order.status === 'RIDER_ASSIGNED' ? 55  :
+                  order.status === 'PICKED_UP'      ? 70  :
+                  order.status === 'ON_THE_WAY'     ? 85  : 100
+                }%`
+              }}
+            />
+            {[
+              { key: 'PENDING',        label: 'Placed',   icon: '🛒' },
+              { key: 'PROCESSING',     label: 'Confirmed',icon: '✅' },
+              { key: 'PICKED_UP',      label: 'Picked Up',icon: '📦' },
+              { key: 'ON_THE_WAY',     label: 'On Way',   icon: '🛵' },
+              { key: 'DELIVERED',      label: 'Delivered',icon: '🎉' },
+            ].map((step, idx) => {
+              const statusOrder = ['PENDING','PROCESSING','SHIPPED','RIDER_ASSIGNED','PICKED_UP','ON_THE_WAY','DELIVERED']
+              const currentIdx  = statusOrder.indexOf(order.status)
+              const stepIdx     = statusOrder.indexOf(step.key)
+              const isDone      = currentIdx >= stepIdx
+              return (
+                <div key={step.key} className="flex flex-col items-center z-10 flex-1">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 transition-all ${
+                    isDone
+                      ? 'bg-bata-primary border-bata-primary text-white'
+                      : 'bg-white border-gray-300 text-gray-400'
+                  }`}>
+                    {step.icon}
+                  </div>
+                  <p className={`text-[10px] font-semibold mt-1.5 text-center ${isDone ? 'text-bata-primary' : 'text-gray-400'}`}>
+                    {step.label}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left column - Order details */}
+        {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
+
           {/* Product card */}
           <div className="bg-white rounded-lg border p-6">
             <div className="flex items-center justify-between mb-4">
@@ -295,7 +376,7 @@ export default function OrderDetailPage() {
                 <div className="flex items-center justify-between mt-4">
                   <div>
                     <p className="text-sm text-gray-500">Price</p>
-                    <p className="font-bold">₦{(order.product?.price || 0).toLocaleString()}</p>
+                    <p className="font-bold">₦{(order.productPrice || order.product?.price || 0).toLocaleString()}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Quantity</p>
@@ -303,7 +384,7 @@ export default function OrderDetailPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Total</p>
-                    <p className="font-bold">₦{((order.product?.price || 0) * (order.quantity || 1)).toLocaleString()}</p>
+                    <p className="font-bold">₦{((order.productPrice || order.product?.price || 0) * (order.quantity || 1)).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -312,6 +393,7 @@ export default function OrderDetailPage() {
 
           {/* Shipping & Payment */}
           <div className="grid md:grid-cols-2 gap-6">
+
             {/* Shipping info */}
             <div className="bg-white rounded-lg border p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -320,17 +402,27 @@ export default function OrderDetailPage() {
               </h2>
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-gray-500">Delivery Address</p>
-                  <p className="font-medium">{order.deliveryAddress || 'Not specified'}</p>
+                  <p className="text-sm text-gray-500">Hostel</p>
+                  <p className="font-medium">{order.deliveryHostel || 'Not specified'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Phone Number</p>
-                  <p className="font-medium">{order.phoneNumber || 'Not specified'}</p>
+                  <p className="text-sm text-gray-500">Room</p>
+                  <p className="font-medium">{order.deliveryRoom || 'Not specified'}</p>
                 </div>
-                {order.deliveryInstructions && (
+                {order.deliveryLandmark && (
                   <div>
-                    <p className="text-sm text-gray-500">Delivery Instructions</p>
-                    <p className="font-medium">{order.deliveryInstructions}</p>
+                    <p className="text-sm text-gray-500">Landmark</p>
+                    <p className="font-medium">{order.deliveryLandmark}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-gray-500">Phone</p>
+                  <p className="font-medium">{order.deliveryPhone || 'Not specified'}</p>
+                </div>
+                {order.orderNote && (
+                  <div>
+                    <p className="text-sm text-gray-500">Note to rider</p>
+                    <p className="font-medium text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-sm">{order.orderNote}</p>
                   </div>
                 )}
               </div>
@@ -344,12 +436,20 @@ export default function OrderDetailPage() {
               </h2>
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-gray-500">Payment Method</p>
-                  <p className="font-medium">{order.paymentMethod || 'Online Payment'}</p>
+                  <p className="text-sm text-gray-500">Subtotal</p>
+                  <p className="font-medium">₦{(order.productPrice || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Delivery Fee</p>
+                  <p className="font-medium">₦{(order.deliveryFee || 0).toLocaleString()}</p>
+                </div>
+                <div className="pt-2 border-t">
+                  <p className="text-sm text-gray-500">Total Paid</p>
+                  <p className="font-bold text-lg">₦{(order.totalAmount || 0).toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Payment Status</p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mt-0.5">
                     {order.isPaid ? (
                       <>
                         <CheckCircle className="w-4 h-4 text-green-500" />
@@ -363,24 +463,18 @@ export default function OrderDetailPage() {
                     )}
                   </div>
                 </div>
-                {order.paymentReference && (
-                  <div>
-                    <p className="text-sm text-gray-500">Reference</p>
-                    <p className="font-mono text-sm">{order.paymentReference}</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Reviews Section - Only show if delivered */}
+          {/* Reviews Section */}
           {(order.status === 'DELIVERED' || order.status === 'COMPLETED') && (
             <div className="bg-white rounded-lg border p-6">
               <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5" />
                 Reviews & Feedback
               </h2>
-              
+
               {/* Product Review */}
               <div className="flex items-center justify-between p-4 border rounded-lg mb-4 bg-gradient-to-r from-purple-50 to-pink-50">
                 <div className="flex items-center gap-3">
@@ -389,9 +483,7 @@ export default function OrderDetailPage() {
                   </div>
                   <div>
                     <h3 className="font-medium">Rate this Product</h3>
-                    <p className="text-sm text-gray-600">
-                      Share your experience with {order.product?.name}
-                    </p>
+                    <p className="text-sm text-gray-600">Share your experience with {order.product?.name}</p>
                   </div>
                 </div>
                 {canReviewProduct ? (
@@ -400,20 +492,15 @@ export default function OrderDetailPage() {
                       onClick={() => router.push(`/orders/${order.id}/review-product`)}
                       className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
                     >
-                      <Star className="w-4 h-4" />
-                      Review Product
+                      <Star className="w-4 h-4" /> Review Product
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setReviewModal({ isOpen: true, type: 'PRODUCT' })}
-                    >
+                    <Button variant="ghost" onClick={() => setReviewModal({ isOpen: true, type: 'PRODUCT' })}>
                       Quick Review
                     </Button>
                   </div>
                 ) : order.productReviews?.length > 0 ? (
                   <span className="text-green-600 font-medium flex items-center gap-1">
-                    <CheckCircle className="w-4 h-4" />
-                    Product Reviewed
+                    <CheckCircle className="w-4 h-4" /> Product Reviewed
                   </span>
                 ) : (
                   <span className="text-gray-500 text-sm">Review not available</span>
@@ -428,9 +515,7 @@ export default function OrderDetailPage() {
                   </div>
                   <div>
                     <h3 className="font-medium">Rate the Seller</h3>
-                    <p className="text-sm text-gray-600">
-                      How was your experience with {order.seller?.name || 'the seller'}?
-                    </p>
+                    <p className="text-sm text-gray-600">How was your experience with {order.seller?.name || 'the seller'}?</p>
                   </div>
                 </div>
                 {canReviewSeller ? (
@@ -439,27 +524,22 @@ export default function OrderDetailPage() {
                       onClick={() => router.push(`/orders/${order.id}/review-seller`)}
                       className="flex items-center gap-2"
                     >
-                      <Star className="w-4 h-4" />
-                      Review Seller
+                      <Star className="w-4 h-4" /> Review Seller
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setReviewModal({ isOpen: true, type: 'SELLER' })}
-                    >
+                    <Button variant="ghost" onClick={() => setReviewModal({ isOpen: true, type: 'SELLER' })}>
                       Quick Review
                     </Button>
                   </div>
                 ) : order.reviews?.some((r: any) => r.type === 'SELLER') ? (
                   <span className="text-green-600 font-medium flex items-center gap-1">
-                    <CheckCircle className="w-4 h-4" />
-                    Seller Reviewed
+                    <CheckCircle className="w-4 h-4" /> Seller Reviewed
                   </span>
                 ) : (
                   <span className="text-gray-500 text-sm">Complete product review first</span>
                 )}
               </div>
 
-              {/* Rider Review (if applicable) */}
+              {/* Rider Review */}
               {order.rider && (
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex items-center gap-3">
@@ -468,23 +548,16 @@ export default function OrderDetailPage() {
                     </div>
                     <div>
                       <h3 className="font-medium">Rate the Rider</h3>
-                      <p className="text-sm text-gray-600">
-                        How was your delivery experience with {order.rider.name}?
-                      </p>
+                      <p className="text-sm text-gray-600">How was your delivery with {order.rider.name}?</p>
                     </div>
                   </div>
                   {canReviewRider ? (
-                    <Button
-                      onClick={() => setReviewModal({ isOpen: true, type: 'RIDER' })}
-                      className="flex items-center gap-2"
-                    >
-                      <Star className="w-4 h-4" />
-                      Review Rider
+                    <Button onClick={() => setReviewModal({ isOpen: true, type: 'RIDER' })} className="flex items-center gap-2">
+                      <Star className="w-4 h-4" /> Review Rider
                     </Button>
                   ) : order.reviews?.some((r: any) => r.type === 'RIDER') ? (
                     <span className="text-green-600 font-medium flex items-center gap-1">
-                      <CheckCircle className="w-4 h-4" />
-                      Rider Reviewed
+                      <CheckCircle className="w-4 h-4" /> Rider Reviewed
                     </span>
                   ) : (
                     <span className="text-gray-500 text-sm">Review not available</span>
@@ -492,19 +565,20 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
-              {/* Existing Reviews */}
-              {(order.reviews && order.reviews.length > 0) || (order.productReviews && order.productReviews.length > 0) ? (
+              {/* Existing reviews */}
+              {((order.reviews && order.reviews.length > 0) || (order.productReviews && order.productReviews.length > 0)) && (
                 <div className="mt-6 pt-6 border-t">
                   <h3 className="font-semibold mb-4">Your Reviews</h3>
                   <ReviewList reviews={[...(order.reviews || []), ...(order.productReviews || [])]} />
                 </div>
-              ) : null}
+              )}
             </div>
           )}
         </div>
 
-        {/* Right column - People involved */}
+        {/* Right column */}
         <div className="space-y-6">
+
           {/* Buyer Card */}
           <div className="bg-white rounded-lg border p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -513,11 +587,7 @@ export default function OrderDetailPage() {
             </h3>
             <div className="flex items-center gap-3">
               {order.buyer?.profilePhoto ? (
-                <img
-                  src={order.buyer.profilePhoto}
-                  alt={order.buyer.name || 'Buyer'}
-                  className="w-12 h-12 rounded-full"
-                />
+                <img src={order.buyer.profilePhoto} alt={order.buyer.name || 'Buyer'} className="w-12 h-12 rounded-full object-cover" />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
                   <User className="w-6 h-6 text-gray-500" />
@@ -525,7 +595,7 @@ export default function OrderDetailPage() {
               )}
               <div>
                 <h4 className="font-medium">{order.buyer?.name || 'Anonymous'}</h4>
-                <p className="text-sm text-gray-600">{order.buyer?.email || 'No email'}</p>
+                <p className="text-sm text-gray-600">{order.buyer?.phone || order.buyer?.email || ''}</p>
               </div>
             </div>
           </div>
@@ -538,24 +608,17 @@ export default function OrderDetailPage() {
             </h3>
             <div className="flex items-center gap-3 mb-4">
               {order.seller?.profilePhoto ? (
-                <img
-                  src={order.seller.profilePhoto}
-                  alt={order.seller.name || 'Seller'}
-                  className="w-12 h-12 rounded-full"
-                />
+                <img src={order.seller.profilePhoto} alt={order.seller.name || 'Seller'} className="w-12 h-12 rounded-full object-cover" />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
                   <User className="w-6 h-6 text-gray-500" />
                 </div>
               )}
               <div>
-                <Link 
-                  href={`/seller/${order.seller?.id}`}
-                  className="font-medium text-blue-600 hover:underline"
-                >
+                <Link href={`/seller/${order.seller?.id}`} className="font-medium text-blue-600 hover:underline">
                   {order.seller?.name || 'Seller'}
                 </Link>
-                <p className="text-sm text-gray-600">{order.seller?.email || 'No email'}</p>
+                <p className="text-sm text-gray-600">{order.seller?.phone || order.seller?.email || ''}</p>
               </div>
             </div>
             <RatingBadge
@@ -563,17 +626,12 @@ export default function OrderDetailPage() {
               reviewCount={order.seller?.totalReviews || 0}
               trustLevel={order.seller?.trustLevel || 'BRONZE'}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full mt-4"
-              onClick={() => router.push(`/seller/${order.seller?.id}`)}
-            >
+            <Button variant="outline" size="sm" className="w-full mt-4" onClick={() => router.push(`/seller/${order.seller?.id}`)}>
               View Seller Profile
             </Button>
           </div>
 
-          {/* Rider Card (if applicable) */}
+          {/* Rider Card */}
           {order.rider && (
             <div className="bg-white rounded-lg border p-6">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -582,11 +640,7 @@ export default function OrderDetailPage() {
               </h3>
               <div className="flex items-center gap-3 mb-4">
                 {order.rider.profilePhoto ? (
-                  <img
-                    src={order.rider.profilePhoto}
-                    alt={order.rider.name || 'Rider'}
-                    className="w-12 h-12 rounded-full"
-                  />
+                  <img src={order.rider.profilePhoto} alt={order.rider.name || 'Rider'} className="w-12 h-12 rounded-full object-cover" />
                 ) : (
                   <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
                     <User className="w-6 h-6 text-gray-500" />
@@ -594,7 +648,7 @@ export default function OrderDetailPage() {
                 )}
                 <div>
                   <h4 className="font-medium">{order.rider.name}</h4>
-                  <p className="text-sm text-gray-600">{order.rider.email || 'No email'}</p>
+                  <p className="text-sm text-gray-600">{order.rider.phone || order.rider.email || ''}</p>
                 </div>
               </div>
               <RatingBadge
@@ -611,21 +665,15 @@ export default function OrderDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Subtotal</span>
-                <span>₦{((order.product?.price || 0) * (order.quantity || 1)).toLocaleString()}</span>
+                <span>₦{(order.productPrice || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Shipping Fee</span>
-                <span>₦{(order.shippingFee || 0).toLocaleString()}</span>
+                <span className="text-gray-600">Delivery Fee</span>
+                <span>₦{(order.deliveryFee || 0).toLocaleString()}</span>
               </div>
-              {order.platformFee && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Platform Fee</span>
-                  <span>₦{order.platformFee.toLocaleString()}</span>
-                </div>
-              )}
               <div className="border-t pt-3 flex justify-between font-bold">
                 <span>Total</span>
-                <span>₦{order.totalAmount?.toLocaleString() || '0'}</span>
+                <span>₦{(order.totalAmount || 0).toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -637,32 +685,20 @@ export default function OrderDetailPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Product Review</span>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    order.productReviews?.length > 0
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-xs ${order.productReviews?.length > 0 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                     {order.productReviews?.length > 0 ? 'Completed ✓' : 'Pending'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Seller Review</span>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    order.reviews?.some((r: any) => r.type === 'SELLER')
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-xs ${order.reviews?.some((r: any) => r.type === 'SELLER') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                     {order.reviews?.some((r: any) => r.type === 'SELLER') ? 'Completed ✓' : 'Pending'}
                   </span>
                 </div>
                 {order.rider && (
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Rider Review</span>
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      order.reviews?.some((r: any) => r.type === 'RIDER')
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                    <span className={`px-2 py-1 rounded text-xs ${order.reviews?.some((r: any) => r.type === 'RIDER') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                       {order.reviews?.some((r: any) => r.type === 'RIDER') ? 'Completed ✓' : 'Pending'}
                     </span>
                   </div>
@@ -681,13 +717,10 @@ export default function OrderDetailPage() {
           orderId={order.id}
           productId={order.product?.id}
           productName={order.product?.name}
-          onReviewSubmitted={() => {
-            fetchOrder();
-            setReviewModal({ isOpen: false, type: null });
-          }}
+          onReviewSubmitted={() => { fetchOrder(); setReviewModal({ isOpen: false, type: null }) }}
         />
       )}
-      
+
       {(reviewModal.type === 'SELLER' || reviewModal.type === 'RIDER') && (
         <ReviewModal
           isOpen={reviewModal.isOpen}
@@ -697,12 +730,9 @@ export default function OrderDetailPage() {
           revieweeName={
             reviewModal.type === 'SELLER'
               ? order.seller?.name || 'Seller'
-              : order.rider?.name || 'Rider'
+              : order.rider?.name  || 'Rider'
           }
-          onReviewSubmitted={() => {
-            fetchOrder();
-            setReviewModal({ isOpen: false, type: null });
-          }}
+          onReviewSubmitted={() => { fetchOrder(); setReviewModal({ isOpen: false, type: null }) }}
         />
       )}
     </div>

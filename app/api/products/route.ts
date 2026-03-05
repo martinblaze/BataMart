@@ -1,29 +1,47 @@
 export const dynamic = 'force-dynamic'
-// app/api/products/route.ts - COMPLETE FIXED VERSION
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 
-// GET all products (for marketplace - only shows in-stock products)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const category = searchParams.get('category')
+    const category  = searchParams.get('category')
+    const hostel    = searchParams.get('hostel')
+    const minPrice  = searchParams.get('minPrice')
+    const maxPrice  = searchParams.get('maxPrice')
+    const search    = searchParams.get('search')
 
-    // ⚠️ CRITICAL: Only show products that are:
-    // 1. Active (isActive = true)
-    // 2. In stock (quantity > 0)
     const where: any = {
       isActive: true,
-      quantity: {
-        gt: 0, // Greater than 0 - MUST HAVE STOCK
-      },
+      quantity: { gt: 0 },
     }
 
-    // Filter by category if provided
     if (category && category !== 'All') {
       where.category = category
+    }
+
+    if (hostel && hostel !== 'All') {
+      where.hostelName = { contains: hostel, mode: 'insensitive' }
+    }
+
+    if (minPrice || maxPrice) {
+      where.price = {}
+      if (minPrice) where.price.gte = parseFloat(minPrice)
+      if (maxPrice) where.price.lte = parseFloat(maxPrice)
+    }
+
+    // Server-side keyword search across name, category, description
+    if (search && search.trim()) {
+      const tokens = search.trim().split(/\s+/).filter(Boolean)
+      where.AND = tokens.map((token: string) => ({
+        OR: [
+          { name:        { contains: token, mode: 'insensitive' } },
+          { category:    { contains: token, mode: 'insensitive' } },
+          { description: { contains: token, mode: 'insensitive' } },
+        ],
+      }))
     }
 
     const products = await prisma.product.findMany({
@@ -33,33 +51,26 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            avgRating: true, // Changed from 'rating' to 'avgRating'
+            avgRating: true,
             trustLevel: true,
             completedOrders: true,
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       products,
       count: products.length,
-      message: `Found ${products.length} products in stock`,
     })
   } catch (error) {
     console.error('Fetch products error:', error)
-    return NextResponse.json({ 
-      error: 'Failed to fetch products',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
   }
 }
 
-// POST create new product
 export async function POST(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)
@@ -67,52 +78,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only sellers can create products
     if (user.role !== 'SELLER' && user.role !== 'ADMIN') {
-      return NextResponse.json({ 
-        error: 'Only sellers can list products. Please update your profile to become a seller.' 
+      return NextResponse.json({
+        error: 'Only sellers can list products.'
       }, { status: 403 })
     }
 
     const body = await request.json()
-    const {
-      name,
-      description,
-      price,
-      images,
-      category,
-      quantity,
-      hostelName,
-      roomNumber,
-      landmark,
-    } = body
+    const { name, description, price, images, category, quantity, hostelName, roomNumber, landmark } = body
 
-    // Validation
     if (!name || !description || !price || !images || images.length === 0) {
-      return NextResponse.json({ 
-        error: 'Missing required fields (name, description, price, images)' 
-      }, { status: 400 })
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+    if (price <= 0) return NextResponse.json({ error: 'Price must be greater than 0' }, { status: 400 })
+    if (!quantity || quantity < 1) return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 })
+    if (!category) return NextResponse.json({ error: 'Please select a category' }, { status: 400 })
 
-    if (price <= 0) {
-      return NextResponse.json({ 
-        error: 'Price must be greater than 0' 
-      }, { status: 400 })
-    }
-
-    if (!quantity || quantity < 1) {
-      return NextResponse.json({ 
-        error: 'Quantity must be at least 1' 
-      }, { status: 400 })
-    }
-
-    if (!category) {
-      return NextResponse.json({ 
-        error: 'Please select a category' 
-      }, { status: 400 })
-    }
-
-    // Create the product
     const product = await prisma.product.create({
       data: {
         name: name.trim(),
@@ -129,23 +110,9 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    console.log('✅ Product created:', {
-      id: product.id,
-      name: product.name,
-      quantity: product.quantity,
-      price: product.price,
-    })
-
-    return NextResponse.json({ 
-      success: true, 
-      product,
-      message: `${product.name} listed successfully with ${product.quantity} items in stock!`,
-    })
+    return NextResponse.json({ success: true, product })
   } catch (error) {
     console.error('Create product error:', error)
-    return NextResponse.json({ 
-      error: 'Failed to create product',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
   }
 }

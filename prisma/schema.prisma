@@ -193,6 +193,9 @@ model User {
   suspensionReason   String?
 
   faceDescriptor     Json?
+  withdrawalPin         String?
+  withdrawalPinAttempts Int       @default(0)
+  withdrawalPinLockedUntil DateTime?
 
   // Dispute & Safety fields
   warningCount       Int         @default(0)
