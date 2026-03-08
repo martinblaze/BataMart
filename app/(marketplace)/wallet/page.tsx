@@ -429,60 +429,60 @@ export default function WalletPage() {
 
       {/* Top bar */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-gray-400 mb-0.5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-0.5">
               <Link href="/marketplace" className="hover:text-bata-primary transition">Marketplace</Link>
               <span>/</span>
               <span className="text-gray-700 font-medium">Wallet</span>
             </div>
-            <h1 className="text-xl font-semibold text-gray-900">Wallet & Payouts</h1>
+            <h1 className="text-base sm:text-xl font-semibold text-gray-900 leading-tight">Wallet & Payouts</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => { setNewPin(''); setConfirmPin(''); setSavePinError(''); setSavePinSuccess(false); setShowSetPin(true) }}
-              className="inline-flex items-center gap-2 border border-gray-300 text-gray-600 hover:border-bata-primary hover:text-bata-primary text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-600 hover:border-bata-primary hover:text-bata-primary text-xs sm:text-sm font-semibold px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
               {user.hasWithdrawalPin ? 'Change PIN' : 'Set PIN'}
             </button>
             <button
               onClick={openWithdrawModal}
-              className="inline-flex items-center gap-2 bg-bata-primary hover:bg-bata-dark text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 bg-bata-primary hover:bg-bata-dark text-white text-xs sm:text-sm font-semibold px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg transition-colors whitespace-nowrap"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9l-5 5-5-5" />
               </svg>
-              Withdraw Funds
+              Withdraw
             </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-6">
 
-        {/* Balance cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Available Balance</p>
-            <p className="text-3xl font-bold text-gray-900 tabular-nums">
+        {/* Balance cards — horizontal scroll on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Available Balance</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900 tabular-nums">
               ₦{wallet.availableBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
             </p>
-            <p className="text-xs text-gray-400 mt-2">Ready to withdraw</p>
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mt-1.5">Ready to withdraw</p>
+            <div className="mt-3 pt-3 border-t border-gray-100">
               <button onClick={openWithdrawModal} className="text-sm font-semibold text-bata-primary hover:underline">Withdraw →</button>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Pending (Escrow)</p>
-            <p className="text-3xl font-bold text-amber-600 tabular-nums">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Pending (Escrow)</p>
+            <p className="text-2xl sm:text-3xl font-bold text-amber-600 tabular-nums">
               ₦{wallet.pendingBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
             </p>
-            <p className="text-xs text-gray-400 mt-2">Released after buyer confirms delivery</p>
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mt-1.5">Released after buyer confirms delivery</p>
+            <div className="mt-3 pt-3 border-t border-gray-100">
               <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
@@ -492,9 +492,9 @@ export default function WalletPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Account Summary</p>
-            <div className="space-y-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Account Summary</p>
+            <div className="space-y-2.5">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">Total earned</span>
                 <span className="text-sm font-semibold text-emerald-600">₦{totalEarned.toLocaleString()}</span>
@@ -510,7 +510,7 @@ export default function WalletPage() {
                 <span className="text-sm font-bold text-gray-900">{wallet.completedOrders}</span>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
               <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${user.hasFaceId ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
                 {user.hasFaceId ? '✓' : '✗'} Face ID
               </span>
@@ -583,8 +583,8 @@ export default function WalletPage() {
 
       {/* ── Withdraw Modal ── */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[95vh] sm:max-h-[92vh] overflow-y-auto">
             <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Withdraw Funds</h3>
@@ -711,8 +711,8 @@ export default function WalletPage() {
 
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setFaceError(''); setPinError('') }} className="flex-1 py-3 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
-                  <button type="submit" disabled={withdrawing} className="flex-1 py-3 bg-bata-primary hover:bg-bata-dark text-white rounded-lg text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2">
-                    {withdrawing ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Processing...</>) : (<><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/></svg>{authMethod === 'pin' ? 'Continue to PIN' : 'Continue to Face Scan'}</>)}
+                  <button type="submit" disabled={withdrawing} className="flex-1 py-3 bg-bata-primary hover:bg-bata-dark text-white rounded-lg text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap">
+                    {withdrawing ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Processing...</>) : (<><svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/></svg>{authMethod === 'pin' ? 'Enter PIN' : 'Face Scan'}</>)}
                   </button>
                 </div>
               </form>
