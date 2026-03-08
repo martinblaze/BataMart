@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyOTP, generateToken, formatPhone } from '@/lib/auth/auth'
+import { generateUniqueReferralCode } from '@/lib/referral/generateReferralCode'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,12 +45,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
+      const referralCode = await generateUniqueReferralCode()
+
       user = await prisma.user.create({
         data: {
           phone: phone ? formatPhone(phone) : undefined,
           email: email || undefined,
           name,
           password: '',
+          referralCode,
         },
       })
     }
