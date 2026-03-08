@@ -17,6 +17,13 @@ async function verifyAdmin(req: NextRequest) {
   }
 }
 
+// Paystack charges 1.5% + ₦100 per transaction, capped at ₦2,000
+// This must be called PER ORDER, not on the aggregate sum
+function paystackFeePerOrder(orderAmount: number): number {
+  const fee = orderAmount * 0.015 + 100
+  return Math.min(fee, 2000)
+}
+
 export async function GET(req: NextRequest) {
   const admin = await verifyAdmin(req)
   if (!admin) {
@@ -25,66 +32,48 @@ export async function GET(req: NextRequest) {
 
   try {
     const now = new Date()
-
-    // This month
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-
-    // Last month
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
 
-    // Today
-    const todayStart = new Date(now.setHours(0, 0, 0, 0))
-
+    // ── Fetch all completed orders (we need per-order amounts for accurate Paystack fees)
     const [
-      allTimeOrders,
-      thisMonthOrders,
-      lastMonthOrders,
-      todayOrders,
+      allCompletedOrders,
+      thisMonthCompletedOrders,
+      lastMonthCompletedOrders,
+      todayCompletedOrders,
       pendingOrders,
       topSellersRaw,
       totalSellersBalance,
       totalRidersBalance,
+      referralStats,
     ] = await Promise.all([
-      // All completed orders
-      prisma.order.aggregate({
+      prisma.order.findMany({
         where: { status: 'COMPLETED' },
-        _sum: { totalAmount: true, platformCommission: true, deliveryFee: true },
-        _count: true,
+        select: { totalAmount: true, platformCommission: true, deliveryFee: true },
       }),
 
-      // This month completed
-      prisma.order.aggregate({
+      prisma.order.findMany({
         where: { status: 'COMPLETED', createdAt: { gte: thisMonthStart } },
-        _sum: { totalAmount: true, platformCommission: true },
-        _count: true,
+        select: { totalAmount: true, platformCommission: true },
       }),
 
-      // Last month completed
-      prisma.order.aggregate({
-        where: {
-          status: 'COMPLETED',
-          createdAt: { gte: lastMonthStart, lte: lastMonthEnd },
-        },
-        _sum: { totalAmount: true, platformCommission: true },
-        _count: true,
+      prisma.order.findMany({
+        where: { status: 'COMPLETED', createdAt: { gte: lastMonthStart, lte: lastMonthEnd } },
+        select: { totalAmount: true, platformCommission: true },
       }),
 
-      // Today completed
-      prisma.order.aggregate({
+      prisma.order.findMany({
         where: { status: 'COMPLETED', createdAt: { gte: todayStart } },
-        _sum: { totalAmount: true, platformCommission: true },
-        _count: true,
+        select: { totalAmount: true, platformCommission: true },
       }),
 
-      // Pending escrow (orders not yet completed)
-      prisma.order.aggregate({
+      prisma.order.findMany({
         where: { status: { notIn: ['COMPLETED', 'CANCELLED'] }, isPaid: true },
-        _sum: { totalAmount: true, platformCommission: true },
-        _count: true,
+        select: { totalAmount: true, platformCommission: true },
       }),
 
-      // Top sellers
       prisma.order.groupBy({
         by: ['sellerId'],
         where: { status: 'COMPLETED' },
@@ -94,20 +83,71 @@ export async function GET(req: NextRequest) {
         take: 10,
       }),
 
-      // Total pending balance owed to sellers
       prisma.user.aggregate({
         where: { role: 'SELLER' },
         _sum: { pendingBalance: true, availableBalance: true },
       }),
 
-      // Total pending balance owed to riders
       prisma.user.aggregate({
         where: { role: 'RIDER' },
         _sum: { pendingBalance: true, availableBalance: true },
       }),
+
+      // Referral rewards paid out
+      prisma.referralReward.aggregate({
+        _sum: { amount: true },
+        _count: true,
+      }).catch(() => ({ _sum: { amount: 0 }, _count: 0 })),
     ])
 
-    // Enrich top sellers with names
+    // ── Helper: sum fields from order arrays ──────────────────────────
+    const sumOrders = (orders: { totalAmount: number; platformCommission: number }[]) => ({
+      totalAmount: orders.reduce((s, o) => s + (o.totalAmount || 0), 0),
+      platformCommission: orders.reduce((s, o) => s + (o.platformCommission || 0), 0),
+      count: orders.length,
+      // Correct Paystack fees: calculate per order then sum
+      paystackFees: orders.reduce((s, o) => s + paystackFeePerOrder(o.totalAmount || 0), 0),
+    })
+
+    const allTime = sumOrders(allCompletedOrders)
+    const thisMonth = sumOrders(thisMonthCompletedOrders)
+    const lastMonth = sumOrders(lastMonthCompletedOrders)
+    const today = sumOrders(todayCompletedOrders)
+    const pending = sumOrders(pendingOrders)
+
+    // ── Net platform profit = commission - Paystack fees - referral payouts ──
+    const referralPaidOut = referralStats._sum.amount || 0
+
+    const netAllTime = allTime.platformCommission - allTime.paystackFees - referralPaidOut
+    const netThisMonth = thisMonth.platformCommission - thisMonth.paystackFees
+    const netLastMonth = lastMonth.platformCommission - lastMonth.paystackFees
+    const netToday = today.platformCommission - today.paystackFees
+    const netPending = pending.platformCommission - pending.paystackFees
+
+    // ── Obligations ────────────────────────────────────────────────────
+    const sellersAvailableNow = totalSellersBalance._sum.availableBalance || 0
+    const sellersPending = totalSellersBalance._sum.pendingBalance || 0
+    const ridersAvailableNow = totalRidersBalance._sum.availableBalance || 0
+    const ridersPending = totalRidersBalance._sum.pendingBalance || 0
+
+    const totalOwedToSellers = sellersAvailableNow + sellersPending
+    const totalOwedToRiders = ridersAvailableNow + ridersPending
+
+    // ── Safe withdrawal calculation ────────────────────────────────────
+    // Paystack holds: all paid-in money
+    // You must keep: total owed to sellers + total owed to riders
+    // You can withdraw: what's in Paystack minus obligations
+    // Since net platform earnings = gross commission - paystack fees,
+    // and obligations are seller/rider shares already tracked in their wallets,
+    // the safe amount to withdraw = your NET platform earnings (all time)
+    // minus referral rewards already paid out (those went to user wallets)
+    const safeToWithdraw = Math.max(0, netAllTime)
+
+    // Total Paystack balance estimate (all paid orders - what's been withdrawn by sellers/riders)
+    // This is an approximation since we don't track withdrawals to bank here
+    const paystackHoldsApprox = allTime.totalAmount
+
+    // ── Enrich top sellers ─────────────────────────────────────────────
     const topSellers = await Promise.all(
       topSellersRaw.map(async (s) => {
         const seller = await prisma.user.findUnique({
@@ -124,128 +164,82 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    // ── Paystack fee calculation helper ───────────────────
-    // Paystack charges 1.5% + ₦100 per transaction, capped at ₦2,000
-    const calculatePaystackFee = (amount: number): number => {
-      const fee = amount * 0.015 + 100
-      return Math.min(fee, 2000) // cap at ₦2,000
-    }
-
-    // Calculate total Paystack fees
-    const allTimePaystackFees = (allTimeOrders._sum.totalAmount || 0) > 0 
-      ? calculatePaystackFee(allTimeOrders._sum.totalAmount || 0) * allTimeOrders._count
-      : 0
-
-    const thisMonthPaystackFees = (thisMonthOrders._sum.totalAmount || 0) > 0
-      ? calculatePaystackFee(thisMonthOrders._sum.totalAmount || 0 / Math.max(thisMonthOrders._count, 1)) * thisMonthOrders._count
-      : 0
-
-    const lastMonthPaystackFees = (lastMonthOrders._sum.totalAmount || 0) > 0
-      ? calculatePaystackFee(lastMonthOrders._sum.totalAmount || 0 / Math.max(lastMonthOrders._count, 1)) * lastMonthOrders._count
-      : 0
-
-    const todayPaystackFees = (todayOrders._sum.totalAmount || 0) > 0
-      ? calculatePaystackFee(todayOrders._sum.totalAmount || 0 / Math.max(todayOrders._count, 1)) * todayOrders._count
-      : 0
-
-    const pendingPaystackFees = (pendingOrders._sum.totalAmount || 0) > 0
-      ? calculatePaystackFee(pendingOrders._sum.totalAmount || 0 / Math.max(pendingOrders._count, 1)) * pendingOrders._count
-      : 0
-
-    // ── Platform earnings calculation ──────────────────────
-    // Gross = what's stored in DB (before Paystack fees)
-    const grossPlatformAllTime = allTimeOrders._sum.platformCommission || 0
-    const grossPlatformThisMonth = thisMonthOrders._sum.platformCommission || 0
-    const grossPlatformLastMonth = lastMonthOrders._sum.platformCommission || 0
-    const grossPlatformToday = todayOrders._sum.platformCommission || 0
-    const grossPlatformPending = pendingOrders._sum.platformCommission || 0
-
-    // Net = gross minus Paystack fees (your actual profit)
-    const netPlatformAllTime = grossPlatformAllTime - allTimePaystackFees
-    const netPlatformThisMonth = grossPlatformThisMonth - thisMonthPaystackFees
-    const netPlatformLastMonth = grossPlatformLastMonth - lastMonthPaystackFees
-    const netPlatformToday = grossPlatformToday - todayPaystackFees
-    const netPlatformPending = grossPlatformPending - pendingPaystackFees
-
-    // Total owed to sellers (available = can withdraw now, pending = in escrow)
-    const totalOwedToSellers =
-      (totalSellersBalance._sum.availableBalance || 0) +
-      (totalSellersBalance._sum.pendingBalance || 0)
-
-    // Total owed to riders
-    const totalOwedToRiders =
-      (totalRidersBalance._sum.availableBalance || 0) +
-      (totalRidersBalance._sum.pendingBalance || 0)
-
-    // What's sitting in Paystack right now (approximate)
-    // = all paid order amounts - what's already been withdrawn (simplified)
-    const totalPaidIn = allTimeOrders._sum.totalAmount || 0
-    const paystackBalance = totalPaidIn // Paystack holds everything until withdrawal
-
     return NextResponse.json({
       revenue: {
-        // ── Overall ────────────────────────────────────────
-        totalRevenue: allTimeOrders._sum.totalAmount || 0,
-        totalOrders: allTimeOrders._count,
+        totalRevenue: allTime.totalAmount,
+        totalOrders: allTime.count,
 
-        // ── Your platform profit ───────────────────────────
         platform: {
           gross: {
-            allTime: grossPlatformAllTime,
-            thisMonth: grossPlatformThisMonth,
-            lastMonth: grossPlatformLastMonth,
-            today: grossPlatformToday,
-            pending: grossPlatformPending,
+            allTime: allTime.platformCommission,
+            thisMonth: thisMonth.platformCommission,
+            lastMonth: lastMonth.platformCommission,
+            today: today.platformCommission,
+            pending: pending.platformCommission,
           },
           net: {
-            allTime: netPlatformAllTime,
-            thisMonth: netPlatformThisMonth,
-            lastMonth: netPlatformLastMonth,
-            today: netPlatformToday,
-            pending: netPlatformPending,
+            allTime: netAllTime,
+            thisMonth: netThisMonth,
+            lastMonth: netLastMonth,
+            today: netToday,
+            pending: netPending,
           },
           paystackFees: {
-            allTime: allTimePaystackFees,
-            thisMonth: thisMonthPaystackFees,
-            lastMonth: lastMonthPaystackFees,
-            today: todayPaystackFees,
-            pending: pendingPaystackFees,
+            allTime: allTime.paystackFees,
+            thisMonth: thisMonth.paystackFees,
+            lastMonth: lastMonth.paystackFees,
+            today: today.paystackFees,
+            pending: pending.paystackFees,
           },
         },
 
-        // ── Period breakdowns ──────────────────────────────
         thisMonth: {
-          revenue: thisMonthOrders._sum.totalAmount || 0,
-          orders: thisMonthOrders._count,
-          platformEarned: grossPlatformThisMonth,
+          revenue: thisMonth.totalAmount,
+          orders: thisMonth.count,
+          platformEarned: thisMonth.platformCommission,
         },
         lastMonth: {
-          revenue: lastMonthOrders._sum.totalAmount || 0,
-          orders: lastMonthOrders._count,
-          platformEarned: grossPlatformLastMonth,
+          revenue: lastMonth.totalAmount,
+          orders: lastMonth.count,
+          platformEarned: lastMonth.platformCommission,
         },
         today: {
-          revenue: todayOrders._sum.totalAmount || 0,
-          orders: todayOrders._count,
-          platformEarned: grossPlatformToday,
+          revenue: today.totalAmount,
+          orders: today.count,
+          platformEarned: today.platformCommission,
         },
 
-        // ── Escrow status ──────────────────────────────────
         escrow: {
-          pendingOrders: pendingOrders._count,
-          totalInEscrow: pendingOrders._sum.totalAmount || 0,
-          yourCutInEscrow: grossPlatformPending,
+          pendingOrders: pending.count,
+          totalInEscrow: pending.totalAmount,
+          yourCutInEscrow: pending.platformCommission,
         },
 
-        // ── Obligations ────────────────────────────────────
         obligations: {
           totalOwedToSellers,
           totalOwedToRiders,
-          sellersAvailableNow: totalSellersBalance._sum.availableBalance || 0,
-          ridersAvailableNow: totalRidersBalance._sum.availableBalance || 0,
+          sellersAvailableNow,
+          sellersPending,
+          ridersAvailableNow,
+          ridersPending,
         },
 
-        // ── Top sellers ────────────────────────────────────
+        referrals: {
+          totalPaidOut: referralPaidOut,
+          totalRewards: referralStats._count,
+        },
+
+        withdrawal: {
+          safeToWithdraw,
+          paystackHoldsApprox,
+          breakdown: {
+            grossCommission: allTime.platformCommission,
+            minusPaystackFees: allTime.paystackFees,
+            minusReferralPayouts: referralPaidOut,
+            result: safeToWithdraw,
+          },
+        },
+
         topSellers,
       },
     })
