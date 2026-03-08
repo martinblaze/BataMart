@@ -257,11 +257,17 @@ export default function WalletPage() {
     setFaceError('')
     setPinError('')
     if (authMethod === 'pin') {
-      setPinValue('')
-      setShowPinEntry(true)
-    } else {
-      setShowFaceVerify(true)
-    }
+        setPinValue('')
+        setShowPinEntry(true)
+    } else if (!user?.hasFaceId) {
+        // No face registered — redirect to register first
+        setShowWithdrawModal(false)
+        setFaceRegisterSuccess(false)
+        setFaceRegisterError('')
+  setShowFaceIdRequired(true)
+} else {
+  setShowFaceVerify(true)
+}
   }
 
   // ── Face verified: the component already called /api/auth/verify-face ─────
