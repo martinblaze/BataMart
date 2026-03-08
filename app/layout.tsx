@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import '@/styles/globals.css'
-import { Navbar } from '@/components/layout/Navbar'
+import { NavbarWrapper } from '@/components/layout/NavbarWrapper'
 import { ThemeProvider } from '@/components/layout/ThemeProvider'
 import { NotificationPrompt } from '@/hooks/usePushSubscription'
 
@@ -21,9 +21,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider>
-          <Navbar />
-          {/* Add padding-top to account for fixed navbar */}
-          <div className="pt-16">
+          <NavbarWrapper />
+          <div>
             {children}
           </div>
           <NotificationPrompt />

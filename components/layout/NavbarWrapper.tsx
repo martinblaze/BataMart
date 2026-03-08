@@ -5,6 +5,15 @@ import { Navbar } from '@/components/layout/Navbar'
 
 export function NavbarWrapper() {
   const pathname = usePathname()
-  if (pathname?.startsWith('/admin') || pathname === '/') return null
-  return <Navbar />
+  const hideNav = pathname?.startsWith('/admin') ||
+                  pathname?.startsWith('/admin-login') ||
+                  pathname === '/'
+
+  if (hideNav) return null
+  return (
+    <>
+      <Navbar />
+      <div className="pt-16" />
+    </>
+  )
 }
