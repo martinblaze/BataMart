@@ -37,11 +37,11 @@ function parseStoredDescriptor(raw: unknown): number[] | null {
 // ── In-memory rate limiter ────────────────────────────────────────────────────
 // 5 failed attempts per user per 15-minute window.
 const failedAttempts = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT_MAX       = 5
+const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 
 function checkRateLimit(userId: string): { allowed: boolean; remainingMs?: number } {
-  const now   = Date.now()
+  const now = Date.now()
   const entry = failedAttempts.get(userId)
   if (!entry || now > entry.resetAt) return { allowed: true }
   if (entry.count >= RATE_LIMIT_MAX) return { allowed: false, remainingMs: entry.resetAt - now }
@@ -49,7 +49,7 @@ function checkRateLimit(userId: string): { allowed: boolean; remainingMs?: numbe
 }
 
 function recordFailure(userId: string): number {
-  const now   = Date.now()
+  const now = Date.now()
   const entry = failedAttempts.get(userId)
   if (!entry || now > entry.resetAt) {
     failedAttempts.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
@@ -112,14 +112,14 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where:  { id: payload.userId },
+      where: { id: payload.userId },
       select: { faceDescriptor: true },
     })
 
     if (!user?.faceDescriptor) {
       return NextResponse.json(
         {
-          error:   'FACE_ID_REQUIRED',
+          error: 'FACE_ID_REQUIRED',
           message: 'No face registered for this account. Please register your Face ID first.',
         },
         { status: 400 }
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     if (!storedDescriptor) {
       await prisma.user.update({
         where: { id: payload.userId },
-        data:  { faceDescriptor: null },
+        data: { faceDescriptor: null },
       })
       return NextResponse.json(
         { error: 'Your stored Face ID data was corrupted and has been cleared. Please register your face again.' },
@@ -139,12 +139,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const distance        = euclideanDistance(storedDescriptor, descriptor)
-    const MATCH_THRESHOLD = 0.55
-    const isMatch         = distance < MATCH_THRESHOLD
+    const distance = euclideanDistance(storedDescriptor, descriptor)
+    const MATCH_THRESHOLD = 0.45
+    const isMatch = distance < MATCH_THRESHOLD
 
     if (!isMatch) {
-      const failCount    = recordFailure(payload.userId)
+      const failCount = recordFailure(payload.userId)
       const attemptsLeft = Math.max(0, RATE_LIMIT_MAX - failCount)
       return NextResponse.json(
         {
@@ -160,22 +160,22 @@ export async function POST(req: NextRequest) {
     // ✅ Face matched — clear failures and issue a short-lived single-use face token
     clearFailures(payload.userId)
 
-    const rawToken    = generateFaceToken()
+    const rawToken = generateFaceToken()
     const hashedToken = hashFaceToken(rawToken)
-    const expiry      = new Date(Date.now() + FACE_TOKEN_TTL_MS)
+    const expiry = new Date(Date.now() + FACE_TOKEN_TTL_MS)
 
     // Only the HASH is stored in DB — raw token is returned to client once and never stored
     await prisma.user.update({
       where: { id: payload.userId },
-      data:  {
-        faceToken:       hashedToken,
+      data: {
+        faceToken: hashedToken,
         faceTokenExpiry: expiry,
       },
     })
 
     return NextResponse.json({
-      success:   true,
-      message:   'Face verified successfully',
+      success: true,
+      message: 'Face verified successfully',
       faceToken: rawToken,
     })
   } catch (error) {
