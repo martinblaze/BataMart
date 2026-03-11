@@ -2,11 +2,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Shield, Lock, Mail, AlertCircle } from 'lucide-react'
 
 export default function AdminLoginPage() {
-  const router = useRouter()
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -35,7 +33,8 @@ export default function AdminLoginPage() {
         // Also keep in localStorage as fallback for API calls
         localStorage.setItem('adminToken', data.token)
         
-        router.push('/admin')
+        // Full page reload so cookie is set before middleware checks it
+        window.location.href = '/admin'
       } else {
         setError(data.error || 'Invalid credentials')
       }
