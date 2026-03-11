@@ -2,9 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOrders, calculateFees } from '../initialize/route'
-import {
-  notifyOrderPlaced,
-} from '@/lib/push/sendPushNotification'
+import { notifyOrderPlaced } from '@/lib/push/sendPushNotification'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,9 +47,11 @@ export async function GET(request: NextRequest) {
 
     // ── Duplicate check ────────────────────────────────────────────────────
     console.log('\n🔄 STEP 2: Checking for Duplicate')
-    const existingOrder = await prisma.order.findFirst({
-      where: { paymentId: reference },
+    const existingPayment = await prisma.payment.findFirst({
+      where: { transactionId: reference },
+      include: { order: true }
     })
+    const existingOrder = existingPayment?.order ?? null
 
     if (existingOrder) {
       console.log('⚠️ Order already exists:', existingOrder.orderNumber)
@@ -143,7 +143,6 @@ export async function GET(request: NextRequest) {
     // ── Fire notifications ─────────────────────────────────────────────────
     console.log('\n🔔 STEP 7: Sending Notifications')
 
-    // Build seller map with items and notes
     const sellerMap = new Map<string, {
       orderId: string
       orderNumber: string
@@ -182,7 +181,7 @@ export async function GET(request: NextRequest) {
       // 2. Push notification for buyer
       notifyOrderPlaced(buyer.id, orders[0].orderNumber),
 
-      // 3. Notify each seller (in-app bell x2 + push + email)
+      // 3. Notify each seller
       ...Array.from(sellerMap.entries()).map(([sellerId, { orderId, orderNumber, orderNote, itemsList }]) =>
         notifyNewOrderWithNote(sellerId, orderId, orderNumber, orderNote, buyer.name, itemsList)
       ),
@@ -226,13 +225,10 @@ async function notifyNewOrderWithNote(
 ) {
   const hasNote = orderNote && orderNote.trim().length > 0
 
-  const pushMessage = hasNote
-    ? `New order #${orderNumber} from ${buyerName}. Note: "${orderNote!.slice(0, 80)}${orderNote!.length > 80 ? '...' : ''}"`
-    : `You have a new order #${orderNumber} from ${buyerName}. Confirm it now.`
-
   const { subject, html } = buildSellerOrderEmail(orderNumber, buyerName, orderNote)
 
-  const { sendPushToUser } = await import('@/lib/push/sendPushNotification')
+  // Use exported functions only
+  const { notifyNewOrder } = await import('@/lib/push/sendPushNotification')
   const { sendEmail } = await import('@/lib/email/sendEmail')
   const { prisma: db } = await import('@/lib/prisma')
   const { createNotification } = await import('@/lib/notification')
@@ -254,7 +250,7 @@ async function notifyNewOrderWithNote(
       metadata: { orderNumber, buyerName, itemsList },
     }),
 
-    // In-app bell 2 — buyer note (only sent if note exists)
+    // In-app bell 2 — buyer note (only if note exists)
     ...(hasNote ? [
       createNotification({
         userId: sellerId,
@@ -266,17 +262,13 @@ async function notifyNewOrderWithNote(
       }),
     ] : []),
 
-    // Push notification (combines both into one browser popup)
-    sendPushToUser(sellerId, {
-      title: '🎉 New Order Received!',
-      message: pushMessage,
-      url: `/orders/sales`,
-      tag: 'new-order',
-      requireInteraction: true,
-    }),
+    // Push notification + email fallback (uses exported notifyNewOrder)
+    notifyNewOrder(sellerId, orderNumber),
 
-    // Email
-    seller?.email ? sendEmail({ to: seller.email, subject, html }) : Promise.resolve(),
+    // Extra email with buyer note (only if note exists)
+    ...(hasNote && seller?.email ? [
+      sendEmail({ to: seller.email, subject, html })
+    ] : []),
 
   ])
 }
