@@ -7,6 +7,51 @@ import { useCartStore } from '@/lib/cart-store'
 import NotificationBell from '@/components/layout/NotificationBell'
 import { ChevronDown, User, LogOut, Store, ShoppingBag, Wallet, Package, AlertTriangle, PlusCircle, Globe } from 'lucide-react'
 
+// ── BataMart Logo Component ───────────────────────────────────────────────────
+function BataMartLogo() {
+  return (
+    <Link href="/" className="flex items-center space-x-2.5">
+      {/* Shopping bag SVG matching the reference logo */}
+      <svg
+        width="38"
+        height="38"
+        viewBox="0 0 100 100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="bagGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#1a56db" />
+            <stop offset="100%" stopColor="#3b9ef5" />
+          </linearGradient>
+        </defs>
+        {/* Bag body */}
+        <path
+          d="M18 38 L10 90 Q10 95 16 95 L84 95 Q90 95 90 90 L82 38 Z"
+          fill="url(#bagGrad)"
+        />
+        {/* Bag handles */}
+        <path
+          d="M36 38 Q36 18 50 18 Q64 18 64 38"
+          stroke="url(#bagGrad)"
+          strokeWidth="7"
+          strokeLinecap="round"
+          fill="none"
+        />
+        {/* Handle rivets */}
+        <circle cx="36" cy="38" r="4" fill="white" opacity="0.7" />
+        <circle cx="64" cy="38" r="4" fill="white" opacity="0.7" />
+      </svg>
+
+      {/* Wordmark: "Bata" dark blue + "Mart" light blue */}
+      <span className="font-extrabold text-2xl tracking-tight leading-none select-none">
+        <span style={{ color: '#1a3f8f' }}>Bata</span>
+        <span style={{ color: '#3b9ef5' }}>Mart</span>
+      </span>
+    </Link>
+  )
+}
+
 export function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
@@ -28,18 +73,13 @@ export function Navbar() {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY
-      
       if (currentScrollY > lastScrollY.current && currentScrollY > 80) {
-        // Scrolling down and past threshold
         setIsVisible(false)
       } else {
-        // Scrolling up
         setIsVisible(true)
       }
-      
       lastScrollY.current = currentScrollY
     }
-
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
@@ -131,34 +171,25 @@ export function Navbar() {
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
 
   return (
-    <nav 
+    <nav
       className={`fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm transition-transform duration-300 ${
         isVisible ? 'translate-y-0' : '-translate-y-full'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-bata-primary to-bata-secondary rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M3 3h18v4H3V3zm0 6h18v12H3V9zm2 2v8h14v-8H5zm2 2h10v4H7v-4z"/>
-              </svg>
-            </div>
-            <div>
-              <span className="font-bold text-xl bg-gradient-to-r from-bata-primary to-bata-secondary bg-clip-text text-transparent">BATA</span>
-              <p className="text-[10px] text-gray-500 -mt-1">Marketplace</p>
-            </div>
-          </Link>
 
-          {/* Desktop Navigation - Only Cart and Notification Bell */}
+          {/* ── Logo ── */}
+          <BataMartLogo />
+
+          {/* ── Desktop Navigation ── */}
           <div className="hidden md:flex items-center space-x-2">
             {/* Cart */}
             {isLoggedIn && (
-              <Link href="/cart" className="relative p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-all">
+              <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all">
                 <ShoppingBag className="w-6 h-6" />
                 {cartCount > 0 && (
-                  <span className="absolute top-0 right-0 bg-orange-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                  <span className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                     {cartCount > 9 ? '9+' : cartCount}
                   </span>
                 )}
@@ -187,7 +218,6 @@ export function Navbar() {
                 {/* Dropdown Menu */}
                 {isUserDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50">
-                    {/* My Account */}
                     <Link
                       href="/myprofile"
                       onClick={() => setIsUserDropdownOpen(false)}
@@ -197,39 +227,35 @@ export function Navbar() {
                       <span className="font-medium">My Account</span>
                     </Link>
 
-                    {/* Marketplace */}
                     <Link
                       href="/marketplace"
                       onClick={() => setIsUserDropdownOpen(false)}
-                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/marketplace') ? 'bg-blue-50 text-bata-primary' : ''}`}
+                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/marketplace') ? 'bg-blue-50 text-blue-600' : ''}`}
                     >
                       <Globe className="w-5 h-5 mr-3 text-gray-400" />
                       <span>Marketplace</span>
                     </Link>
 
-                    {/* My Shop */}
                     <Link
                       href="/my-shop"
                       onClick={() => setIsUserDropdownOpen(false)}
-                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/my-shop') ? 'bg-orange-50 text-orange-600' : ''}`}
+                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/my-shop') ? 'bg-blue-50 text-blue-600' : ''}`}
                     >
                       <Store className="w-5 h-5 mr-3 text-gray-400" />
                       <span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
                     </Link>
 
-                    {/* Sell */}
                     {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
                       <Link
                         href="/sell"
                         onClick={() => setIsUserDropdownOpen(false)}
-                        className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/sell') ? 'bg-red-50 text-red-600' : ''}`}
+                        className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/sell') ? 'bg-blue-50 text-blue-600' : ''}`}
                       >
                         <PlusCircle className="w-5 h-5 mr-3 text-gray-400" />
                         <span>Sell</span>
                       </Link>
                     )}
 
-                    {/* Orders */}
                     <Link
                       href="/orders"
                       onClick={() => setIsUserDropdownOpen(false)}
@@ -239,7 +265,6 @@ export function Navbar() {
                       <span>Orders</span>
                     </Link>
 
-                    {/* Wallet */}
                     <Link
                       href="/wallet"
                       onClick={() => setIsUserDropdownOpen(false)}
@@ -254,7 +279,6 @@ export function Navbar() {
                       </div>
                     </Link>
 
-                    {/* Disputes */}
                     {userRole !== 'RIDER' && (
                       <Link
                         href="/dispute/select-order"
@@ -266,7 +290,6 @@ export function Navbar() {
                       </Link>
                     )}
 
-                    {/* Rider Dashboard */}
                     {userRole === 'RIDER' && (
                       <Link
                         href="/rider-dashboard"
@@ -280,13 +303,12 @@ export function Navbar() {
                       </Link>
                     )}
 
-                    {/* Role Toggle for Sellers/Admins */}
                     {(userRole === 'SELLER' || userRole === 'ADMIN') && (
                       <div className="px-4 py-3 border-t border-gray-100">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Mode</span>
                           <button
-                            onClick={() => toggleRoleMode()}
+                            onClick={toggleRoleMode}
                             className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors hover:bg-gray-400"
                           >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSellerMode ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -296,19 +318,17 @@ export function Navbar() {
                       </div>
                     )}
 
-                    {/* Become Seller for Buyers */}
                     {userRole === 'BUYER' && (
                       <Link
                         href="/become-seller"
                         onClick={() => setIsUserDropdownOpen(false)}
-                        className="flex items-center px-4 py-3 text-orange-600 hover:bg-orange-50 transition-colors border-t border-gray-100"
+                        className="flex items-center px-4 py-3 text-blue-600 hover:bg-blue-50 transition-colors border-t border-gray-100"
                       >
                         <PlusCircle className="w-5 h-5 mr-3" />
                         <span className="font-medium">Become a Seller</span>
                       </Link>
                     )}
 
-                    {/* Logout */}
                     <button
                       onClick={handleLogout}
                       className="flex items-center w-full px-4 py-3 text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100"
@@ -321,13 +341,19 @@ export function Navbar() {
               </div>
             ) : (
               <div className="flex items-center space-x-3">
-                <Link href="/login" className="text-bata-primary hover:text-bata-dark font-semibold transition-colors">Login</Link>
-                <Link href="/signup" className="bg-bata-primary hover:bg-bata-dark text-white px-4 py-2 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg text-sm">Sign Up</Link>
+                <Link href="/login" className="font-semibold transition-colors" style={{ color: '#1a3f8f' }}>Login</Link>
+                <Link
+                  href="/signup"
+                  className="text-white px-4 py-2 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg text-sm"
+                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+                >
+                  Sign Up
+                </Link>
               </div>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* ── Mobile Menu Button ── */}
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
             <svg className="w-6 h-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               {isMenuOpen ? (
@@ -340,17 +366,17 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* ── Mobile Menu ── */}
       {isMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="px-4 py-4">
             {/* Mobile Header with Cart and Notifications */}
             <div className="flex items-center justify-end gap-4 mb-4 pb-4 border-b border-gray-200">
               {isLoggedIn && (
-                <Link href="/cart" className="relative p-2 text-gray-600 hover:text-orange-600">
+                <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600">
                   <ShoppingBag className="w-6 h-6" />
                   {cartCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                       {cartCount > 9 ? '9+' : cartCount}
                     </span>
                   )}
@@ -361,49 +387,45 @@ export function Navbar() {
 
             {isLoggedIn ? (
               <div className="space-y-2">
-                {/* My Account */}
                 <Link
                   href="/myprofile"
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center px-4 py-3 rounded-xl bg-gradient-to-r from-bata-primary to-bata-secondary text-white"
+                  className="flex items-center px-4 py-3 rounded-xl text-white"
+                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
                 >
                   <User className="w-5 h-5 mr-3" />
                   <span className="font-medium">My Account</span>
                 </Link>
 
-                {/* Marketplace */}
                 <Link
                   href="/marketplace"
                   onClick={() => setIsMenuOpen(false)}
-                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/marketplace') ? 'bg-blue-50 text-bata-primary' : 'text-gray-600 hover:bg-gray-50'}`}
+                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/marketplace') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
                 >
                   <Globe className="w-5 h-5 mr-3" />
                   <span>Marketplace</span>
                 </Link>
 
-                {/* My Shop */}
                 <Link
                   href="/my-shop"
                   onClick={() => setIsMenuOpen(false)}
-                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/my-shop') ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}
+                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/my-shop') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
                 >
                   <Store className="w-5 h-5 mr-3" />
                   <span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
                 </Link>
 
-                {/* Sell */}
                 {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
                   <Link
                     href="/sell"
                     onClick={() => setIsMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/sell') ? 'bg-red-50 text-red-600' : 'text-gray-600 hover:bg-gray-50'}`}
+                    className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/sell') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
                   >
                     <PlusCircle className="w-5 h-5 mr-3" />
                     <span>Sell</span>
                   </Link>
                 )}
 
-                {/* Orders */}
                 <Link
                   href="/orders"
                   onClick={() => setIsMenuOpen(false)}
@@ -413,7 +435,6 @@ export function Navbar() {
                   <span>Orders</span>
                 </Link>
 
-                {/* Wallet */}
                 <Link
                   href="/wallet"
                   onClick={() => setIsMenuOpen(false)}
@@ -428,7 +449,6 @@ export function Navbar() {
                   </div>
                 </Link>
 
-                {/* Disputes */}
                 {userRole !== 'RIDER' && (
                   <Link
                     href="/dispute/select-order"
@@ -440,7 +460,6 @@ export function Navbar() {
                   </Link>
                 )}
 
-                {/* Rider Dashboard */}
                 {userRole === 'RIDER' && (
                   <Link
                     href="/rider-dashboard"
@@ -454,7 +473,6 @@ export function Navbar() {
                   </Link>
                 )}
 
-                {/* User Info & Logout */}
                 <div className="pt-4 border-t border-gray-200 mt-4">
                   <div className="flex items-center justify-between mb-4">
                     <div>
@@ -465,7 +483,7 @@ export function Navbar() {
                       <div className="flex items-center space-x-2">
                         <span className="text-xs text-gray-500">{isSellerMode ? 'Selling' : 'Buying'}</span>
                         <button
-                          onClick={() => { toggleRoleMode(); }}
+                          onClick={toggleRoleMode}
                           className="relative inline-flex h-5 w-10 items-center rounded-full bg-gray-300"
                         >
                           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSellerMode ? 'translate-x-5' : 'translate-x-1'}`} />
@@ -474,7 +492,7 @@ export function Navbar() {
                     )}
                   </div>
                   <button
-                    onClick={() => { handleLogout(); setIsMenuOpen(false); }}
+                    onClick={() => { handleLogout(); setIsMenuOpen(false) }}
                     className="flex items-center justify-center w-full space-x-2 bg-red-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-red-700 transition-all"
                   >
                     <LogOut className="w-5 h-5" />
@@ -484,8 +502,22 @@ export function Navbar() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                <Link href="/login" onClick={() => setIsMenuOpen(false)} className="text-center py-3 border-2 border-bata-primary text-bata-primary rounded-lg font-medium hover:bg-bata-primary hover:text-white transition-all">Login</Link>
-                <Link href="/signup" onClick={() => setIsMenuOpen(false)} className="text-center py-3 bg-bata-primary text-white rounded-lg font-medium hover:bg-bata-dark transition-all">Sign Up</Link>
+                <Link
+                  href="/login"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="text-center py-3 border-2 rounded-lg font-medium transition-all"
+                  style={{ borderColor: '#1a3f8f', color: '#1a3f8f' }}
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="text-center py-3 text-white rounded-lg font-medium transition-all"
+                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+                >
+                  Sign Up
+                </Link>
               </div>
             )}
           </div>
