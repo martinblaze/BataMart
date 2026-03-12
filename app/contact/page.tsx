@@ -8,14 +8,14 @@ import {
 } from 'lucide-react'
 
 const CATEGORIES = [
-  { value: 'PAYMENT_ISSUE',  label: '💳 Payment Issue' },
-  { value: 'ORDER_PROBLEM',  label: '📦 Order Problem' },
-  { value: 'ACCOUNT_ISSUE',  label: '👤 Account Issue' },
-  { value: 'DISPUTE_HELP',   label: '⚖️ Dispute Help' },
-  { value: 'SELLER_ISSUE',   label: '🛍️ Seller Issue' },
-  { value: 'RIDER_ISSUE',    label: '🚴 Rider Issue' },
-  { value: 'BUG_REPORT',     label: '🐛 Bug Report' },
-  { value: 'OTHER',          label: '💬 Other' },
+  { value: 'PAYMENT_ISSUE', label: '💳 Payment Issue' },
+  { value: 'ORDER_PROBLEM', label: '📦 Order Problem' },
+  { value: 'ACCOUNT_ISSUE', label: '👤 Account Issue' },
+  { value: 'DISPUTE_HELP', label: '⚖️ Dispute Help' },
+  { value: 'SELLER_ISSUE', label: '🛍️ Seller Issue' },
+  { value: 'RIDER_ISSUE', label: '🚴 Rider Issue' },
+  { value: 'BUG_REPORT', label: '🐛 Bug Report' },
+  { value: 'OTHER', label: '💬 Other' },
 ]
 
 const faqs = [
@@ -73,14 +73,14 @@ export default function ContactPage() {
             if (data?.user) {
               setForm(f => ({
                 ...f,
-                name:  data.user.name  || f.name,
+                name: data.user.name || f.name,
                 email: data.user.email || f.email,
               }))
             }
           })
-          .catch(() => {})
+          .catch(() => { })
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -141,20 +141,20 @@ export default function ContactPage() {
             <p className="text-gray-600">Choose your preferred way to reach us</p>
           </div>
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <a href="mailto:support@bata.com"
-               className="bg-white p-8 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300 group">
+            <a href="mailto:support@bata-mart.com"
+              className="bg-white p-8 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300 group">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                 <Mail className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Email Support</h3>
               <p className="text-gray-600 mb-4">Get help via email</p>
               <div className="flex items-center justify-between">
-                <span className="text-bata-primary font-semibold text-lg">support@bata.com</span>
+                <span className="text-bata-primary font-semibold text-lg">support@bata-mart.com</span>
                 <span className="text-bata-primary group-hover:translate-x-2 transition-transform duration-300">→</span>
               </div>
             </a>
             <a href="https://wa.me/234XXXXXXXXXX" target="_blank" rel="noopener noreferrer"
-               className="bg-white p-8 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300 group">
+              className="bg-white p-8 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300 group">
               <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                 <MessageCircle className="w-8 h-8 text-white" />
               </div>
@@ -343,8 +343,8 @@ export default function ContactPage() {
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { href: '/marketplace', emoji: '🛍️', title: 'Browse Marketplace', desc: 'Explore products from students' },
-              { href: '/sell',        emoji: '💰', title: 'Start Selling',       desc: 'List your products for free' },
-              { href: '/rider-signup',emoji: '🚴', title: 'Become a Rider',      desc: 'Earn ₦560 per delivery' },
+              { href: '/sell', emoji: '💰', title: 'Start Selling', desc: 'List your products for free' },
+              { href: '/rider-signup', emoji: '🚴', title: 'Become a Rider', desc: 'Earn ₦560 per delivery' },
             ].map(l => (
               <Link key={l.href} href={l.href}
                 className="bg-gray-50 p-6 rounded-xl border border-gray-100 hover:shadow-lg transition-all text-center group">
@@ -363,12 +363,12 @@ export default function ContactPage() {
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Still Have Questions?</h2>
           <p className="text-xl mb-8 text-white/90">Don't hesitate to reach out. We're always happy to help UNIZIK students!</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="mailto:support@bata.com"
-               className="bg-white text-bata-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2">
+            <a href="mailto:support@bata-mart.com"
+              className="bg-white text-bata-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2">
               <Mail className="w-5 h-5" /> Email Us
             </a>
             <a href="https://wa.me/234XXXXXXXXXX" target="_blank" rel="noopener noreferrer"
-               className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2">
+              className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2">
               <MessageCircle className="w-5 h-5" /> WhatsApp Us
             </a>
           </div>

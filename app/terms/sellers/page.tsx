@@ -234,8 +234,8 @@ export default function SellerTermsPage() {
 
         <p className="text-center text-xs text-gray-400 mt-6 pb-8">
           Questions? Contact us at{' '}
-          <a href="mailto:support@bata.ng" className="hover:text-bata-primary underline">
-            support@bata.ng
+          <a href="mailto:support@bata-mart.com" className="hover:text-bata-primary underline">
+            support@bata-mart.com
           </a>
         </p>
 

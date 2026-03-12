@@ -106,7 +106,7 @@ export default function TermsPage() {
             Terms & Conditions
           </h1>
           <p className="text-xl text-white/90 max-w-2xl mx-auto">
-            Please read these terms carefully before using BATA. They outline your rights and 
+            Please read these terms carefully before using BATA. They outline your rights and
             responsibilities as a member of our community.
           </p>
           <p className="text-sm text-white/75 mt-6">
@@ -123,8 +123,8 @@ export default function TermsPage() {
               📋 Agreement to Terms
             </h2>
             <p className="text-gray-700 leading-relaxed">
-              These Terms of Service ("Terms") govern your use of BATA, the student-to-student 
-              marketplace platform for Nnamdi Azikiwe University (UNIZIK) students. By creating 
+              These Terms of Service ("Terms") govern your use of BATA, the student-to-student
+              marketplace platform for Nnamdi Azikiwe University (UNIZIK) students. By creating
               an account or using our services, you enter into a legally binding agreement with us.
             </p>
           </div>
@@ -235,7 +235,7 @@ export default function TermsPage() {
             </div>
             <div className="space-y-4 text-gray-700">
               <p>
-                BATA reserves the right to suspend or terminate accounts that violate these Terms. 
+                BATA reserves the right to suspend or terminate accounts that violate these Terms.
                 Violations include but are not limited to:
               </p>
               <ul className="space-y-2 pl-6">
@@ -277,11 +277,11 @@ export default function TermsPage() {
             </h3>
             <div className="text-gray-700 space-y-2">
               <p>
-                All content on BATA, including the logo, design, text, graphics, and software, is owned by 
+                All content on BATA, including the logo, design, text, graphics, and software, is owned by
                 BATA or its licensors and protected by copyright and trademark laws.
               </p>
               <p>
-                You retain ownership of content you upload (product listings, photos, descriptions) but 
+                You retain ownership of content you upload (product listings, photos, descriptions) but
                 grant BATA a license to use this content to operate and promote the platform.
               </p>
             </div>
@@ -298,7 +298,7 @@ export default function TermsPage() {
             </h3>
             <div className="text-gray-700 space-y-2">
               <p>
-                BATA provides a platform for students to trade but does not guarantee the quality, safety, 
+                BATA provides a platform for students to trade but does not guarantee the quality, safety,
                 or legality of items listed. We are not responsible for:
               </p>
               <ul className="pl-6 space-y-1">
@@ -324,8 +324,8 @@ export default function TermsPage() {
               📢 Changes to These Terms
             </h2>
             <p className="text-gray-700 leading-relaxed">
-              We may modify these Terms at any time. We will notify users of significant changes via 
-              email or platform notification. Continued use of BATA after changes constitutes acceptance 
+              We may modify these Terms at any time. We will notify users of significant changes via
+              email or platform notification. Continued use of BATA after changes constitutes acceptance
               of the revised Terms. If you do not agree to the changes, you must stop using the platform.
             </p>
           </div>
@@ -342,13 +342,13 @@ export default function TermsPage() {
             If you have any questions or concerns about these Terms of Service, please contact us.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
-              href="mailto:support@bata.com"
+            <a
+              href="mailto:support@bata-mart.com"
               className="bg-white text-bata-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl"
             >
-              Email: support@bata.com
+              Email: support@bata-mart.com
             </a>
-            <Link 
+            <Link
               href="/contact"
               className="bg-bata-dark/50 hover:bg-bata-dark text-white border-2 border-white px-8 py-4 rounded-xl font-bold text-lg transition-all"
             >

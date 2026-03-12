@@ -95,7 +95,7 @@ export default function PrivacyPage() {
         },
         {
           subtitle: "Data Deletion",
-          text: "You can request deletion of your account and personal data by contacting us at support@bata.com. Some data may be retained for legal obligations."
+          text: "You can request deletion of your account and personal data by contacting us at support@bata-mart.com. Some data may be retained for legal obligations."
         },
         {
           subtitle: "Opt-Out",
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
             Your Privacy Matters to Us
           </h1>
           <p className="text-xl text-white/90 max-w-2xl mx-auto">
-            We're committed to protecting your personal information and being transparent 
+            We're committed to protecting your personal information and being transparent
             about how we collect, use, and share your data.
           </p>
           <p className="text-sm text-white/75 mt-6">
@@ -136,8 +136,8 @@ export default function PrivacyPage() {
         <div className="max-w-4xl mx-auto">
           <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-r-xl">
             <p className="text-gray-700 leading-relaxed">
-              <strong className="text-blue-900">Welcome to BATA's Privacy Policy.</strong> This policy explains how 
-              BATA ("we," "us," or "our") collects, uses, shares, and protects your personal information when you 
+              <strong className="text-blue-900">Welcome to BATA's Privacy Policy.</strong> This policy explains how
+              BATA ("we," "us," or "our") collects, uses, shares, and protects your personal information when you
               use our student marketplace platform. By using BATA, you agree to the practices described in this policy.
             </p>
           </div>
@@ -184,7 +184,7 @@ export default function PrivacyPage() {
               📅 Data Retention
             </h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              We retain your personal information for as long as necessary to provide our services and comply 
+              We retain your personal information for as long as necessary to provide our services and comply
               with legal obligations. Specifically:
             </p>
             <ul className="space-y-2 text-gray-700">
@@ -244,7 +244,7 @@ export default function PrivacyPage() {
               ⚠️ Third-Party Links
             </h3>
             <p className="text-gray-700">
-              BATA may contain links to external websites. We are not responsible for the privacy practices 
+              BATA may contain links to external websites. We are not responsible for the privacy practices
               of these third-party sites. We encourage you to read their privacy policies.
             </p>
           </div>
@@ -259,8 +259,8 @@ export default function PrivacyPage() {
               👶 Children's Privacy
             </h2>
             <p className="text-gray-700 leading-relaxed">
-              BATA is intended for UNIZIK students aged 18 and above. We do not knowingly collect 
-              information from individuals under 18. If we discover we have collected data from someone 
+              BATA is intended for UNIZIK students aged 18 and above. We do not knowingly collect
+              information from individuals under 18. If we discover we have collected data from someone
               under 18, we will delete it promptly.
             </p>
           </div>
@@ -275,8 +275,8 @@ export default function PrivacyPage() {
               📝 Changes to This Policy
             </h3>
             <p className="text-gray-700">
-              We may update this Privacy Policy from time to time. When we make significant changes, 
-              we'll notify you via email or through a notice on the platform. Continued use of BATA 
+              We may update this Privacy Policy from time to time. When we make significant changes,
+              we'll notify you via email or through a notice on the platform. Continued use of BATA
               after changes constitutes acceptance of the updated policy.
             </p>
           </div>
@@ -290,17 +290,17 @@ export default function PrivacyPage() {
             Questions About Your Privacy?
           </h2>
           <p className="text-xl text-white/90 mb-8">
-            If you have questions or concerns about this Privacy Policy or how we handle your data, 
+            If you have questions or concerns about this Privacy Policy or how we handle your data,
             we're here to help.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
-              href="mailto:support@bata.com"
+            <a
+              href="mailto:support@bata-mart.com"
               className="bg-white text-bata-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl"
             >
-              Email: support@bata.com
+              Email: support@bata-mart.com
             </a>
-            <Link 
+            <Link
               href="/contact"
               className="bg-bata-dark/50 hover:bg-bata-dark text-white border-2 border-white px-8 py-4 rounded-xl font-bold text-lg transition-all"
             >

@@ -5,17 +5,17 @@ import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { sendEmail } from '@/lib/email/sendEmail'
 
-const ADMIN_EMAIL = 'support@bata.com'
+const ADMIN_EMAIL = 'support@bata-mart.com'
 
 const CATEGORY_LABELS: Record<string, string> = {
-  PAYMENT_ISSUE:  'Payment Issue',
-  ORDER_PROBLEM:  'Order Problem',
-  ACCOUNT_ISSUE:  'Account Issue',
-  DISPUTE_HELP:   'Dispute Help',
-  SELLER_ISSUE:   'Seller Issue',
-  RIDER_ISSUE:    'Rider Issue',
-  BUG_REPORT:     'Bug Report',
-  OTHER:          'Other',
+  PAYMENT_ISSUE: 'Payment Issue',
+  ORDER_PROBLEM: 'Order Problem',
+  ACCOUNT_ISSUE: 'Account Issue',
+  DISPUTE_HELP: 'Dispute Help',
+  SELLER_ISSUE: 'Seller Issue',
+  RIDER_ISSUE: 'Rider Issue',
+  BUG_REPORT: 'Bug Report',
+  OTHER: 'Other',
 }
 
 export async function POST(request: NextRequest) {
@@ -43,11 +43,11 @@ export async function POST(request: NextRequest) {
     // Save to database
     const ticket = await prisma.supportTicket.create({
       data: {
-        name:     name.trim(),
-        email:    email.trim().toLowerCase(),
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
         category,
-        message:  message.trim(),
-        userId:   user?.id ?? null,
+        message: message.trim(),
+        userId: user?.id ?? null,
       },
     })
 
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
                     <hr style="border:none;border-top:1px solid #f3f4f6;margin:24px 0;" />
                     <p style="font-size:13px;color:#9ca3af;margin:0;">
                       If your issue is urgent, you can also reach us on WhatsApp.<br/>
-                      Please do not reply to this email — use <strong>support@bata.com</strong> to follow up.
+                      Please do not reply to this email — use <strong>support@bata-mart.com</strong> to follow up.
                     </p>
                   </td>
                 </tr>
