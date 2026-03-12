@@ -1,25 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest } from '@/lib/auth/auth'
+import { verifyToken } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUserFromRequest(request)
+    // ── 1. Extract & verify token ──────────────────────────────────────────
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // ── 2. Fetch user (including suspension fields) ────────────────────────
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        matricNumber: true,
+        profilePhoto: true,
+        role: true,
+        hostelName: true,
+        roomNumber: true,
+        landmark: true,
+        trustLevel: true,
+        avgRating: true,
+        totalReviews: true,
+        completedOrders: true,
+        pendingBalance: true,
+        availableBalance: true,
+        penaltyPoints: true,
+        isSuspended: true,
+        suspendedUntil: true,
+        suspensionReason: true,
+        isRiderVerified: true,
+        isAvailable: true,
+        faceDescriptor: true,
+        withdrawalPin: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const extraRow = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        faceDescriptor: true,
-        withdrawalPin: true,
-      },
-    })
+    // ── 3. Auto-lift expired suspension ───────────────────────────────────
+    if (user.isSuspended && user.suspendedUntil && new Date(user.suspendedUntil) <= new Date()) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { isSuspended: false, suspendedUntil: null, suspensionReason: null },
+      })
+      user.isSuspended = false
+      user.suspendedUntil = null
+      user.suspensionReason = null
+    }
 
+    // ── 4. Return 403 for suspended users — distinct from 401 ─────────────
+    // This lets the client know it's not a token problem but an account problem,
+    // so it can show the right message and force logout immediately.
+    if (user.isSuspended) {
+      return NextResponse.json(
+        {
+          error: 'Account suspended',
+          suspended: true,
+          reason: user.suspensionReason ?? 'Violation of platform terms',
+          until: user.suspendedUntil,
+        },
+        { status: 403 }
+      )
+    }
+
+    // ── 5. Normal response ─────────────────────────────────────────────────
     return NextResponse.json({
       user: {
         id: user.id,
@@ -45,9 +107,8 @@ export async function GET(request: NextRequest) {
         isAvailable: user.isAvailable,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
-        // ✅ Security flags
-        hasFaceId: !!extraRow?.faceDescriptor,
-        hasWithdrawalPin: !!extraRow?.withdrawalPin,
+        hasFaceId: !!user.faceDescriptor,
+        hasWithdrawalPin: !!user.withdrawalPin,
       },
     })
   } catch (error) {

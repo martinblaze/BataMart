@@ -4,6 +4,7 @@ import '@/styles/globals.css'
 import { NavbarWrapper } from '@/components/layout/NavbarWrapper'
 import { ThemeProvider } from '@/components/layout/ThemeProvider'
 import { NotificationPrompt } from '@/hooks/usePushSubscription'
+import { SuspensionGuard } from '@/components/layout/SuspensionGuard'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -21,6 +22,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider>
+          {/* Polls /api/auth/me every 30s — force-logs out suspended users immediately */}
+          <SuspensionGuard />
           <NavbarWrapper />
           <div>
             {children}

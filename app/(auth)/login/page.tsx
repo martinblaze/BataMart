@@ -1,15 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // ── Show suspension context if redirected from SuspensionGuard ────────────
+  const wasSuspended = searchParams.get('suspended') === '1'
+  const suspensionReason = searchParams.get('reason')
+  const suspensionUntil = searchParams.get('until')
+
+  const suspensionMessage = wasSuspended
+    ? buildSuspensionMessage(suspensionReason, suspensionUntil)
+    : null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,6 +69,20 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
+
+          {/* ── Suspension banner — only shown when redirected from a forced logout ── */}
+          {suspensionMessage && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-red-500 text-xl flex-shrink-0">🚫</span>
+                <div>
+                  <p className="font-semibold text-red-800 text-sm">Account Suspended</p>
+                  <p className="text-red-700 text-sm mt-1">{suspensionMessage}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
@@ -114,4 +139,27 @@ export default function LoginPage() {
       </div>
     </div>
   )
+}
+
+// ── Helper ────────────────────────────────────────────────────────────────────
+function buildSuspensionMessage(reason: string | null, until: string | null): string {
+  const reasonText = reason ?? 'Violation of platform terms'
+
+  if (!until) {
+    return `Your account has been permanently suspended. Reason: ${reasonText}. Contact support if you believe this is an error.`
+  }
+
+  const untilDate = new Date(until)
+  const now = new Date()
+
+  // Treat dates > 50 years in future as "permanent" (our server-side placeholder)
+  if (untilDate.getFullYear() - now.getFullYear() > 50) {
+    return `Your account has been permanently suspended. Reason: ${reasonText}. Contact support if you believe this is an error.`
+  }
+
+  return `Your account is suspended until ${untilDate.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })}. Reason: ${reasonText}.`
 }
