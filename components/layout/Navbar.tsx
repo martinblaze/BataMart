@@ -27,6 +27,11 @@ function BataMartLogo() {
 export function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
+
+  // Hide entire navbar when opened in Android app
+  const isApp = typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('app') === 'true'
+
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userName, setUserName] = useState('')
@@ -37,7 +42,7 @@ export function Navbar() {
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  
+
   const getTotalItems = useCartStore((state) => state.getTotalItems)
   const cartCount = getTotalItems()
 
@@ -74,10 +79,10 @@ export function Navbar() {
         setIsLoggedIn(true)
         const storedName = localStorage.getItem('userName')
         if (storedName) setUserName(storedName)
-        
+
         const sellerModePref = localStorage.getItem('sellerMode')
         if (sellerModePref !== null) setIsSellerMode(sellerModePref === 'true')
-        
+
         try {
           const response = await fetch('/api/auth/me', {
             headers: { 'Authorization': `Bearer ${token}` },
@@ -141,6 +146,9 @@ export function Navbar() {
   }
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
+
+  // Return null if opened inside Android app
+  if (isApp) return null
 
   return (
     <nav
@@ -351,7 +359,6 @@ export function Navbar() {
       {isMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="px-4 py-4">
-            {/* Mobile Header with Cart and Notifications */}
             <div className="flex items-center justify-end gap-4 mb-4 pb-4 border-b border-gray-200">
               {isLoggedIn && (
                 <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600">
