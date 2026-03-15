@@ -14,11 +14,11 @@ function BataMartLogo() {
       <Image
         src="/BATAMART - logo.png"
         alt="BataMart"
-        width={180}
-        height={55}
+        width={140}
+        height={45}
         priority
         className="object-contain"
-        style={{ maxHeight: '55px', width: 'auto' }}
+        style={{ maxHeight: '45px', width: 'auto' }}
       />
     </Link>
   )
@@ -140,22 +140,25 @@ export function Navbar() {
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
 
-  // In app mode — show only cart + notification bar
+  // In app mode — show logo + cart + notification only
   if (isApp) {
     return (
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
-        <div className="flex items-center justify-end h-14 px-4 gap-3">
-          {isLoggedIn && (
-            <Link href={`/cart?app=true`} className="relative p-2 text-gray-600">
-              <ShoppingBag className="w-6 h-6" />
-              {cartCount > 0 && (
-                <span className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                  {cartCount > 9 ? '9+' : cartCount}
-                </span>
-              )}
-            </Link>
-          )}
-          {isLoggedIn && <NotificationBell />}
+        <div className="flex items-center justify-between h-14 px-4">
+          <BataMartLogo />
+          <div className="flex items-center gap-3">
+            {isLoggedIn && (
+              <Link href="/cart?app=true" className="relative p-2 text-gray-600">
+                <ShoppingBag className="w-6 h-6" />
+                {cartCount > 0 && (
+                  <span className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    {cartCount > 9 ? '9+' : cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
+            {isLoggedIn && <NotificationBell />}
+          </div>
         </div>
       </nav>
     )
