@@ -1,13 +1,18 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Navbar } from '@/components/layout/Navbar'
+import { Suspense } from 'react'
 
-export function NavbarWrapper() {
+function NavbarContent() {
   const pathname = usePathname()
-  const hideNav = pathname?.startsWith('/admin') ||
-                  pathname?.startsWith('/admin-login') ||
-                  pathname === '/'
+  const searchParams = useSearchParams()
+  const isApp = searchParams.get('app') === 'true'
+
+  const hideNav = isApp ||
+    pathname?.startsWith('/admin') ||
+    pathname?.startsWith('/admin-login') ||
+    pathname === '/'
 
   if (hideNav) return null
   return (
@@ -15,5 +20,13 @@ export function NavbarWrapper() {
       <Navbar />
       <div className="pt-16" />
     </>
+  )
+}
+
+export function NavbarWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <NavbarContent />
+    </Suspense>
   )
 }

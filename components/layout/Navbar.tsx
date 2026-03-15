@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useCartStore } from '@/lib/cart-store'
 import NotificationBell from '@/components/layout/NotificationBell'
 import { ChevronDown, User, LogOut, Store, ShoppingBag, Wallet, Package, AlertTriangle, PlusCircle, Globe } from 'lucide-react'
@@ -27,10 +27,8 @@ function BataMartLogo() {
 export function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
-
-  // Hide entire navbar when opened in Android app
-  const isApp = typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).get('app') === 'true'
+  const searchParams = useSearchParams()
+  const isApp = searchParams.get('app') === 'true'
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -46,7 +44,6 @@ export function Navbar() {
   const getTotalItems = useCartStore((state) => state.getTotalItems)
   const cartCount = getTotalItems()
 
-  // Scroll behavior - hide on scroll down, show on scroll up
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY
@@ -61,7 +58,6 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -147,7 +143,7 @@ export function Navbar() {
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
 
-  // Return null if opened inside Android app
+  // Hide entire navbar when in Android app
   if (isApp) return null
 
   return (
@@ -159,13 +155,9 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
-          {/* ── Logo ── */}
           <BataMartLogo />
 
-          {/* ── Desktop Navigation ── */}
           <div className="hidden md:flex items-center space-x-2">
-
-            {/* Cart */}
             {isLoggedIn && (
               <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all">
                 <ShoppingBag className="w-6 h-6" />
@@ -177,10 +169,8 @@ export function Navbar() {
               </Link>
             )}
 
-            {/* Notification Bell */}
             {isLoggedIn && <NotificationBell />}
 
-            {/* User Dropdown */}
             {isLoggedIn ? (
               <div className="relative ml-2" ref={dropdownRef}>
                 <button
@@ -196,61 +186,31 @@ export function Navbar() {
                   <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Dropdown Menu */}
                 {isUserDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50">
-                    <Link
-                      href="/myprofile"
-                      onClick={() => setIsUserDropdownOpen(false)}
-                      className="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100"
-                    >
+                    <Link href="/myprofile" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100">
                       <User className="w-5 h-5 mr-3 text-gray-400" />
                       <span className="font-medium">My Account</span>
                     </Link>
-
-                    <Link
-                      href="/marketplace"
-                      onClick={() => setIsUserDropdownOpen(false)}
-                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/marketplace') ? 'bg-blue-50 text-blue-600' : ''}`}
-                    >
+                    <Link href="/marketplace" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/marketplace') ? 'bg-blue-50 text-blue-600' : ''}`}>
                       <Globe className="w-5 h-5 mr-3 text-gray-400" />
                       <span>Marketplace</span>
                     </Link>
-
-                    <Link
-                      href="/my-shop"
-                      onClick={() => setIsUserDropdownOpen(false)}
-                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/my-shop') ? 'bg-blue-50 text-blue-600' : ''}`}
-                    >
+                    <Link href="/my-shop" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/my-shop') ? 'bg-blue-50 text-blue-600' : ''}`}>
                       <Store className="w-5 h-5 mr-3 text-gray-400" />
                       <span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
                     </Link>
-
                     {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
-                      <Link
-                        href="/sell"
-                        onClick={() => setIsUserDropdownOpen(false)}
-                        className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/sell') ? 'bg-blue-50 text-blue-600' : ''}`}
-                      >
+                      <Link href="/sell" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/sell') ? 'bg-blue-50 text-blue-600' : ''}`}>
                         <PlusCircle className="w-5 h-5 mr-3 text-gray-400" />
                         <span>Sell</span>
                       </Link>
                     )}
-
-                    <Link
-                      href="/orders"
-                      onClick={() => setIsUserDropdownOpen(false)}
-                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : ''}`}
-                    >
+                    <Link href="/orders" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : ''}`}>
                       <Package className="w-5 h-5 mr-3 text-gray-400" />
                       <span>Orders</span>
                     </Link>
-
-                    <Link
-                      href="/wallet"
-                      onClick={() => setIsUserDropdownOpen(false)}
-                      className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/wallet') ? 'bg-green-50 text-green-600' : ''}`}
-                    >
+                    <Link href="/wallet" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/wallet') ? 'bg-green-50 text-green-600' : ''}`}>
                       <Wallet className="w-5 h-5 mr-3 text-gray-400" />
                       <div className="flex items-center justify-between flex-1">
                         <span>Wallet</span>
@@ -259,61 +219,38 @@ export function Navbar() {
                         )}
                       </div>
                     </Link>
-
                     {userRole !== 'RIDER' && (
-                      <Link
-                        href="/dispute/select-order"
-                        onClick={() => setIsUserDropdownOpen(false)}
-                        className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/dispute') ? 'bg-red-50 text-red-600' : ''}`}
-                      >
+                      <Link href="/dispute/select-order" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/dispute') ? 'bg-red-50 text-red-600' : ''}`}>
                         <AlertTriangle className="w-5 h-5 mr-3 text-gray-400" />
                         <span>Disputes</span>
                       </Link>
                     )}
-
                     {userRole === 'RIDER' && (
-                      <Link
-                        href="/rider-dashboard"
-                        onClick={() => setIsUserDropdownOpen(false)}
-                        className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : ''}`}
-                      >
+                      <Link href="/rider-dashboard" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : ''}`}>
                         <svg className="w-5 h-5 mr-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                         </svg>
                         <span>Rider Dashboard</span>
                       </Link>
                     )}
-
                     {(userRole === 'SELLER' || userRole === 'ADMIN') && (
                       <div className="px-4 py-3 border-t border-gray-100">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Mode</span>
-                          <button
-                            onClick={toggleRoleMode}
-                            className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors hover:bg-gray-400"
-                          >
+                          <button onClick={toggleRoleMode} className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors hover:bg-gray-400">
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSellerMode ? 'translate-x-6' : 'translate-x-1'}`} />
                           </button>
                           <span className="text-xs text-gray-500">{isSellerMode ? 'Selling' : 'Buying'}</span>
                         </div>
                       </div>
                     )}
-
                     {userRole === 'BUYER' && (
-                      <Link
-                        href="/become-seller"
-                        onClick={() => setIsUserDropdownOpen(false)}
-                        className="flex items-center px-4 py-3 text-blue-600 hover:bg-blue-50 transition-colors border-t border-gray-100"
-                      >
+                      <Link href="/become-seller" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center px-4 py-3 text-blue-600 hover:bg-blue-50 transition-colors border-t border-gray-100">
                         <PlusCircle className="w-5 h-5 mr-3" />
                         <span className="font-medium">Become a Seller</span>
                       </Link>
                     )}
-
-                    <button
-                      onClick={handleLogout}
-                      className="flex items-center w-full px-4 py-3 text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100"
-                    >
+                    <button onClick={handleLogout} className="flex items-center w-full px-4 py-3 text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100">
                       <LogOut className="w-5 h-5 mr-3" />
                       <span>Logout</span>
                     </button>
@@ -322,41 +259,32 @@ export function Navbar() {
               </div>
             ) : (
               <div className="flex items-center space-x-3">
-                <Link
-                  href="/login"
-                  className="font-semibold text-blue-900 hover:text-blue-700 transition-colors"
-                >
-                  Login
-                </Link>
-                <Link
-                  href="/signup"
-                  className="text-white px-4 py-2 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg text-sm"
-                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-                >
-                  Sign Up
-                </Link>
+                <Link href="/login" className="font-semibold text-blue-900 hover:text-blue-700 transition-colors">Login</Link>
+                <Link href="/signup" className="text-white px-4 py-2 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg text-sm" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>Sign Up</Link>
               </div>
             )}
           </div>
 
-          {/* ── Mobile Menu Button ── */}
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <svg className="w-6 h-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {isMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
+          {/* Mobile Menu Button — hidden in app */}
+          {!isApp && (
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <svg className="w-6 h-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {isMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── Mobile Menu ── */}
-      {isMenuOpen && (
+      {/* Mobile Menu — hidden in app */}
+      {isMenuOpen && !isApp && (
         <div className="md:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="px-4 py-4">
             <div className="flex items-center justify-end gap-4 mb-4 pb-4 border-b border-gray-200">
@@ -375,59 +303,29 @@ export function Navbar() {
 
             {isLoggedIn ? (
               <div className="space-y-2">
-                <Link
-                  href="/myprofile"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center px-4 py-3 rounded-xl text-white"
-                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-                >
+                <Link href="/myprofile" onClick={() => setIsMenuOpen(false)} className="flex items-center px-4 py-3 rounded-xl text-white" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
                   <User className="w-5 h-5 mr-3" />
                   <span className="font-medium">My Account</span>
                 </Link>
-
-                <Link
-                  href="/marketplace"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/marketplace') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
+                <Link href="/marketplace" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/marketplace') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Globe className="w-5 h-5 mr-3" />
                   <span>Marketplace</span>
                 </Link>
-
-                <Link
-                  href="/my-shop"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/my-shop') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
+                <Link href="/my-shop" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/my-shop') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Store className="w-5 h-5 mr-3" />
                   <span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
                 </Link>
-
                 {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
-                  <Link
-                    href="/sell"
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/sell') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
+                  <Link href="/sell" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/sell') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                     <PlusCircle className="w-5 h-5 mr-3" />
                     <span>Sell</span>
                   </Link>
                 )}
-
-                <Link
-                  href="/orders"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
+                <Link href="/orders" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Package className="w-5 h-5 mr-3" />
                   <span>Orders</span>
                 </Link>
-
-                <Link
-                  href="/wallet"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/wallet') ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
+                <Link href="/wallet" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/wallet') ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Wallet className="w-5 h-5 mr-3" />
                   <div className="flex items-center justify-between flex-1">
                     <span>Wallet</span>
@@ -436,31 +334,20 @@ export function Navbar() {
                     )}
                   </div>
                 </Link>
-
                 {userRole !== 'RIDER' && (
-                  <Link
-                    href="/dispute/select-order"
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/dispute') ? 'bg-red-50 text-red-600' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
+                  <Link href="/dispute/select-order" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/dispute') ? 'bg-red-50 text-red-600' : 'text-gray-600 hover:bg-gray-50'}`}>
                     <AlertTriangle className="w-5 h-5 mr-3" />
                     <span>Disputes</span>
                   </Link>
                 )}
-
                 {userRole === 'RIDER' && (
-                  <Link
-                    href="/rider-dashboard"
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}
-                  >
+                  <Link href="/rider-dashboard" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}>
                     <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                     <span>Rider Dashboard</span>
                   </Link>
                 )}
-
                 <div className="pt-4 border-t border-gray-200 mt-4">
                   <div className="flex items-center justify-between mb-4">
                     <div>
@@ -470,19 +357,13 @@ export function Navbar() {
                     {(userRole === 'SELLER' || userRole === 'ADMIN') && (
                       <div className="flex items-center space-x-2">
                         <span className="text-xs text-gray-500">{isSellerMode ? 'Selling' : 'Buying'}</span>
-                        <button
-                          onClick={toggleRoleMode}
-                          className="relative inline-flex h-5 w-10 items-center rounded-full bg-gray-300"
-                        >
+                        <button onClick={toggleRoleMode} className="relative inline-flex h-5 w-10 items-center rounded-full bg-gray-300">
                           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSellerMode ? 'translate-x-5' : 'translate-x-1'}`} />
                         </button>
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => { handleLogout(); setIsMenuOpen(false) }}
-                    className="flex items-center justify-center w-full space-x-2 bg-red-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-red-700 transition-all"
-                  >
+                  <button onClick={() => { handleLogout(); setIsMenuOpen(false) }} className="flex items-center justify-center w-full space-x-2 bg-red-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-red-700 transition-all">
                     <LogOut className="w-5 h-5" />
                     <span>Logout</span>
                   </button>
@@ -490,21 +371,8 @@ export function Navbar() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                <Link
-                  href="/login"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="text-center py-3 border-2 border-blue-900 text-blue-900 rounded-lg font-medium hover:bg-blue-900 hover:text-white transition-all"
-                >
-                  Login
-                </Link>
-                <Link
-                  href="/signup"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="text-center py-3 text-white rounded-lg font-medium transition-all"
-                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-                >
-                  Sign Up
-                </Link>
+                <Link href="/login" onClick={() => setIsMenuOpen(false)} className="text-center py-3 border-2 border-blue-900 text-blue-900 rounded-lg font-medium hover:bg-blue-900 hover:text-white transition-all">Login</Link>
+                <Link href="/signup" onClick={() => setIsMenuOpen(false)} className="text-center py-3 text-white rounded-lg font-medium transition-all" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>Sign Up</Link>
               </div>
             )}
           </div>
