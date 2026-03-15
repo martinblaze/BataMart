@@ -47,9 +47,7 @@ export default function MyProfilePage() {
     setIsApp(params.get('app') === 'true')
   }, [])
 
-  useEffect(() => {
-    fetchProfileData()
-  }, [])
+  useEffect(() => { fetchProfileData() }, [])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -94,7 +92,6 @@ export default function MyProfilePage() {
     setSaving(true)
     setSaveError('')
     setSaveSuccess(false)
-
     try {
       const token = localStorage.getItem('token')
       const response = await fetch('/api/auth/update-profile', {
@@ -108,9 +105,7 @@ export default function MyProfilePage() {
           landmark: editedUser.landmark
         })
       })
-
       const data = await response.json()
-
       if (response.ok) {
         setUser({ ...user!, ...editedUser })
         setIsEditing(false)
@@ -154,37 +149,35 @@ export default function MyProfilePage() {
   const isSeller = user.role === 'SELLER' || user.role === 'ADMIN'
 
   const menuItems = [
-    { icon: <ShoppingBag className="w-5 h-5" />, label: 'Marketplace', href: '/marketplace' },
-    { icon: <Store className="w-5 h-5" />, label: isSeller && user.isSellerMode ? 'My Shop' : 'My Items', href: '/my-shop' },
-    ...(isSeller && user.isSellerMode ? [{ icon: <PlusCircle className="w-5 h-5" />, label: 'Sell', href: '/sell' }] : []),
-    { icon: <Package className="w-5 h-5" />, label: 'Orders', href: '/orders' },
-    { icon: <Wallet className="w-5 h-5" />, label: 'Wallet', href: '/wallet' },
-    { icon: <Gift className="w-5 h-5" />, label: 'Referrals', href: '/referrals' },
-    ...(user.role !== 'RIDER' ? [{ icon: <AlertTriangle className="w-5 h-5" />, label: 'Disputes', href: '/dispute/select-order' }] : []),
+    { icon: <ShoppingBag className="w-5 h-5" />, label: 'Marketplace', href: isApp ? '/marketplace?app=true' : '/marketplace' },
+    { icon: <Store className="w-5 h-5" />, label: isSeller && user.isSellerMode ? 'My Shop' : 'My Items', href: isApp ? '/my-shop?app=true' : '/my-shop' },
+    ...(isSeller && user.isSellerMode ? [{ icon: <PlusCircle className="w-5 h-5" />, label: 'Sell', href: isApp ? '/sell?app=true' : '/sell' }] : []),
+    { icon: <Package className="w-5 h-5" />, label: 'Orders', href: isApp ? '/orders?app=true' : '/orders' },
+    { icon: <Wallet className="w-5 h-5" />, label: 'Wallet', href: isApp ? '/wallet?app=true' : '/wallet' },
+    { icon: <Gift className="w-5 h-5" />, label: 'Referrals', href: isApp ? '/referrals?app=true' : '/referrals' },
+    ...(user.role !== 'RIDER' ? [{ icon: <AlertTriangle className="w-5 h-5" />, label: 'Disputes', href: isApp ? '/dispute/select-order?app=true' : '/dispute/select-order' }] : []),
   ]
 
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* Mobile Header — hidden in app mode */}
-      {!isApp && (
-        <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-30">
-          <div className="flex items-center justify-between px-4 py-3">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 -ml-2 rounded-lg hover:bg-gray-100 transition-colors"
-              aria-label="Open menu"
-            >
-              <Menu className="w-6 h-6 text-gray-700" />
-            </button>
-            <h1 className="font-bold text-gray-900">My Account</h1>
-            <div className="w-10" />
-          </div>
+      {/* Mobile Header — always visible */}
+      <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="flex items-center justify-between px-4 py-3">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-2 -ml-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-6 h-6 text-gray-700" />
+          </button>
+          <h1 className="font-bold text-gray-900">My Account</h1>
+          <div className="w-10" />
         </div>
-      )}
+      </div>
 
-      {/* Mobile Slide-out Menu — hidden in app mode */}
-      {!isApp && isMobileMenuOpen && (
+      {/* Mobile Slide-out Menu — always available */}
+      {isMobileMenuOpen && (
         <>
           <div
             className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity"
@@ -198,14 +191,13 @@ export default function MyProfilePage() {
                     <User className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <p className="font-bold text-gray-900 text-sm">My BATA Account</p>
+                    <p className="font-bold text-gray-900 text-sm">{user.name}</p>
                     <p className="text-xs text-gray-500 capitalize">{user.role.toLowerCase()}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
-                  aria-label="Close menu"
                 >
                   <X className="w-5 h-5 text-gray-600" />
                 </button>
@@ -268,7 +260,6 @@ export default function MyProfilePage() {
                   </div>
                 </div>
               </div>
-
               <nav className="divide-y divide-gray-100">
                 {menuItems.map((item, index) => (
                   <Link
@@ -281,7 +272,6 @@ export default function MyProfilePage() {
                   </Link>
                 ))}
               </nav>
-
               <div className="border-t border-gray-200 p-4">
                 <button
                   onClick={handleLogout}
@@ -355,17 +345,11 @@ export default function MyProfilePage() {
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Full Name</label>
                     {isEditing ? (
-                      <input
-                        type="text"
-                        value={editedUser.name || ''}
-                        onChange={(e) => setEditedUser({ ...editedUser, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent"
-                      />
+                      <input type="text" value={editedUser.name || ''} onChange={(e) => setEditedUser({ ...editedUser, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent" />
                     ) : (
                       <p className="text-gray-900 font-medium">{user.name}</p>
                     )}
                   </div>
-
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Email Address</label>
                     <div className="flex items-center gap-2">
@@ -374,22 +358,12 @@ export default function MyProfilePage() {
                     </div>
                     <p className="text-xs text-gray-400 mt-1">Email cannot be changed</p>
                   </div>
-
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Phone Number</label>
                     {isEditing ? (
                       <div className="flex">
                         <span className="inline-flex items-center px-3 border border-r-0 border-gray-300 rounded-l-lg bg-gray-50 text-gray-500 text-sm">+234</span>
-                        <input
-                          type="tel"
-                          value={(editedUser.phone || '').replace(/^\+?234/, '')}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, '')
-                            setEditedUser({ ...editedUser, phone: digits })
-                          }}
-                          maxLength={11}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent"
-                        />
+                        <input type="tel" value={(editedUser.phone || '').replace(/^\+?234/, '')} onChange={(e) => { const digits = e.target.value.replace(/\D/g, ''); setEditedUser({ ...editedUser, phone: digits }) }} maxLength={11} className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent" />
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -413,17 +387,10 @@ export default function MyProfilePage() {
                 </div>
                 <div className="p-4 lg:p-5 space-y-4">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Your default shipping address:</p>
-
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Hostel/Location</label>
                     {isEditing ? (
-                      <input
-                        type="text"
-                        value={editedUser.hostelName || ''}
-                        onChange={(e) => setEditedUser({ ...editedUser, hostelName: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent"
-                        placeholder="e.g. Boys Hostel, Block A"
-                      />
+                      <input type="text" value={editedUser.hostelName || ''} onChange={(e) => setEditedUser({ ...editedUser, hostelName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent" placeholder="e.g. Boys Hostel, Block A" />
                     ) : (
                       <div className="flex items-start gap-2">
                         <Home className="w-4 h-4 text-gray-400 mt-0.5" />
@@ -431,32 +398,18 @@ export default function MyProfilePage() {
                       </div>
                     )}
                   </div>
-
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Room Number</label>
                     {isEditing ? (
-                      <input
-                        type="text"
-                        value={editedUser.roomNumber || ''}
-                        onChange={(e) => setEditedUser({ ...editedUser, roomNumber: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent"
-                        placeholder="e.g. 205"
-                      />
+                      <input type="text" value={editedUser.roomNumber || ''} onChange={(e) => setEditedUser({ ...editedUser, roomNumber: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent" placeholder="e.g. 205" />
                     ) : (
                       <p className="text-gray-900 font-medium">{user.roomNumber || 'Not set'}</p>
                     )}
                   </div>
-
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Landmark</label>
                     {isEditing ? (
-                      <input
-                        type="text"
-                        value={editedUser.landmark || ''}
-                        onChange={(e) => setEditedUser({ ...editedUser, landmark: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent"
-                        placeholder="e.g. Near the cafeteria"
-                      />
+                      <input type="text" value={editedUser.landmark || ''} onChange={(e) => setEditedUser({ ...editedUser, landmark: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bata-primary focus:border-transparent" placeholder="e.g. Near the cafeteria" />
                     ) : (
                       <div className="flex items-start gap-2">
                         <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
@@ -468,7 +421,7 @@ export default function MyProfilePage() {
               </div>
             </div>
 
-            {/* BATA Balance Card */}
+            {/* BATA Balance */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-gray-100">
                 <h2 className="font-bold text-gray-900 text-sm lg:text-base">BATA BALANCE</h2>
@@ -484,7 +437,7 @@ export default function MyProfilePage() {
                       ₦{wallet?.availableBalance?.toLocaleString('en-NG', { minimumFractionDigits: 2 }) || '0.00'}
                     </p>
                   </div>
-                  <Link href="/wallet" className="ml-auto text-bata-primary hover:text-bata-dark font-medium text-sm flex items-center gap-1 flex-shrink-0">
+                  <Link href={isApp ? '/wallet?app=true' : '/wallet'} className="ml-auto text-bata-primary hover:text-bata-dark font-medium text-sm flex items-center gap-1 flex-shrink-0">
                     View <ChevronRight className="w-4 h-4" />
                   </Link>
                 </div>
@@ -506,40 +459,23 @@ export default function MyProfilePage() {
                       <div>
                         <p className="font-medium text-gray-900 text-sm">Push Notifications</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {!isSupported
-                            ? 'Not supported in this browser'
-                            : permission === 'denied'
-                            ? 'Blocked — enable in browser settings'
-                            : isSubscribed
-                            ? "You'll get updates even when browser is closed"
+                          {!isSupported ? 'Not supported in this browser'
+                            : permission === 'denied' ? 'Blocked — enable in browser settings'
+                            : isSubscribed ? "You'll get updates even when browser is closed"
                             : 'Enable to get order and payment alerts'}
                         </p>
                       </div>
                     </div>
-
                     {isSupported && permission !== 'denied' && (
                       <button
                         onClick={isSubscribed ? unsubscribe : subscribe}
                         disabled={notifLoading}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                          isSubscribed
-                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${isSubscribed ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
                       >
-                        {notifLoading ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : isSubscribed ? (
-                          'Turn Off'
-                        ) : (
-                          'Enable'
-                        )}
+                        {notifLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isSubscribed ? 'Turn Off' : 'Enable'}
                       </button>
                     )}
-
-                    {permission === 'denied' && (
-                      <span className="text-xs text-red-500 font-medium">Blocked</span>
-                    )}
+                    {permission === 'denied' && <span className="text-xs text-red-500 font-medium">Blocked</span>}
                   </div>
                 </div>
               </div>
@@ -552,7 +488,7 @@ export default function MyProfilePage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="font-bold text-gray-900 text-sm lg:text-base">Recommended For You</h2>
-                <Link href="/marketplace" className="text-bata-primary hover:text-bata-dark text-sm font-medium flex items-center gap-1">
+                <Link href={isApp ? '/marketplace?app=true' : '/marketplace'} className="text-bata-primary hover:text-bata-dark text-sm font-medium flex items-center gap-1">
                   See All <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>
