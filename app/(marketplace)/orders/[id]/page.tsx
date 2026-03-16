@@ -25,7 +25,8 @@ import {
   Shield,
   ShoppingBag,
   MessageSquare,
-  ExternalLink
+  ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -68,7 +69,7 @@ export default function OrderDetailPage() {
     setIsPolling(true);
     const interval = setInterval(() => {
       fetchOrder();
-    }, 10000); // every 10 seconds
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [order?.status]);
@@ -83,9 +84,7 @@ export default function OrderDetailPage() {
       }
       
       const response = await fetch(`/api/orders/${params.id}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
@@ -244,6 +243,27 @@ export default function OrderDetailPage() {
   const statusActions = getStatusActions();
   const userRole = getCurrentUserRole();
 
+  // ── Dispute status label helper ────────────────────────────────────────────
+  const getDisputeStatusLabel = (s: string) => {
+    switch (s) {
+      case 'OPEN':                   return 'Open — Awaiting Review'
+      case 'UNDER_REVIEW':           return 'Under Review'
+      case 'RESOLVED_BUYER_FAVOR':   return 'Resolved — Refund Issued'
+      case 'RESOLVED_SELLER_FAVOR':  return 'Resolved — No Refund'
+      case 'RESOLVED_COMPROMISE':    return 'Partial Refund'
+      case 'DISMISSED':              return 'Dismissed'
+      default:                       return s
+    }
+  }
+
+  const getDisputeStatusBadge = (s: string) => {
+    if (s === 'OPEN')           return 'bg-blue-100 text-blue-700'
+    if (s === 'UNDER_REVIEW')   return 'bg-amber-100 text-amber-700'
+    if (s.startsWith('RESOLVED')) return 'bg-emerald-100 text-emerald-700'
+    if (s === 'DISMISSED')      return 'bg-gray-100 text-gray-600'
+    return 'bg-gray-100 text-gray-600'
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
 
@@ -265,7 +285,6 @@ export default function OrderDetailPage() {
               <span className="font-medium">{order.status.replace(/_/g, ' ')}</span>
             </div>
 
-            {/* ── Live polling indicator ─────────────────────────────────── */}
             {isPolling && (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
@@ -280,7 +299,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Status actions */}
         {statusActions.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
             {statusActions.map((action) => (
@@ -302,7 +320,6 @@ export default function OrderDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Order Progress</h2>
           <div className="flex items-center justify-between relative">
-            {/* Progress line */}
             <div className="absolute left-0 right-0 top-4 h-0.5 bg-gray-200 z-0" />
             <div
               className="absolute left-0 top-4 h-0.5 bg-bata-primary z-0 transition-all duration-500"
@@ -318,12 +335,12 @@ export default function OrderDetailPage() {
               }}
             />
             {[
-              { key: 'PENDING',        label: 'Placed',   icon: '🛒' },
-              { key: 'PROCESSING',     label: 'Confirmed',icon: '✅' },
-              { key: 'PICKED_UP',      label: 'Picked Up',icon: '📦' },
-              { key: 'ON_THE_WAY',     label: 'On Way',   icon: '🛵' },
-              { key: 'DELIVERED',      label: 'Delivered',icon: '🎉' },
-            ].map((step, idx) => {
+              { key: 'PENDING',    label: 'Placed',    icon: '🛒' },
+              { key: 'PROCESSING', label: 'Confirmed', icon: '✅' },
+              { key: 'PICKED_UP',  label: 'Picked Up', icon: '📦' },
+              { key: 'ON_THE_WAY', label: 'On Way',    icon: '🛵' },
+              { key: 'DELIVERED',  label: 'Delivered', icon: '🎉' },
+            ].map((step) => {
               const statusOrder = ['PENDING','PROCESSING','SHIPPED','RIDER_ASSIGNED','PICKED_UP','ON_THE_WAY','DELIVERED']
               const currentIdx  = statusOrder.indexOf(order.status)
               const stepIdx     = statusOrder.indexOf(step.key)
@@ -348,7 +365,7 @@ export default function OrderDetailPage() {
       )}
 
       <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left column */}
+        {/* ── Left column ───────────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-6">
 
           {/* Product card */}
@@ -394,7 +411,6 @@ export default function OrderDetailPage() {
           {/* Shipping & Payment */}
           <div className="grid md:grid-cols-2 gap-6">
 
-            {/* Shipping info */}
             <div className="bg-white rounded-lg border p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Truck className="w-5 h-5" />
@@ -428,7 +444,6 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            {/* Payment info */}
             <div className="bg-white rounded-lg border p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
@@ -475,7 +490,6 @@ export default function OrderDetailPage() {
                 Reviews & Feedback
               </h2>
 
-              {/* Product Review */}
               <div className="flex items-center justify-between p-4 border rounded-lg mb-4 bg-gradient-to-r from-purple-50 to-pink-50">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-purple-100 rounded-lg">
@@ -507,7 +521,6 @@ export default function OrderDetailPage() {
                 )}
               </div>
 
-              {/* Seller Review */}
               <div className="flex items-center justify-between p-4 border rounded-lg mb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-50 rounded-lg">
@@ -539,7 +552,6 @@ export default function OrderDetailPage() {
                 )}
               </div>
 
-              {/* Rider Review */}
               {order.rider && (
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex items-center gap-3">
@@ -565,7 +577,6 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
-              {/* Existing reviews */}
               {((order.reviews && order.reviews.length > 0) || (order.productReviews && order.productReviews.length > 0)) && (
                 <div className="mt-6 pt-6 border-t">
                   <h3 className="font-semibold mb-4">Your Reviews</h3>
@@ -576,7 +587,7 @@ export default function OrderDetailPage() {
           )}
         </div>
 
-        {/* Right column */}
+        {/* ── Right column ──────────────────────────────────────────────────── */}
         <div className="space-y-6">
 
           {/* Buyer Card */}
@@ -657,6 +668,55 @@ export default function OrderDetailPage() {
                 trustLevel={order.rider.trustLevel || 'BRONZE'}
               />
             </div>
+          )}
+
+          {/* ── Dispute card ──────────────────────────────────────────────── */}
+          {order.dispute ? (
+            // Existing dispute → Track Dispute button
+            <div className="bg-white rounded-lg border border-orange-200 p-6">
+              <h3 className="font-semibold mb-1 flex items-center gap-2 text-orange-700">
+                <Shield className="w-5 h-5" />
+                Dispute Filed
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                A dispute has been opened for this order. Track your case and
+                communicate with the support team.
+              </p>
+              <div className="mb-4">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getDisputeStatusBadge(order.dispute.status)}`}>
+                  {getDisputeStatusLabel(order.dispute.status)}
+                </span>
+              </div>
+              <Button
+                onClick={() => router.push(`/disputes/${order.dispute.id}`)}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center gap-2"
+              >
+                <Shield className="w-4 h-4" />
+                Track Dispute
+              </Button>
+            </div>
+          ) : (
+            // No dispute → show "Open a Dispute" prompt to buyers on delivered orders
+            userRole === 'BUYER' &&
+            (order.status === 'DELIVERED' || order.status === 'COMPLETED') && (
+              <div className="bg-white rounded-lg border p-6">
+                <h3 className="font-semibold mb-1 flex items-center gap-2 text-gray-700">
+                  <AlertTriangle className="w-5 h-5 text-orange-500" />
+                  Something wrong?
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  If there's an issue with this order, you can open a dispute
+                  within 7 days of delivery.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/orders/${order.id}/dispute`)}
+                  className="w-full border-orange-300 text-orange-600 hover:bg-orange-50"
+                >
+                  Open a Dispute
+                </Button>
+              </div>
+            )
           )}
 
           {/* Order Summary */}
