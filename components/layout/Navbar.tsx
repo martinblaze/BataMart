@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared logo — plain <img> avoids next/image issues with spaces in filename
+// Shared logo
 // ─────────────────────────────────────────────────────────────────────────────
 function BATAMARTLogo({ appMode = false }: { appMode?: boolean }) {
   const href = appMode ? '/marketplace?app=true' : '/'
@@ -325,8 +325,23 @@ export function Navbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const isApp     = searchParams.get('app')     === 'true'
-  const isAndroid = searchParams.get('android') === 'true'
+  const isAppParam  = searchParams.get('app')     === 'true'
+  const isAndroid   = searchParams.get('android') === 'true'
+
+  // ── KEY FIX ─────────────────────────────────────────────────────────────────
+  // Detect if running as installed PWA via matchMedia.
+  // This fires even when ?app=true is lost during internal Next.js navigation.
+  const [isStandalone, setIsStandalone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(display-mode: standalone)')
+    setIsStandalone(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsStandalone(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // isApp = true if either the URL param says so OR the browser is in standalone mode
+  const isApp = isAppParam || isStandalone
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -441,15 +456,14 @@ export function Navbar() {
   // ── ANDROID WEBVIEW — return null, native nav handles everything ───────────
   if (isAndroid) return null
 
-  // ── PWA APP MODE — top bar + bottom tab bar ────────────────────────────────
+  // ── PWA / APP MODE — top bar + bottom tab bar ──────────────────────────────
+  // Fires when ?app=true is in URL OR when running as installed PWA (standalone)
   if (isApp) {
     return (
       <>
-        {/* Fixed top bar */}
         <AppTopBar isLoggedIn={isLoggedIn} cartCount={cartCount} />
-        {/* Push content below fixed top bar */}
+        {/* Spacer for fixed top bar */}
         <div className="h-14" />
-        {/* Fixed bottom tab bar */}
         <AppBottomNav
           isLoggedIn={isLoggedIn}
           userRole={userRole}
@@ -457,7 +471,7 @@ export function Navbar() {
           userName={userName}
           onLogout={handleLogout}
         />
-        {/* Push content above fixed bottom bar */}
+        {/* Spacer for fixed bottom nav */}
         <div className="h-16" />
       </>
     )
