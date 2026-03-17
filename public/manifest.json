@@ -2,10 +2,10 @@
   "name": "BATAMART",
   "short_name": "BataMart",
   "description": "Student-to-student marketplace at UNIZIK",
-  "start_url": "/",
+  "start_url": "/marketplace?app=true",
   "display": "standalone",
-  "background_color": "#0ea5e9",
-  "theme_color": "#0ea5e9",
+  "background_color": "#ffffff",
+  "theme_color": "#1a3f8f",
   "orientation": "portrait",
   "icons": [
     {
