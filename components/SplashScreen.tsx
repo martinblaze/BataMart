@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 
 export default function SplashScreen() {
   const [visible, setVisible] = useState(false)
-  const [fadeOut, setFadeOut] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'in' | 'out'>('idle')
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -18,72 +18,92 @@ export default function SplashScreen() {
     const isAppParam = searchParams.get('app') === 'true'
     const isAppMode = isStandalone || isAppParam
 
-    // ── APP MODE ──────────────────────────────────────────────────────────────
-    // Show once per session. After splash → redirect to /marketplace?app=true
-    // (only if currently on landing page).
-    if (isAppMode) {
-      const splashShown = sessionStorage.getItem('batamart_splash_app')
-      if (splashShown) return
-
-      sessionStorage.setItem('batamart_splash_app', '1')
+    const run = () => {
       setVisible(true)
+      // tiny delay so the element is mounted before we trigger CSS transitions
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setPhase('in'))
+      })
 
-      const fadeTimer = setTimeout(() => setFadeOut(true), 2500)
+      // At 2500ms → start fade-out
+      const outTimer = setTimeout(() => setPhase('out'), 2500)
+
+      // At 2500 + 500ms → unmount + redirect if needed
       const doneTimer = setTimeout(() => {
         setVisible(false)
-        if (pathname === '/') {
+        if (isAppMode && pathname === '/') {
           router.replace('/marketplace?app=true')
         }
       }, 3000)
 
       return () => {
-        clearTimeout(fadeTimer)
+        clearTimeout(outTimer)
         clearTimeout(doneTimer)
       }
     }
 
-    // ── BROWSER MODE ──────────────────────────────────────────────────────────
-    // Only show the FIRST time user lands on /marketplace this session.
-    // Never on landing page or other pages. Never on return visits.
+    if (isAppMode) {
+      if (sessionStorage.getItem('batamart_splash_app')) return
+      sessionStorage.setItem('batamart_splash_app', '1')
+      return run()
+    }
+
     if (pathname === '/marketplace') {
-      const splashShown = sessionStorage.getItem('batamart_splash_browser')
-      if (splashShown) return
-
+      if (sessionStorage.getItem('batamart_splash_browser')) return
       sessionStorage.setItem('batamart_splash_browser', '1')
-      setVisible(true)
-
-      const fadeTimer = setTimeout(() => setFadeOut(true), 2500)
-      const doneTimer = setTimeout(() => setVisible(false), 3000)
-
-      return () => {
-        clearTimeout(fadeTimer)
-        clearTimeout(doneTimer)
-      }
+      return run()
     }
-
-    // All other pages → no splash
   }, [pathname, searchParams, router])
 
   if (!visible) return null
 
+  const logoStyle: React.CSSProperties = {
+    opacity:    phase === 'in'  ? 1 : 0,
+    transform:  phase === 'out' ? 'translateY(-8px)' : 'translateY(0)',
+    transition:
+      phase === 'in'
+        ? 'opacity 700ms cubic-bezier(0.45,0,0.55,1) 200ms'
+        : phase === 'out'
+        ? 'opacity 400ms ease, transform 400ms ease'
+        : 'none',
+  }
+
+  const textStyle: React.CSSProperties = {
+    opacity:   phase === 'in'  ? 1 : 0,
+    transform: phase === 'in'  ? 'translateY(0)'
+             : phase === 'out' ? 'translateY(-20px)'
+             :                   'translateY(30px)',   // initial: pushed down like Android's 30dp
+    transition:
+      phase === 'in'
+        ? 'opacity 700ms cubic-bezier(0.45,0,0.55,1) 600ms, transform 700ms cubic-bezier(0.45,0,0.55,1) 600ms'
+        : phase === 'out'
+        ? 'opacity 400ms ease, transform 400ms ease'
+        : 'none',
+  }
+
   return (
-    <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white transition-opacity duration-500 ${
-        fadeOut ? 'opacity-0' : 'opacity-100'
-      }`}
-    >
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white">
+      {/* Logo — 280×120dp equivalent, fitCenter */}
       <img
-        src="/icon-512x512.png"
+        src="/BATAMART - logo.png"
         alt="BataMart"
-        className={`w-[140px] h-[140px] object-contain transition-all duration-700 ${
-          fadeOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-        }`}
+        style={{
+          width: '280px',
+          height: '120px',
+          objectFit: 'contain',
+          ...logoStyle,
+        }}
       />
+
+      {/* Text — slides up from 30px below, fades in */}
       <p
-        className={`mt-3 text-[#1a3f8f] text-sm font-semibold transition-all duration-700 ${
-          fadeOut ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'
-        }`}
-        style={{ transitionDelay: '0.3s' }}
+        style={{
+          marginTop: '12px',
+          color: '#1a3f8f',
+          fontSize: '16px',
+          fontWeight: 600,
+          ...textStyle,
+        }}
       >
         Campus Marketplace
       </p>
