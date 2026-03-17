@@ -1,17 +1,39 @@
-// public/sw.js
-// This file must be in your /public folder so it's served from the root of your domain
+const CACHE_NAME = 'batamart-static-v1'
+
+const STATIC_ASSETS = [
+  '/',
+  '/manifest.json',
+  '/icon-192x192.png'
+]
 
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installed')
   self.skipWaiting()
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
+  )
 })
 
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated')
   event.waitUntil(clients.claim())
 })
 
-// This is the magic — fires even when browser is closed
+// ⚠️ SAFE caching (DO NOT cache API)
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url)
+
+  // 🚫 NEVER cache API (VERY IMPORTANT)
+  if (url.pathname.startsWith('/api')) return
+
+  // Cache first for static assets
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      return cached || fetch(event.request)
+    })
+  )
+})
+
+
+// PUSH (your original code)
 self.addEventListener('push', (event) => {
   if (!event.data) return
 
@@ -20,7 +42,7 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.message,
     icon: '/icon-192x192.png',
-    badge: '/badge-72x72.png',
+    badge: '/icon-192x192.png',
     tag: data.tag || 'default',
     data: {
       url: data.url || '/'
@@ -34,26 +56,21 @@ self.addEventListener('push', (event) => {
   )
 })
 
-// Handle notification click — opens the right page
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
   const urlToOpen = event.notification.data?.url || '/'
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If app is already open, focus it
-      for (const client of windowClients) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+      for (const client of clientsArr) {
+        if (client.url.includes(self.location.origin)) {
           client.focus()
           client.navigate(urlToOpen)
           return
         }
       }
-      // Otherwise open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen)
-      }
+      return clients.openWindow(urlToOpen)
     })
   )
 })
