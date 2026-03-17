@@ -1,17 +1,17 @@
 'use client'
+
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useCartStore } from '@/lib/cart-store'
 import NotificationBell from '@/components/layout/NotificationBell'
-import Image from 'next/image'
 import {
   ChevronDown, User, LogOut, Store, ShoppingBag, Wallet,
   Package, AlertTriangle, PlusCircle, Globe, Plus,
 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared logo — uses plain <img> to avoid next/image issues with spaces in filename
+// Shared logo — plain <img> avoids next/image issues with spaces in filename
 // ─────────────────────────────────────────────────────────────────────────────
 function BATAMARTLogo({ appMode = false }: { appMode?: boolean }) {
   const href = appMode ? '/marketplace?app=true' : '/'
@@ -40,16 +40,10 @@ function AppTopBar({
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
       <div className="flex items-center justify-between h-14 px-4">
-        {/* Logo */}
         <BATAMARTLogo appMode />
-
-        {/* Right side: Cart + Bell */}
         <div className="flex items-center gap-2">
           {isLoggedIn && (
-            <Link
-              href="/cart?app=true"
-              className="relative p-2 text-gray-600"
-            >
+            <Link href="/cart?app=true" className="relative p-2 text-gray-600">
               <ShoppingBag className="w-6 h-6" />
               {cartCount > 0 && (
                 <span className="absolute top-0.5 right-0.5 bg-blue-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center leading-none">
@@ -91,9 +85,7 @@ function AppBottomNav({
   const isSeller = userRole === 'SELLER' || userRole === 'ADMIN'
 
   const sellHref = isLoggedIn
-    ? isSeller && isSellerMode
-      ? '/sell?app=true'
-      : '/become-seller?app=true'
+    ? isSeller && isSellerMode ? '/sell?app=true' : '/become-seller?app=true'
     : '/login?app=true'
 
   const leftTabs = [
@@ -446,16 +438,18 @@ export function Navbar() {
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
 
-  // ── ANDROID WEBVIEW — render nothing, native nav handles everything ─────────
+  // ── ANDROID WEBVIEW — return null, native nav handles everything ───────────
   if (isAndroid) return null
 
-  // ── PWA APP MODE — top bar (logo + cart + bell) + bottom tab bar ───────────
+  // ── PWA APP MODE — top bar + bottom tab bar ────────────────────────────────
   if (isApp) {
     return (
       <>
+        {/* Fixed top bar */}
         <AppTopBar isLoggedIn={isLoggedIn} cartCount={cartCount} />
-        {/* Spacer for fixed top bar */}
+        {/* Push content below fixed top bar */}
         <div className="h-14" />
+        {/* Fixed bottom tab bar */}
         <AppBottomNav
           isLoggedIn={isLoggedIn}
           userRole={userRole}
@@ -463,11 +457,8 @@ export function Navbar() {
           userName={userName}
           onLogout={handleLogout}
         />
-        {/* Spacer for fixed bottom nav */}
-        <div
-          className="h-16"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-        />
+        {/* Push content above fixed bottom bar */}
+        <div className="h-16" />
       </>
     )
   }
@@ -482,7 +473,6 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
-          {/* Use plain img here too for consistency */}
           <Link href="/" className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
