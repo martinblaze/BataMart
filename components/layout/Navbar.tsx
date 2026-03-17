@@ -6,11 +6,18 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useCartStore } from '@/lib/cart-store'
 import NotificationBell from '@/components/layout/NotificationBell'
-import { ChevronDown, User, LogOut, Store, ShoppingBag, Wallet, Package, AlertTriangle, PlusCircle, Globe } from 'lucide-react'
+import {
+  ChevronDown, User, LogOut, Store, ShoppingBag, Wallet,
+  Package, AlertTriangle, PlusCircle, Globe, Plus,
+} from 'lucide-react'
 
-function BATAMARTMartLogo() {
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared logo
+// ─────────────────────────────────────────────────────────────────────────────
+function BATAMARTLogo({ appMode = false }: { appMode?: boolean }) {
+  const href = appMode ? '/marketplace?app=true' : '/'
   return (
-    <Link href="/" className="flex items-center">
+    <Link href={href} className="flex items-center">
       <Image
         src="/BATAMART - logo.png"
         alt="BATAMART"
@@ -24,6 +31,301 @@ function BATAMARTMartLogo() {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// App Mode — slim top bar (logo + notification only)
+// ─────────────────────────────────────────────────────────────────────────────
+function AppTopBar({ isLoggedIn }: { isLoggedIn: boolean }) {
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
+      <div className="flex items-center justify-between h-14 px-4">
+        <BATAMARTLogo appMode />
+        <div className="flex items-center gap-3">
+          {isLoggedIn && <NotificationBell />}
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// App Mode — bottom tab bar
+// Layout: Marketplace · Orders · [FAB Sell] · Wallet · Profile
+// ─────────────────────────────────────────────────────────────────────────────
+function AppBottomNav({
+  isLoggedIn,
+  cartCount,
+  userRole,
+  isSellerMode,
+  userName,
+  onLogout,
+}: {
+  isLoggedIn: boolean
+  cartCount: number
+  userRole: string
+  isSellerMode: boolean
+  userName: string
+  onLogout: () => void
+}) {
+  const pathname = usePathname()
+  const [profileOpen, setProfileOpen] = useState(false)
+
+  const isActive = (path: string) =>
+    pathname === path || pathname.startsWith(path + '/')
+
+  const isSeller = userRole === 'SELLER' || userRole === 'ADMIN'
+
+  // Where the center FAB points
+  const sellHref = isLoggedIn
+    ? isSeller && isSellerMode
+      ? '/sell?app=true'
+      : '/become-seller?app=true'
+    : '/login?app=true'
+
+  // Left tabs
+  const leftTabs = [
+    {
+      href: '/marketplace?app=true',
+      label: 'Market',
+      match: '/marketplace',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[22px] h-[22px]">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 21V12h6v9" />
+        </svg>
+      ),
+    },
+    {
+      href: isLoggedIn ? '/orders?app=true' : '/login?app=true',
+      label: 'Orders',
+      match: '/orders',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[22px] h-[22px]">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" strokeLinecap="round" strokeLinejoin="round" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6M9 16h4" />
+        </svg>
+      ),
+    },
+  ]
+
+  // Right tabs
+  const rightTabs = [
+    {
+      href: isLoggedIn ? '/wallet?app=true' : '/login?app=true',
+      label: 'Wallet',
+      match: '/wallet',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[22px] h-[22px]">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8V6a2 2 0 012-2h14a2 2 0 012 2v2" />
+          <circle cx="16" cy="14" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      ),
+    },
+    // Profile handled separately (opens a drawer)
+  ]
+
+  return (
+    <>
+      {/* Bottom nav */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
+        style={{ boxShadow: '0 -4px 24px rgba(0,0,0,0.07)' }}
+      >
+        <div
+          className="flex items-stretch"
+          style={{
+            height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}
+        >
+          {/* LEFT TABS */}
+          {leftTabs.map(({ href, label, match, icon }) => {
+            const active = isActive(match)
+            return (
+              <Link
+                key={label}
+                href={href}
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                  active ? 'text-blue-600' : 'text-gray-400'
+                }`}
+              >
+                {active && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-blue-600 rounded-b-full" />
+                )}
+                <span className={active ? 'scale-110 transition-transform' : 'transition-transform'}>
+                  {icon}
+                </span>
+                <span className="text-[10px] font-medium leading-none">{label}</span>
+              </Link>
+            )
+          })}
+
+          {/* CENTER FAB — Sell */}
+          <div className="flex-1 flex items-center justify-center relative">
+            {/* Cutout illusion spacer */}
+            <div className="absolute inset-0 bg-white" />
+            <Link
+              href={sellHref}
+              className="relative z-10 flex flex-col items-center justify-center -mt-5"
+            >
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)',
+                  boxShadow: '0 4px 20px rgba(26,63,143,0.45)',
+                }}
+              >
+                <Plus className="w-7 h-7 text-white" strokeWidth={2.5} />
+              </div>
+              <span className="text-[10px] font-semibold text-blue-800 mt-1 leading-none">Sell</span>
+            </Link>
+          </div>
+
+          {/* RIGHT TABS */}
+          {rightTabs.map(({ href, label, match, icon }) => {
+            const active = isActive(match)
+            return (
+              <Link
+                key={label}
+                href={href}
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                  active ? 'text-blue-600' : 'text-gray-400'
+                }`}
+              >
+                {active && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-blue-600 rounded-b-full" />
+                )}
+                <span className={active ? 'scale-110 transition-transform' : 'transition-transform'}>
+                  {icon}
+                </span>
+                <span className="text-[10px] font-medium leading-none">{label}</span>
+              </Link>
+            )
+          })}
+
+          {/* PROFILE TAB */}
+          <button
+            onClick={() => setProfileOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+              profileOpen ? 'text-blue-600' : 'text-gray-400'
+            }`}
+          >
+            {/* Avatar circle */}
+            <div
+              className={`w-[26px] h-[26px] rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                isLoggedIn
+                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-200'
+                  : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              {isLoggedIn && userName
+                ? userName.charAt(0).toUpperCase()
+                : <User className="w-3.5 h-3.5" />}
+            </div>
+            <span className="text-[10px] font-medium leading-none">
+              {isLoggedIn ? 'Profile' : 'Login'}
+            </span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Profile sheet */}
+      {profileOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
+            onClick={() => setProfileOpen(false)}
+          />
+
+          {/* Sheet */}
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-3xl shadow-2xl"
+            style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-200 rounded-full" />
+            </div>
+
+            {isLoggedIn ? (
+              <>
+                {/* User info */}
+                <div className="px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 border-2 border-blue-200 flex items-center justify-center text-blue-700 text-lg font-bold">
+                      {userName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{userName}</p>
+                      <p className="text-xs text-gray-400 capitalize">{userRole.toLowerCase()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sheet links */}
+                <div className="px-4 py-2">
+                  {[
+                    { href: '/myprofile?app=true', icon: User, label: 'My Account' },
+                    { href: '/my-shop?app=true', icon: Store, label: isSeller && isSellerMode ? 'My Shop' : 'My Items' },
+                    { href: '/dispute/select-order?app=true', icon: AlertTriangle, label: 'Disputes', hide: userRole === 'RIDER' },
+                  ]
+                    .filter(item => !item.hide)
+                    .map(({ href, icon: Icon, label }) => (
+                      <Link
+                        key={label}
+                        href={href}
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3 px-2 py-3.5 text-gray-700 hover:text-blue-600 border-b border-gray-50 last:border-0"
+                      >
+                        <Icon className="w-5 h-5 text-gray-400" />
+                        <span className="font-medium text-sm">{label}</span>
+                      </Link>
+                    ))}
+                </div>
+
+                {/* Logout */}
+                <div className="px-6 pt-2">
+                  <button
+                    onClick={() => { setProfileOpen(false); onLogout() }}
+                    className="flex items-center justify-center w-full gap-2 bg-red-50 text-red-600 font-semibold py-3 rounded-xl"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    Logout
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="px-6 py-6 flex flex-col gap-3">
+                <p className="text-center text-gray-500 text-sm mb-2">Sign in to access your account</p>
+                <Link
+                  href="/login?app=true"
+                  onClick={() => setProfileOpen(false)}
+                  className="text-center py-3 border-2 border-blue-900 text-blue-900 rounded-xl font-semibold"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup?app=true"
+                  onClick={() => setProfileOpen(false)}
+                  className="text-center py-3 text-white rounded-xl font-semibold"
+                  style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+                >
+                  Create Account
+                </Link>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main exported Navbar
+// ─────────────────────────────────────────────────────────────────────────────
 export function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
@@ -135,44 +437,43 @@ export function Navbar() {
     setUserRole('')
     setIsSellerMode(true)
     setIsUserDropdownOpen(false)
-    router.push('/')
+    router.push('/marketplace?app=true')
   }
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
 
-  // In app mode — show logo + cart + notification only
+  // ── APP MODE ───────────────────────────────────────────────────────────────
   if (isApp) {
     return (
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
-        <div className="flex items-center justify-between h-14 px-4">
-          <BATAMARTMartLogo />
-          <div className="flex items-center gap-3">
-            {isLoggedIn && (
-              <Link href="/cart?app=true" className="relative p-2 text-gray-600">
-                <ShoppingBag className="w-6 h-6" />
-                {cartCount > 0 && (
-                  <span className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                    {cartCount > 9 ? '9+' : cartCount}
-                  </span>
-                )}
-              </Link>
-            )}
-            {isLoggedIn && <NotificationBell />}
-          </div>
-        </div>
-      </nav>
+      <>
+        <AppTopBar isLoggedIn={isLoggedIn} />
+        {/* Spacer for fixed top bar */}
+        <div className="h-14" />
+        <AppBottomNav
+          isLoggedIn={isLoggedIn}
+          cartCount={cartCount}
+          userRole={userRole}
+          isSellerMode={isSellerMode}
+          userName={userName}
+          onLogout={handleLogout}
+        />
+        {/* Spacer for fixed bottom nav */}
+        <div className="h-16" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} />
+      </>
     )
   }
 
+  // ── BROWSER MODE ───────────────────────────────────────────────────────────
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm transition-transform duration-300 ${isVisible ? 'translate-y-0' : '-translate-y-full'
-        }`}
+      className={`fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm transition-transform duration-300 ${
+        isVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
-          <BATAMARTMartLogo />
+          <BATAMARTLogo />
 
           <div className="hidden md:flex items-center space-x-2">
             {isLoggedIn && (
@@ -188,7 +489,10 @@ export function Navbar() {
             {isLoggedIn && <NotificationBell />}
             {isLoggedIn ? (
               <div className="relative ml-2" ref={dropdownRef}>
-                <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-all">
+                <button
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-all"
+                >
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-medium text-gray-700">Hi, {userName || 'User'}</span>
                     <span className="text-xs text-gray-500">
@@ -348,7 +652,10 @@ export function Navbar() {
                       </div>
                     )}
                   </div>
-                  <button onClick={() => { handleLogout(); setIsMenuOpen(false) }} className="flex items-center justify-center w-full space-x-2 bg-red-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-red-700 transition-all">
+                  <button
+                    onClick={() => { handleLogout(); setIsMenuOpen(false) }}
+                    className="flex items-center justify-center w-full space-x-2 bg-red-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-red-700 transition-all"
+                  >
                     <LogOut className="w-5 h-5" /><span>Logout</span>
                   </button>
                 </div>
