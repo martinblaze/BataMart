@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── SPLASH BLOCKER ────────────────────────────────────────────────────────
+   When splash-pending is on <html>, hide everything instantly.
+   The inline script in layout.tsx adds this class synchronously before
+   React hydrates, so NOTHING shows until SplashScreen removes it.
+   Only applies in standalone PWA mode on first open.
+   Uses visibility:hidden (not display:none) so page still loads in bg.
+──────────────────────────────────────────────────────────────────────────── */
+html.splash-pending body > * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* The splash screen itself must always stay visible */
+html.splash-pending #__splash_screen {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
 @layer base {
   :root {
     --primary: #6366F1;

@@ -18,22 +18,17 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'BATAMART - UNIZIK Campus Marketplace',
   description: 'Student-to-student commerce at UNIZIK. Buy, sell, and deliver within campus.',
-
   manifest: '/manifest.json',
-
   icons: {
     icon: '/icon-192x192.png',
     apple: '/apple-touch-icon.png',
   },
-
   themeColor: '#0ea5e9',
-
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'BataMart',
   },
-
   viewport: {
     width: 'device-width',
     initialScale: 1,
@@ -55,36 +50,48 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="BataMart" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="theme-color" content="#0ea5e9" />
-
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+        {/*
+          ── BULLETPROOF SPLASH BLOCKER ──────────────────────────────────────
+          This inline script runs SYNCHRONOUSLY before React hydrates.
+          If we're in standalone PWA mode AND haven't shown the splash yet
+          this session, we add 'splash-pending' to <body> which hides all
+          page content via CSS until SplashScreen removes the class.
+          This eliminates the flash of marketplace before splash 100%.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true;
+                  var isAppParam = window.location.search.indexOf('app=true') !== -1;
+                  var isAndroid = window.location.search.indexOf('android=true') !== -1;
+                  var splashShown = sessionStorage.getItem('batamart_splash_app');
+
+                  if (!isAndroid && (isStandalone || isAppParam) && !splashShown) {
+                    document.documentElement.classList.add('splash-pending');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
       </head>
 
       <body className={inter.className}>
         <ThemeProvider>
-
-          {/* 🔧 Core PWA */}
           <PWARegister />
-
-          {/* 🎬 Splash (no lag, auto removes) */}
           <SplashScreen />
-
-          {/* 📲 Install prompts (smart) */}
           <InstallPrompt />
           <IosInstallPrompt />
-
-          {/* 🔐 Auth system */}
           <SuspensionGuard />
-
-          {/* 🧭 Navigation */}
           <NavbarWrapper />
-
-          {/* 📦 App */}
           <div>{children}</div>
-
-          {/* 🔔 Push */}
           <NotificationPrompt />
-
         </ThemeProvider>
       </body>
     </html>
