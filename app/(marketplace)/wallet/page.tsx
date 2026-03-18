@@ -622,8 +622,8 @@ export default function WalletPage() {
 
       {/* ── Withdraw Modal ── */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[95vh] sm:max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[95vh] sm:max-h-[92vh] overflow-y-auto pb-[env(safe-area-inset-bottom,0px)]">
             <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Withdraw Funds</h3>
