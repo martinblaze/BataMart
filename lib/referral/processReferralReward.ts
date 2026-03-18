@@ -5,7 +5,7 @@
 import { Prisma } from '@prisma/client'
 
 const PLATFORM_COMMISSION_RATE = 0.05   // 5%
-const REFERRER_REWARD_RATE     = 0.10   // 10% of commission
+const REFERRER_REWARD_RATE     = 0.40   // 40% of commission
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx => ...) block.

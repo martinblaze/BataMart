@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       referralCode: fullUser.referralCode, // ✅ correctly fetched
-      referralLink: `${process.env.NEXT_PUBLIC_APP_URL || 'https://yourdomain.com'}/signup?ref=${fullUser.referralCode}`,
+      referralLink: `https://bata-mart.vercel.app/signup?ref=${fullUser.referralCode}`,
       totalReferrals,
       totalEarnings,
       totalReferralOrders,
