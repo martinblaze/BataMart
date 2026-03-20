@@ -12,9 +12,37 @@ function preloadImage(src: string): Promise<void> {
   })
 }
 
-// Remove the splash-pending class so page content becomes visible
 function unblockPage() {
   document.documentElement.classList.remove('splash-pending')
+}
+
+// ─── Global signal: is splash currently showing? ───────────────────────────
+// Stored in sessionStorage so marketplace page can read it synchronously
+// on first render before React effects run.
+export function isSplashPending(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    const isAppParam = window.location.search.indexOf('app=true') !== -1
+    const isAndroid = window.location.search.indexOf('android=true') !== -1
+    const splashShown = sessionStorage.getItem('batamart_splash_app')
+    const splashBrowserShown = sessionStorage.getItem('batamart_splash_browser')
+
+    if (isAndroid) return false
+
+    // App mode splash
+    if ((isStandalone || isAppParam) && !splashShown) return true
+
+    // Browser mode splash (only on /marketplace)
+    if (!isStandalone && !isAppParam && !splashBrowserShown &&
+        window.location.pathname === '/marketplace') return true
+
+    return false
+  } catch {
+    return false
+  }
 }
 
 export default function SplashScreen() {
@@ -34,7 +62,6 @@ export default function SplashScreen() {
     const isAndroid  = searchParams.get('android') === 'true'
     const isAppMode  = isStandalone || isAppParam
 
-    // Android has its own native splash — unblock page immediately
     if (isAndroid) {
       unblockPage()
       return
@@ -48,17 +75,14 @@ export default function SplashScreen() {
       pathname === '/marketplace' &&
       !sessionStorage.getItem('batamart_splash_browser')
 
-    // No splash needed — unblock immediately
     if (!shouldShowAppSplash && !shouldShowBrowserSplash) {
       unblockPage()
       return
     }
 
-    // Mark session so splash doesn't repeat
     if (shouldShowAppSplash)     sessionStorage.setItem('batamart_splash_app', '1')
     if (shouldShowBrowserSplash) sessionStorage.setItem('batamart_splash_browser', '1')
 
-    // Preload logo fully before showing anything
     preloadImage('/BATAMART - logo.png').then(() => {
       setVisible(true)
 
@@ -70,8 +94,9 @@ export default function SplashScreen() {
 
       const doneTimer = setTimeout(() => {
         setVisible(false)
-        // Unblock the page — content becomes visible after splash
         unblockPage()
+        // Dispatch event so marketplace page knows splash is done
+        window.dispatchEvent(new CustomEvent('batamart:splash-done'))
         if (isAppMode && pathname === '/') {
           router.replace('/marketplace?app=true')
         }
