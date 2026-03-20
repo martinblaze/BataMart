@@ -158,11 +158,23 @@ export default function WalletPage() {
   const [pinLoading, setPinLoading] = useState(false)
 
   const [showSetPin, setShowSetPin] = useState(false)
+  const [currentPin, setCurrentPin] = useState('')
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [savePinLoading, setSavePinLoading] = useState(false)
   const [savePinError, setSavePinError] = useState('')
   const [savePinSuccess, setSavePinSuccess] = useState(false)
+
+  // ── Forgot PIN flow ────────────────────────────────────────────────────────
+  const [showForgotPin, setShowForgotPin] = useState(false)
+  const [forgotPinStep, setForgotPinStep] = useState<'send' | 'verify'>('send')
+  const [forgotPinOtp, setForgotPinOtp] = useState('')
+  const [forgotPinNew, setForgotPinNew] = useState('')
+  const [forgotPinConfirm, setForgotPinConfirm] = useState('')
+  const [forgotPinLoading, setForgotPinLoading] = useState(false)
+  const [forgotPinError, setForgotPinError] = useState('')
+  const [forgotPinEmail, setForgotPinEmail] = useState('')
+  const [forgotPinSuccess, setForgotPinSuccess] = useState(false)
 
   // ── PIN required modal (no PIN set yet) ───────────────────────────────────
   const [showPinRequired, setShowPinRequired] = useState(false)
@@ -296,7 +308,8 @@ export default function WalletPage() {
   }
 
   const handleSetPinSubmit = async () => {
-    if (!/^\d{6}$/.test(newPin)) { setSavePinError('PIN must be exactly 6 digits'); return }
+    if (user?.hasWithdrawalPin && !currentPin) { setSavePinError('Please enter your current PIN'); return }
+    if (!/^\d{6}$/.test(newPin)) { setSavePinError('New PIN must be exactly 6 digits'); return }
     if (newPin !== confirmPin) { setSavePinError('PINs do not match'); return }
     setSavePinLoading(true)
     setSavePinError('')
@@ -305,7 +318,7 @@ export default function WalletPage() {
       const res = await fetch('/api/wallet/set-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pin: newPin }),
+        body: JSON.stringify({ pin: newPin, ...(user?.hasWithdrawalPin ? { currentPin } : {}) }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -314,6 +327,7 @@ export default function WalletPage() {
         setTimeout(() => {
           setShowSetPin(false)
           setSavePinSuccess(false)
+          setCurrentPin('')
           setNewPin('')
           setConfirmPin('')
         }, 2000)
@@ -324,6 +338,65 @@ export default function WalletPage() {
       setSavePinError('Network error. Please try again.')
     } finally {
       setSavePinLoading(false)
+    }
+  }
+
+  const handleForgotPinSendOtp = async () => {
+    setForgotPinLoading(true)
+    setForgotPinError('')
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/wallet/reset-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'send-otp' }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setForgotPinEmail(data.email)
+        setForgotPinStep('verify')
+      } else {
+        setForgotPinError(data.error || 'Failed to send OTP')
+      }
+    } catch {
+      setForgotPinError('Network error. Please try again.')
+    } finally {
+      setForgotPinLoading(false)
+    }
+  }
+
+  const handleForgotPinVerify = async () => {
+    if (forgotPinOtp.length !== 6) { setForgotPinError('Enter the 6-digit OTP'); return }
+    if (!/^\d{6}$/.test(forgotPinNew)) { setForgotPinError('New PIN must be exactly 6 digits'); return }
+    if (forgotPinNew !== forgotPinConfirm) { setForgotPinError('PINs do not match'); return }
+    setForgotPinLoading(true)
+    setForgotPinError('')
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/wallet/set-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ otpCode: forgotPinOtp, pin: forgotPinNew }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setForgotPinSuccess(true)
+        setUser(prev => prev ? { ...prev, hasWithdrawalPin: true } : prev)
+        setTimeout(() => {
+          setShowForgotPin(false)
+          setForgotPinSuccess(false)
+          setForgotPinStep('send')
+          setForgotPinOtp('')
+          setForgotPinNew('')
+          setForgotPinConfirm('')
+        }, 2000)
+      } else {
+        setForgotPinError(data.error || 'Failed to reset PIN')
+      }
+    } catch {
+      setForgotPinError('Network error. Please try again.')
+    } finally {
+      setForgotPinLoading(false)
     }
   }
 
@@ -635,21 +708,96 @@ export default function WalletPage() {
               </div>
             ) : (
               <>
+                {/* Current PIN — only shown when changing existing PIN */}
+                {user.hasWithdrawalPin && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-semibold text-gray-700">Current PIN</label>
+                      <button
+                        type="button"
+                        onClick={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError(''); setShowForgotPin(true); setForgotPinStep('send'); setForgotPinError(''); setForgotPinSuccess(false) }}
+                        className="text-xs text-BATAMART-primary hover:underline font-semibold"
+                      >
+                        Forgot PIN?
+                      </button>
+                    </div>
+                    <input type="password" inputMode="numeric" maxLength={6} value={currentPin} onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" autoFocus />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">New PIN</label>
                   <input type="password" inputMode="numeric" maxLength={6} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm PIN</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm New PIN</label>
                   <input type="password" inputMode="numeric" maxLength={6} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
                 </div>
                 {savePinError && <p className="text-red-500 text-sm font-medium">{savePinError}</p>}
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowSetPin(false); setNewPin(''); setConfirmPin(''); setSavePinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
+                  <button onClick={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
                   <button onClick={handleSetPinSubmit} disabled={savePinLoading || newPin.length !== 6 || confirmPin.length !== 6} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
                     {savePinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Save PIN'}
                   </button>
                 </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Forgot PIN Modal ── */}
+      {showForgotPin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-5">
+            <div className="text-center">
+              <div className="text-4xl mb-2">🔑</div>
+              <h3 className="text-lg font-black text-gray-900">Reset Withdrawal PIN</h3>
+              <p className="text-sm text-gray-400">
+                {forgotPinStep === 'send' ? "We'll send a verification code to your email" : `Enter the code sent to ${forgotPinEmail}`}
+              </p>
+            </div>
+
+            {forgotPinSuccess ? (
+              <div className="text-center py-4 space-y-2">
+                <div className="text-5xl">✅</div>
+                <p className="font-bold text-gray-900">PIN Reset!</p>
+                <p className="text-sm text-gray-400">Your new withdrawal PIN has been set.</p>
+              </div>
+            ) : forgotPinStep === 'send' ? (
+              <>
+                <p className="text-sm text-gray-500 text-center">A 6-digit OTP will be sent to your registered email address to verify it's you.</p>
+                {forgotPinError && <p className="text-red-500 text-sm font-medium text-center">{forgotPinError}</p>}
+                <div className="flex gap-3">
+                  <button onClick={() => { setShowForgotPin(false); setForgotPinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
+                  <button onClick={handleForgotPinSendOtp} disabled={forgotPinLoading} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
+                    {forgotPinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Send OTP'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">OTP Code</label>
+                  <input type="text" inputMode="numeric" maxLength={6} value={forgotPinOtp} onChange={e => setForgotPinOtp(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" autoFocus />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">New PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={forgotPinNew} onChange={e => setForgotPinNew(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm New PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={forgotPinConfirm} onChange={e => setForgotPinConfirm(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
+                </div>
+                {forgotPinError && <p className="text-red-500 text-sm font-medium">{forgotPinError}</p>}
+                <div className="flex gap-3">
+                  <button onClick={() => { setForgotPinStep('send'); setForgotPinOtp(''); setForgotPinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">← Back</button>
+                  <button onClick={handleForgotPinVerify} disabled={forgotPinLoading || forgotPinOtp.length !== 6 || forgotPinNew.length !== 6 || forgotPinConfirm.length !== 6} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
+                    {forgotPinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Reset PIN'}
+                  </button>
+                </div>
+                <button onClick={handleForgotPinSendOtp} disabled={forgotPinLoading} className="w-full text-xs text-gray-400 hover:text-BATAMART-primary transition text-center">
+                  Didn't receive code? Resend
+                </button>
               </>
             )}
           </div>
