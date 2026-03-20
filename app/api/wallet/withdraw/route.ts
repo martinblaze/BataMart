@@ -2,13 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
-import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
-
-function hashFaceToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex')
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,27 +12,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { amount, bankCode, accountNumber, accountName, faceToken } = await request.json()
+    const { amount, bankCode, accountNumber, accountName } = await request.json()
 
-    // ── Basic validation ──────────────────────────────────────────────────────
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: 'Invalid withdrawal amount' }, { status: 400 })
-    }
-    if (!accountNumber || !bankCode || !accountName) {
-      return NextResponse.json({ error: 'Bank details required' }, { status: 400 })
-    }
-    if (amount < 1000) {
+    // ── Basic validation ───────────────────────────────────────────────────
+    if (!amount || amount < 1000) {
       return NextResponse.json({ error: 'Minimum withdrawal is ₦1,000' }, { status: 400 })
     }
+    if (!bankCode || !accountNumber || !accountName) {
+      return NextResponse.json({ error: 'Bank details are required' }, { status: 400 })
+    }
 
-    // ── Fetch fresh user data including face token fields ─────────────────────
+    // ── Check PIN is set ───────────────────────────────────────────────────
     const currentUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
+        id: true,
         availableBalance: true,
-        faceDescriptor: true,
-        faceToken: true,
-        faceTokenExpiry: true,
+        withdrawalPin: true,
+        withdrawalPinLockedUntil: true,
       },
     })
 
@@ -45,72 +37,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // ── Face ID must be registered ────────────────────────────────────────────
-    if (!currentUser.faceDescriptor) {
-      return NextResponse.json(
-        {
-          error: 'FACE_ID_REQUIRED',
-          message: 'You must register your Face ID before you can withdraw funds.',
-        },
-        { status: 403 }
-      )
+    if (!currentUser.withdrawalPin) {
+      return NextResponse.json({ error: 'PIN_REQUIRED' }, { status: 403 })
     }
 
-    // ── faceToken must be present in the request body ─────────────────────────
-    if (!faceToken || typeof faceToken !== 'string') {
-      return NextResponse.json(
-        {
-          error: 'FACE_VERIFICATION_REQUIRED',
-          message: 'Face verification is required before withdrawing.',
-        },
-        { status: 403 }
-      )
-    }
-
-    // ── Validate faceToken against DB ─────────────────────────────────────────
-    const hashedIncoming = hashFaceToken(faceToken)
-    const now = new Date()
-
-    const tokenMissing = !currentUser.faceToken || !currentUser.faceTokenExpiry
-    const tokenExpired = currentUser.faceTokenExpiry !== null && currentUser.faceTokenExpiry < now
-    const tokenMismatch = currentUser.faceToken !== hashedIncoming
-
-    if (tokenMissing || tokenExpired || tokenMismatch) {
-      // Always clear whatever is in DB on any failure — force a fresh face scan
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { faceToken: null, faceTokenExpiry: null },
-      })
-      return NextResponse.json(
-        {
-          error: 'FACE_VERIFICATION_REQUIRED',
-          message: tokenExpired
-            ? 'Your face verification has expired. Please verify your face again.'
-            : 'Face verification failed. Please verify your face and try again.',
-        },
-        { status: 403 }
-      )
-    }
-
-    // ✅ Token is valid — immediately invalidate it (single-use)
-    // This prevents replay even within the 2-minute window
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { faceToken: null, faceTokenExpiry: null },
-    })
-
-    // ── Balance check ─────────────────────────────────────────────────────────
+    // ── Balance check ──────────────────────────────────────────────────────
     if (currentUser.availableBalance < amount) {
-      return NextResponse.json(
-        { error: `Insufficient balance. Available: ₦${currentUser.availableBalance.toLocaleString()}` },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Insufficient balance' }, { status: 400 })
     }
 
-    // ── Development: mock withdrawal ──────────────────────────────────────────
-    if (process.env.NODE_ENV === 'development') {
-      const reference = `WD-DEV-${Date.now()}`
+    const reference = `WD-${Date.now()}-${user.id.substring(0, 8)}`
 
+    // ── Dev mode ───────────────────────────────────────────────────────────
+    if (process.env.NODE_ENV !== 'production' || process.env.PAYSTACK_DEV_MODE === 'true') {
       await prisma.$transaction(async (tx) => {
         await tx.user.update({
           where: { id: user.id },
@@ -132,7 +71,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Withdrawal successful (Dev Mode)', reference })
     }
 
-    // ── Production: Paystack Transfer API ─────────────────────────────────────
+    // ── Production: Paystack Transfer API ─────────────────────────────────
     const transferReference = `WD-${Date.now()}-${user.id.substring(0, 8)}`
 
     // Step 1: Create transfer recipient
