@@ -9,6 +9,7 @@ import {
   ChevronDown, User, LogOut, Store, ShoppingBag, Wallet,
   Package, AlertTriangle, PlusCircle, Globe, Plus,
 } from 'lucide-react'
+import { isSplashPending } from '@/components/SplashScreen'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared logo
@@ -329,7 +330,6 @@ export function Navbar() {
   const isAppParam  = searchParams.get('app')     === 'true'
   const isAndroid   = searchParams.get('android') === 'true'
 
-  // Detect standalone PWA via matchMedia — persists even when ?app=true is lost
   const [isStandalone, setIsStandalone] = useState(false)
   useEffect(() => {
     const mq = window.matchMedia('(display-mode: standalone)')
@@ -340,6 +340,25 @@ export function Navbar() {
   }, [])
 
   const isApp = isAppParam || isStandalone
+
+  // ── SPLASH GUARD ─────────────────────────────────────────────────────────
+  // Hide navbar completely while splash is showing — no top bar, no bottom nav
+  const [splashDone, setSplashDone] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    return !isSplashPending()
+  })
+
+  useEffect(() => {
+    if (splashDone) return
+    const handler = () => setSplashDone(true)
+    window.addEventListener('batamart:splash-done', handler)
+    const fallback = setTimeout(() => setSplashDone(true), 4000)
+    return () => {
+      window.removeEventListener('batamart:splash-done', handler)
+      clearTimeout(fallback)
+    }
+  }, [splashDone])
+  // ─────────────────────────────────────────────────────────────────────────
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -454,8 +473,10 @@ export function Navbar() {
   // ── ANDROID WEBVIEW — return null, native nav handles everything ───────────
   if (isAndroid) return null
 
+  // ── SPLASH ACTIVE — hide everything, show nothing ─────────────────────────
+  if (!splashDone) return null
+
   // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar only ─────────────
-  // NO spacer divs here — spacers are in NavbarWrapper
   if (isApp) {
     return (
       <>
@@ -471,8 +492,7 @@ export function Navbar() {
     )
   }
 
-  // ── BROWSER MODE — standard top navbar only, no spacer ────────────────────
-  // Spacer is in NavbarWrapper
+  // ── BROWSER MODE — standard top navbar only ────────────────────────────────
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm transition-transform duration-300 ${

@@ -238,32 +238,13 @@ export default function MarketplacePage() {
   const isApp = searchParams.get('app') === 'true' ||
     (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches)
 
-  // ── SPLASH GUARD ──────────────────────────────────────────────────────────
-  // Synchronously check on first render if splash is pending.
-  // If yes → render blank white page until splash fires 'batamart:splash-done'.
-  // If no  → render normally (splash already shown this session).
+  // ── ALL HOOKS MUST BE AT THE TOP — no hooks after any early return ────────
+
+  // Splash guard — synchronously check if splash is pending on first render
   const [splashDone, setSplashDone] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     return !isSplashPending()
   })
-
-  useEffect(() => {
-    if (splashDone) return
-    const handler = () => setSplashDone(true)
-    window.addEventListener('batamart:splash-done', handler)
-    // Safety fallback — if event never fires for any reason, unblock after 4s
-    const fallback = setTimeout(() => setSplashDone(true), 4000)
-    return () => {
-      window.removeEventListener('batamart:splash-done', handler)
-      clearTimeout(fallback)
-    }
-  }, [splashDone])
-
-  // ── BLANK SCREEN WHILE SPLASH IS ACTIVE ───────────────────────────────────
-  if (!splashDone) {
-    return <div className="min-h-screen bg-white" />
-  }
-  // ──────────────────────────────────────────────────────────────────────────
 
   const [allProducts, setAllProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -279,6 +260,19 @@ export default function MarketplacePage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
   const isClickingSuggestionRef = useRef(false)
+
+  // Listen for splash done event
+  useEffect(() => {
+    if (splashDone) return
+    const handler = () => setSplashDone(true)
+    window.addEventListener('batamart:splash-done', handler)
+    // Safety fallback — if event never fires for any reason, unblock after 4s
+    const fallback = setTimeout(() => setSplashDone(true), 4000)
+    return () => {
+      window.removeEventListener('batamart:splash-done', handler)
+      clearTimeout(fallback)
+    }
+  }, [splashDone])
 
   useEffect(() => {
     if (document.getElementById('BATAMART-anim')) return
@@ -452,6 +446,12 @@ export default function MarketplacePage() {
       </div>,
       document.body
     ) : null
+
+  // ── BLANK SCREEN WHILE SPLASH IS ACTIVE ──────────────────────────────────
+  if (!splashDone) {
+    return <div className="min-h-screen bg-white" />
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#f7f8fa]">
