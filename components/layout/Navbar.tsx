@@ -142,15 +142,24 @@ function AppBottomNav({
 
   return (
     <>
+      {/* ── FIXED BOTTOM NAV — never moves, ever ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
-        style={{ boxShadow: '0 -4px 24px rgba(0,0,0,0.07)', position: 'fixed', bottom: 0, left: 0, right: 0, transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+        style={{
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
+          // Force GPU layer so WebView scroll NEVER drags this element
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          willChange: 'transform',
+        }}
       >
         <div
           className="flex items-stretch"
           style={{
-            height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            // 64px nav height + gesture bar space
+            // max() ensures at least 16px even when env() returns 0 (Android WebView)
+            height: 'calc(64px + max(env(safe-area-inset-bottom), 16px))',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
           }}
         >
           {/* LEFT TABS */}
@@ -251,7 +260,7 @@ function AppBottomNav({
           />
           <div
             className="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-3xl shadow-2xl"
-            style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
+            style={{ paddingBottom: 'calc(24px + max(env(safe-area-inset-bottom), 16px))' }}
           >
             <div className="flex justify-center pt-3 pb-2">
               <div className="w-10 h-1 bg-gray-200 rounded-full" />
