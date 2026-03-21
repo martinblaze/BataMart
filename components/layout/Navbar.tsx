@@ -147,7 +147,7 @@ function AppBottomNav({
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
         style={{
           boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
-          // Force GPU layer so WebView scroll NEVER drags this element
+          // Force GPU compositing layer — WebView scroll cannot touch this
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
           willChange: 'transform',
@@ -156,8 +156,6 @@ function AppBottomNav({
         <div
           className="flex items-stretch"
           style={{
-            // 64px nav height + gesture bar space
-            // max() ensures at least 16px even when env() returns 0 (Android WebView)
             height: 'calc(64px + max(env(safe-area-inset-bottom), 16px))',
             paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
           }}
@@ -361,7 +359,6 @@ export function Navbar() {
   const isApp = isAppParam || isStandalone
 
   // ── SPLASH GUARD ─────────────────────────────────────────────────────────
-  // Hide navbar completely while splash is showing — no top bar, no bottom nav
   const [splashDone, setSplashDone] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     return !isSplashPending()
@@ -395,7 +392,12 @@ export function Navbar() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollY = window.scrollY
+      // ── Read scrollTop from our container, NOT window ──
+      // layout.tsx wraps content in #page-scroll-container so window.scrollY
+      // is always 0. We must read from the container element directly.
+      const container = document.getElementById('page-scroll-container')
+      const currentScrollY = container ? container.scrollTop : window.scrollY
+
       if (currentScrollY > lastScrollY.current && currentScrollY > 80) {
         setIsVisible(false)
       } else {
@@ -403,8 +405,12 @@ export function Navbar() {
       }
       lastScrollY.current = currentScrollY
     }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+
+    // Attach listener to the scroll container, fall back to window
+    const container = document.getElementById('page-scroll-container')
+    const target: EventTarget = container ?? window
+    target.addEventListener('scroll', handleScroll, { passive: true })
+    return () => target.removeEventListener('scroll', handleScroll)
   }, [])
 
   useEffect(() => {

@@ -71,10 +71,7 @@ export default function RootLayout({
                   var splashShown = sessionStorage.getItem('batamart_splash_app');
 
                   if (!isAndroid && (isStandalone || isAppParam) && !splashShown) {
-                    // Add class to <html> for CSS to pick up immediately
                     document.documentElement.classList.add('splash-pending');
-                    // ALSO directly hide body as a belt-and-suspenders approach
-                    // This fires before any CSS is parsed, blocking the flash
                     document.addEventListener('DOMContentLoaded', function() {
                       var style = document.createElement('style');
                       style.textContent = 'body > *:not(#__splash_screen) { visibility: hidden !important; }';
@@ -116,7 +113,28 @@ export default function RootLayout({
           <IosInstallPrompt />
           <SuspensionGuard />
           <NavbarWrapper />
-          <div>{children}</div>
+          {/*
+            ── PAGE SCROLL CONTAINER ────────────────────────────────────────
+            The page scrolls inside this div, NOT via window.
+            This means position:fixed elements (bottom nav) are completely
+            outside the scroll context — WebView can NEVER drag them along.
+            The Navbar scroll listener reads from this element's scrollTop.
+          */}
+          <div
+            id="page-scroll-container"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {children}
+          </div>
           <NotificationPrompt />
         </ThemeProvider>
       </body>
