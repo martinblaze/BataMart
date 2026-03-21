@@ -25,8 +25,8 @@ function NavbarContent() {
   // Hide navbar completely on admin pages
   const hideNav =
     pathname?.startsWith('/admin') ||
-    pathname?.startsWith('/admin-login')
-  pathname === '/'
+    pathname?.startsWith('/admin-login')||
+    pathname === '/'
 
   if (hideNav) return null
 
