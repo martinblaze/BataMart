@@ -151,6 +151,11 @@ div.fixed {
   transform: translateZ(0);
 }
 
+/* ── BOTTOM NAV STABILITY (ALL PLATFORMS) ───────────────────────────────────
+   Hard-locks the bottom nav. `transition: none` is critical — without it,
+   iOS re-triggers animations during rubber-band bounce causing the nav to
+   jiggle and snap back.
+──────────────────────────────────────────────────────────────────────────── */
 nav[class*="fixed"][class*="bottom-0"] {
   position: fixed !important;
   bottom: 0 !important;
@@ -158,4 +163,22 @@ nav[class*="fixed"][class*="bottom-0"] {
   -webkit-transform: translateZ(0) !important;
   transition: none !important;
   will-change: transform;
+}
+
+/* ── IOS PWA SCROLL FIX ─────────────────────────────────────────────────────
+   
+──────────────────────────────────────────────────────────────────────────── */
+@supports (-webkit-touch-callout: none) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden; /* body must NOT scroll — this kills the rubber-band */
+  }
+
+  #page-scroll-container {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* smooth native iOS scroll feel */
+    overscroll-behavior: none;         /* no bounce at scroll edges */
+  }
 }
