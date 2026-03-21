@@ -29,11 +29,9 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'BataMart',
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
+  // ⚠️ viewport is intentionally NOT set here — we set it as a raw &lt;meta&gt; tag
+  // in &lt;head&gt; below because Next.js metadata API doesn't always serialize
+  // user-scalable=no correctly, leaving pinch-to-zoom still working.
 }
 
 export default function RootLayout({
@@ -44,6 +42,13 @@ export default function RootLayout({
   return (
     &lt;html lang="en" suppressHydrationWarning&gt;
       &lt;head&gt;
+        {/* ── DISABLE PINCH-TO-ZOOM ────────────────────────────────────────
+            Hard-coded raw meta tag — this is the only reliable way to kill
+            pinch zoom on both iOS Safari and Android Chrome/WebView.
+            Next.js metadata viewport API sometimes omits user-scalable=no.
+        ─────────────────────────────────────────────────────────────────── */}
+        &lt;meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" /&gt;
+
         &lt;meta name="application-name" content="BataMart" /&gt;
         &lt;meta name="mobile-web-app-capable" content="yes" /&gt;
         &lt;meta name="apple-mobile-web-app-capable" content="yes" /&gt;
@@ -71,10 +76,7 @@ export default function RootLayout({
                   var splashShown = sessionStorage.getItem('batamart_splash_app');
 
                   if (!isAndroid &amp;&amp; (isStandalone || isAppParam) &amp;&amp; !splashShown) {
-                    // Add class to &lt;html&gt; for CSS to pick up immediately
                     document.documentElement.classList.add('splash-pending');
-                    // ALSO directly hide body as a belt-and-suspenders approach
-                    // This fires before any CSS is parsed, blocking the flash
                     document.addEventListener('DOMContentLoaded', function() {
                       var style = document.createElement('style');
                       style.textContent = 'body &gt; *:not(#__splash_screen) { visibility: hidden !important; }';
@@ -116,7 +118,16 @@ export default function RootLayout({
           &lt;IosInstallPrompt /&gt;
           &lt;SuspensionGuard /&gt;
           &lt;NavbarWrapper /&gt;
-          &lt;div&gt;{children}&lt;/div&gt;
+          {/*
+            Plain div — no fixed positioning wrapper.
+            NavbarWrapper already outputs the correct spacer divs (h-14 / h-16)
+            so content starts below the navbar naturally.
+            The navbar itself is kept fixed via its own CSS + GPU layer forcing
+            in globals.css and the willChange/translateZ on the nav element.
+          */}
+          &lt;div id="page-scroll-container"&gt;
+            {children}
+          &lt;/div&gt;
           &lt;NotificationPrompt /&gt;
         &lt;/ThemeProvider&gt;
       &lt;/body&gt;
@@ -13545,15 +13556,23 @@ function AppBottomNav({
 
   return (
     &lt;&gt;
+      {/* ── FIXED BOTTOM NAV ── */}
       &lt;nav
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
-        style={{ boxShadow: '0 -4px 24px rgba(0,0,0,0.07)', position: 'fixed', bottom: 0, left: 0, right: 0, transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+        style={{
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          willChange: 'transform',
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden',
+        }}
       &gt;
         &lt;div
           className="flex items-stretch"
           style={{
-            height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            height: 'calc(64px + max(env(safe-area-inset-bottom), 16px))',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
           }}
         &gt;
           {/* LEFT TABS */}
@@ -13654,7 +13673,7 @@ function AppBottomNav({
           /&gt;
           &lt;div
             className="fixed bottom-0 left-0 right-0 z-[70] bg-white rounded-t-3xl shadow-2xl"
-            style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
+            style={{ paddingBottom: 'calc(24px + max(env(safe-area-inset-bottom), 16px))' }}
           &gt;
             &lt;div className="flex justify-center pt-3 pb-2"&gt;
               &lt;div className="w-10 h-1 bg-gray-200 rounded-full" /&gt;
@@ -13755,7 +13774,6 @@ export function Navbar() {
   const isApp = isAppParam || isStandalone
 
   // ── SPLASH GUARD ─────────────────────────────────────────────────────────
-  // Hide navbar completely while splash is showing — no top bar, no bottom nav
   const [splashDone, setSplashDone] = useState&lt;boolean&gt;(() =&gt; {
     if (typeof window === 'undefined') return true
     return !isSplashPending()
@@ -13886,10 +13904,13 @@ export function Navbar() {
   // ── ANDROID WEBVIEW — return null, native nav handles everything ───────────
   if (isAndroid) return null
 
-  // ── SPLASH ACTIVE — hide everything, show nothing ─────────────────────────
+  // ── SPLASH ACTIVE — hide everything ──────────────────────────────────────
   if (!splashDone) return null
 
-  // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar only ─────────────
+  // ── HOME PAGE — no navbar on the landing page ─────────────────────────────
+  if (pathname === '/') return null
+
+  // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar ─────────────────
   if (isApp) {
     return (
       &lt;&gt;
@@ -13905,7 +13926,7 @@ export function Navbar() {
     )
   }
 
-  // ── BROWSER MODE — standard top navbar only ────────────────────────────────
+  // ── BROWSER MODE — standard fixed top navbar ───────────────────────────────
   return (
     &lt;nav
       className={`fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm transition-transform duration-300 ${
@@ -14148,7 +14169,8 @@ function NavbarContent() {
   // Hide navbar completely on admin pages
   const hideNav =
     pathname?.startsWith('/admin') ||
-    pathname?.startsWith('/admin-login')
+    pathname?.startsWith('/admin-login')||
+    pathname === '/'
 
   if (hideNav) return null
 
@@ -25615,6 +25637,9 @@ html.splash-pending body &gt; div &gt; * {
   body {
     @apply bg-light-surface text-gray-900;
     font-family: 'Inter', system-ui, sans-serif;
+    /* Prevent WebView momentum scroll from dragging fixed elements */
+    -webkit-overflow-scrolling: auto;
+    overscroll-behavior: none;
   }
 }
 
@@ -25703,6 +25728,18 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-BATAMART-dark rounded-full;
+}
+
+/* ── FIXED NAV STABILITY ────────────────────────────────────────────────────
+   Forces the browser to promote fixed/sticky elements to their own GPU
+   compositing layer. This prevents WebView scroll from ever dragging them.
+──────────────────────────────────────────────────────────────────────────── */
+nav.fixed,
+div.fixed {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }</pre></div>
 <div class='file-block'><div class='file-header'>styles/mobile.css</div><pre>/* Mobile-first responsive utilities */
 

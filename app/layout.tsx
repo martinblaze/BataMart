@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import '@/styles/globals.css'
 
@@ -23,15 +23,23 @@ export const metadata: Metadata = {
     icon: '/icon-192x192.png',
     apple: '/apple-touch-icon.png',
   },
-  themeColor: '#0ea5e9',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'BataMart',
   },
-  // ⚠️ viewport is intentionally NOT set here — we set it as a raw <meta> tag
-  // in <head> below because Next.js metadata API doesn't always serialize
-  // user-scalable=no correctly, leaving pinch-to-zoom still working.
+}
+
+// ✅ PROPER NEXT.JS VIEWPORT EXPORT
+// This is the ONLY reliable way to lock zoom across ALL route transitions
+// in Next.js App Router. A raw <meta> tag in <head> gets overridden by
+// Next.js during client-side navigation — this export doesn't.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#0ea5e9',
 }
 
 export default function RootLayout({
@@ -42,21 +50,45 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* ── DISABLE PINCH-TO-ZOOM ────────────────────────────────────────
-            Hard-coded raw meta tag — this is the only reliable way to kill
-            pinch zoom on both iOS Safari and Android Chrome/WebView.
-            Next.js metadata viewport API sometimes omits user-scalable=no.
-        ─────────────────────────────────────────────────────────────────── */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-
         <meta name="application-name" content="BataMart" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="BataMart" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="theme-color" content="#0ea5e9" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+        {/*
+          ── BULLETPROOF ZOOM KILLER ──────────────────────────────────────────
+          The viewport export above handles the meta tag, but iOS Safari can
+          STILL allow pinch zoom even with user-scalable=no in some versions.
+          This JS kills it at the touch-event level — works on every page,
+          survives every route transition because it's registered once on the
+          document at app boot.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                // Kill pinch-to-zoom via touch events (iOS Safari bypass)
+                document.addEventListener('gesturestart', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('gesturechange', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('gestureend', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('touchmove', function(e) {
+                  if (e.touches && e.touches.length > 1) {
+                    e.preventDefault();
+                  }
+                }, { passive: false });
+              })();
+            `,
+          }}
+        />
 
         {/*
           ── BULLETPROOF SPLASH BLOCKER ──────────────────────────────────────
