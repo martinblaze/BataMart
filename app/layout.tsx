@@ -29,12 +29,9 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'BataMart',
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+  // ⚠️ viewport is intentionally NOT set here — we set it as a raw <meta> tag
+  // in <head> below because Next.js metadata API doesn't always serialize
+  // user-scalable=no correctly, leaving pinch-to-zoom still working.
 }
 
 export default function RootLayout({
@@ -45,6 +42,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* ── DISABLE PINCH-TO-ZOOM ────────────────────────────────────────
+            Hard-coded raw meta tag — this is the only reliable way to kill
+            pinch zoom on both iOS Safari and Android Chrome/WebView.
+            Next.js metadata viewport API sometimes omits user-scalable=no.
+        ─────────────────────────────────────────────────────────────────── */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
         <meta name="application-name" content="BataMart" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

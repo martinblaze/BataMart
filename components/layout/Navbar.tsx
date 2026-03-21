@@ -147,7 +147,6 @@ function AppBottomNav({
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
         style={{
           boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
-          // GPU compositing layer — WebView scroll physically cannot move this
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
           willChange: 'transform',
@@ -394,7 +393,6 @@ export function Navbar() {
 
   useEffect(() => {
     const handleScroll = () => {
-      // Normal window scroll — layout.tsx no longer uses a fixed scroll container
       const currentScrollY = window.scrollY
       if (currentScrollY > lastScrollY.current && currentScrollY > 80) {
         setIsVisible(false)
@@ -494,6 +492,9 @@ export function Navbar() {
 
   // ── SPLASH ACTIVE — hide everything ──────────────────────────────────────
   if (!splashDone) return null
+
+  // ── HOME PAGE — no navbar on the landing page ─────────────────────────────
+  if (pathname === '/') return null
 
   // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar ─────────────────
   if (isApp) {
