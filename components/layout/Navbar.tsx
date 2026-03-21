@@ -12,6 +12,45 @@ import {
 import { isSplashPending } from '@/components/SplashScreen'
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Hook: locks bottom nav to the BOTTOM OF THE SCREEN even when keyboard opens.
+// The browser's Visual Viewport shrinks when the keyboard appears. Without this
+// hook, `fixed bottom-0` repositions relative to the shrunken viewport, causing
+// the navbar to float up with the keyboard. We counter that by reading the
+// visual viewport offset and applying it as a CSS custom property.
+// ─────────────────────────────────────────────────────────────────────────────
+function useKeyboardAwareBottom(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const vv = (window as any).visualViewport as VisualViewport | undefined
+    if (!vv || !ref.current) return
+
+    const el = ref.current
+
+    const update = () => {
+      // offsetTop = how far the visual viewport has scrolled inside the layout viewport
+      // height    = current visual viewport height (shrinks when keyboard opens)
+      // window.innerHeight = full layout viewport height (stays constant)
+      const keyboardHeight = window.innerHeight - vv.height - vv.offsetTop
+      // Push the nav up by exactly the keyboard height so it stays at the
+      // bottom of the VISIBLE screen, not the bottom of the layout viewport.
+      el.style.transform = `translateY(-${Math.max(0, keyboardHeight)}px)`
+    }
+
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+
+    // Run once immediately
+    update()
+
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+      // Reset on unmount
+      if (ref.current) ref.current.style.transform = ''
+    }
+  }, [ref])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Shared logo
 // ─────────────────────────────────────────────────────────────────────────────
 function BATAMARTLogo({ appMode = false }: { appMode?: boolean }) {
@@ -89,6 +128,12 @@ function AppBottomNav({
 }) {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
+  const navRef = useRef<HTMLElement>(null)
+
+  // ✅ THE FIX: keeps the navbar pinned to the visible bottom even when
+  // the keyboard is open. Without this, `fixed bottom-0` moves UP with the
+  // keyboard because the visual viewport shrinks.
+  useKeyboardAwareBottom(navRef)
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + '/')
@@ -144,9 +189,12 @@ function AppBottomNav({
     <>
       {/* ── FIXED BOTTOM NAV ── */}
       <nav
+        ref={navRef}
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
         style={{
           boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
+          // translateZ(0) keeps it on the GPU layer — the useKeyboardAwareBottom
+          // hook will override transform dynamically when keyboard opens.
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
           willChange: 'transform',
