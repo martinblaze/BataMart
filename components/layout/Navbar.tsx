@@ -142,15 +142,17 @@ function AppBottomNav({
 
   return (
     <>
-      {/* ── FIXED BOTTOM NAV — never moves, ever ── */}
+      {/* ── FIXED BOTTOM NAV ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
         style={{
           boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
-          // Force GPU compositing layer — WebView scroll cannot touch this
+          // GPU compositing layer — WebView scroll physically cannot move this
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
           willChange: 'transform',
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden',
         }}
       >
         <div
@@ -392,12 +394,8 @@ export function Navbar() {
 
   useEffect(() => {
     const handleScroll = () => {
-      // ── Read scrollTop from our container, NOT window ──
-      // layout.tsx wraps content in #page-scroll-container so window.scrollY
-      // is always 0. We must read from the container element directly.
-      const container = document.getElementById('page-scroll-container')
-      const currentScrollY = container ? container.scrollTop : window.scrollY
-
+      // Normal window scroll — layout.tsx no longer uses a fixed scroll container
+      const currentScrollY = window.scrollY
       if (currentScrollY > lastScrollY.current && currentScrollY > 80) {
         setIsVisible(false)
       } else {
@@ -405,12 +403,8 @@ export function Navbar() {
       }
       lastScrollY.current = currentScrollY
     }
-
-    // Attach listener to the scroll container, fall back to window
-    const container = document.getElementById('page-scroll-container')
-    const target: EventTarget = container ?? window
-    target.addEventListener('scroll', handleScroll, { passive: true })
-    return () => target.removeEventListener('scroll', handleScroll)
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
   useEffect(() => {
@@ -498,10 +492,10 @@ export function Navbar() {
   // ── ANDROID WEBVIEW — return null, native nav handles everything ───────────
   if (isAndroid) return null
 
-  // ── SPLASH ACTIVE — hide everything, show nothing ─────────────────────────
+  // ── SPLASH ACTIVE — hide everything ──────────────────────────────────────
   if (!splashDone) return null
 
-  // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar only ─────────────
+  // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar ─────────────────
   if (isApp) {
     return (
       <>
@@ -517,7 +511,7 @@ export function Navbar() {
     )
   }
 
-  // ── BROWSER MODE — standard top navbar only ────────────────────────────────
+  // ── BROWSER MODE — standard fixed top navbar ───────────────────────────────
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm transition-transform duration-300 ${

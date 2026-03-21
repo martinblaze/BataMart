@@ -46,6 +46,9 @@ html.splash-pending body > div > * {
   body {
     @apply bg-light-surface text-gray-900;
     font-family: 'Inter', system-ui, sans-serif;
+    /* Prevent WebView momentum scroll from dragging fixed elements */
+    -webkit-overflow-scrolling: auto;
+    overscroll-behavior: none;
   }
 }
 
@@ -134,4 +137,16 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-BATAMART-dark rounded-full;
+}
+
+/* ── FIXED NAV STABILITY ────────────────────────────────────────────────────
+   Forces the browser to promote fixed/sticky elements to their own GPU
+   compositing layer. This prevents WebView scroll from ever dragging them.
+──────────────────────────────────────────────────────────────────────────── */
+nav.fixed,
+div.fixed {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }

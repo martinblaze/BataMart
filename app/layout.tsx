@@ -115,25 +115,13 @@ export default function RootLayout({
           <SuspensionGuard />
           <NavbarWrapper />
           {/*
-            ── PAGE SCROLL CONTAINER ────────────────────────────────────────
-            The page scrolls inside this div, NOT via window.
-            This means position:fixed elements (bottom nav) are completely
-            outside the scroll context — WebView can NEVER drag them along.
-            The Navbar scroll listener reads from this element's scrollTop.
+            Plain div — no fixed positioning wrapper.
+            NavbarWrapper already outputs the correct spacer divs (h-14 / h-16)
+            so content starts below the navbar naturally.
+            The navbar itself is kept fixed via its own CSS + GPU layer forcing
+            in globals.css and the willChange/translateZ on the nav element.
           */}
-          <div
-            id="page-scroll-container"
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
+          <div id="page-scroll-container">
             {children}
           </div>
           <NotificationPrompt />

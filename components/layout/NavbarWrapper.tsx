@@ -26,6 +26,7 @@ function NavbarContent() {
   const hideNav =
     pathname?.startsWith('/admin') ||
     pathname?.startsWith('/admin-login')
+  pathname === '/'
 
   if (hideNav) return null
 
