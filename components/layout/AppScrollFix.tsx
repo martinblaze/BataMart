@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-function AppScrollFixInner({ children }: { children: React.ReactNode }) {
+function BottomNavSpacerInner() {
   const searchParams = useSearchParams()
   const isAppParam = searchParams.get('app') === 'true'
   const isAndroid = searchParams.get('android') === 'true'
@@ -20,17 +20,27 @@ function AppScrollFixInner({ children }: { children: React.ReactNode }) {
 
   const isApp = isAppParam || isStandalone || isAndroid
 
+  if (!isApp) return null
+
   return (
-    <div id="page-scroll-container" className={isApp ? 'pb-nav' : ''}>
-      {children}
-    </div>
+    <div
+      style={{
+        height: 'calc(64px + max(env(safe-area-inset-bottom), 16px))',
+        flexShrink: 0,
+        pointerEvents: 'none',
+      }}
+      aria-hidden="true"
+    />
   )
 }
 
 export function AppScrollFix({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<div id="page-scroll-container">{children}</div>}>
-      <AppScrollFixInner>{children}</AppScrollFixInner>
-    </Suspense>
+    <>
+      {children}
+      <Suspense fallback={null}>
+        <BottomNavSpacerInner />
+      </Suspense>
+    </>
   )
 }
