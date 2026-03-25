@@ -8,7 +8,6 @@ import { NotificationPrompt } from '@/hooks/usePushSubscription'
 import { SuspensionGuard } from '@/components/layout/SuspensionGuard'
 import { AppScrollFix } from '@/components/layout/AppScrollFix'
 
-
 // 🔥 PWA + UX
 import PWARegister from '@/components/PWARegister'
 import SplashScreen from '@/components/SplashScreen'
@@ -32,20 +31,12 @@ export const metadata: Metadata = {
   },
 }
 
-// ✅ PROPER NEXT.JS VIEWPORT EXPORT
-// This is the ONLY reliable way to lock zoom across ALL route transitions
-// in Next.js App Router. A raw <meta> tag in <head> gets overridden by
-// Next.js during client-side navigation — this export doesn't.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
   themeColor: '#0ea5e9',
-  // ✅ KEY FIX for bottom nav + keyboard:
-  // 'resizes-visual' means only the VISUAL viewport shrinks when the keyboard
-  // opens — the LAYOUT viewport (where `fixed` positioning is anchored) stays
-  // full height. So `fixed bottom-0` never moves regardless of keyboard state.
   interactiveWidget: 'resizes-visual',
 }
 
@@ -65,19 +56,11 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-        {/*
-          ── BULLETPROOF ZOOM KILLER ──────────────────────────────────────────
-          The viewport export above handles the meta tag, but iOS Safari can
-          STILL allow pinch zoom even with user-scalable=no in some versions.
-          This JS kills it at the touch-event level — works on every page,
-          survives every route transition because it's registered once on the
-          document at app boot.
-        */}
+        {/* ── BULLETPROOF ZOOM KILLER ── */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                // Kill pinch-to-zoom via touch events (iOS Safari bypass)
                 document.addEventListener('gesturestart', function(e) {
                   e.preventDefault();
                 }, { passive: false });
@@ -97,12 +80,41 @@ export default function RootLayout({
           }}
         />
 
-        {/*
-          ── BULLETPROOF SPLASH BLOCKER ──────────────────────────────────────
-          Runs SYNCHRONOUSLY before React hydrates — zero flash guaranteed.
-          Hides body immediately if splash is needed, shows it only after
-          SplashScreen component calls unblockPage().
-        */}
+        {/* ── iOS PWA KEYBOARD FIX ── */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                // Only run on iOS
+                if (!(/iPad|iPhone|iPod/.test(navigator.userAgent))) return;
+
+                var lastScrollY = 0;
+
+                // Save scroll position when keyboard opens
+                window.addEventListener('focusin', function(e) {
+                  lastScrollY = window.scrollY;
+                });
+
+                // Restore everything when keyboard closes
+                window.addEventListener('focusout', function(e) {
+                  setTimeout(function() {
+                    // Restore scroll position
+                    window.scrollTo({ top: lastScrollY, behavior: 'instant' });
+
+                    // Force all navs to repaint — fixes floating bottom nav
+                    document.querySelectorAll('nav').forEach(function(nav) {
+                      nav.style.display = 'none';
+                      nav.offsetHeight; // trigger reflow
+                      nav.style.display = '';
+                    });
+                  }, 100);
+                });
+              })();
+            `,
+          }}
+        />
+
+        {/* ── BULLETPROOF SPLASH BLOCKER ── */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -128,13 +140,7 @@ export default function RootLayout({
           }}
         />
 
-        {/*
-          ── INSTANT BODY HIDE ────────────────────────────────────────────────
-          This <style> tag is parsed by the browser BEFORE any JS runs.
-          It hides body content the moment the HTML is received, before
-          React, before hydration, before anything. The splash-pending class
-          is what gates it — added by the script above synchronously.
-        */}
+        {/* ── INSTANT BODY HIDE ── */}
         <style dangerouslySetInnerHTML={{
           __html: `
             html.splash-pending body > * {
@@ -157,13 +163,6 @@ export default function RootLayout({
           <IosInstallPrompt />
           <SuspensionGuard />
           <NavbarWrapper />
-          {/*
-            Plain div — no fixed positioning wrapper.
-            NavbarWrapper already outputs the correct spacer divs (h-14 / h-16)
-            so content starts below the navbar naturally.
-            The navbar itself is kept fixed via its own CSS + GPU layer forcing
-            in globals.css and the willChange/translateZ on the nav element.
-          */}
           <AppScrollFix>
             {children}
           </AppScrollFix>

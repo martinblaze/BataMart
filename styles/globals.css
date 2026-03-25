@@ -186,3 +186,11 @@ nav[class*="fixed"][class*="bottom-0"] {
 .pb-nav {
   padding-bottom: calc(64px + max(env(safe-area-inset-bottom), 16px)) !important;
 }
+
+@supports (-webkit-touch-callout: none) {
+  nav {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: transform;
+  }
+}
