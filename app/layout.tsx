@@ -6,6 +6,8 @@ import { NavbarWrapper } from '@/components/layout/NavbarWrapper'
 import { ThemeProvider } from '@/components/layout/ThemeProvider'
 import { NotificationPrompt } from '@/hooks/usePushSubscription'
 import { SuspensionGuard } from '@/components/layout/SuspensionGuard'
+import { AppScrollFix } from '@/components/layout/AppScrollFix'
+
 
 // 🔥 PWA + UX
 import PWARegister from '@/components/PWARegister'
@@ -162,9 +164,9 @@ export default function RootLayout({
             The navbar itself is kept fixed via its own CSS + GPU layer forcing
             in globals.css and the willChange/translateZ on the nav element.
           */}
-          <div id="page-scroll-container">
+          <AppScrollFix>
             {children}
-          </div>
+          </AppScrollFix>
           <NotificationPrompt />
         </ThemeProvider>
       </body>

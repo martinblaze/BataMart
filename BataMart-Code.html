@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BataMart Code</title><style>body{margin:0;padding:20px;background:#1e1e1e;color:#d4d4d4;font-family:monospace;font-size:13px;line-height:1.6;}.file-block{margin-bottom:48px;}.file-header{background:#333;color:#9cdcfe;padding:8px 14px;font-weight:bold;font-size:13px;border-left:4px solid #569cd6;margin-bottom:0;}pre{margin:0;padding:16px;background:#252526;overflow-x:auto;white-space:pre-wrap;word-break:break-word;border:1px solid #333;}</style></head><body><div class='file-block'><div class='file-header'>app/layout.tsx</div><pre>import type { Metadata } from 'next'
+﻿<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BataMart Code</title><style>body{margin:0;padding:20px;background:#1e1e1e;color:#d4d4d4;font-family:monospace;font-size:13px;line-height:1.6;}.file-block{margin-bottom:48px;}.file-header{background:#333;color:#9cdcfe;padding:8px 14px;font-weight:bold;font-size:13px;border-left:4px solid #569cd6;margin-bottom:0;}pre{margin:0;padding:16px;background:#252526;overflow-x:auto;white-space:pre-wrap;word-break:break-word;border:1px solid #333;}</style></head><body><div class='file-block'><div class='file-header'>app/layout.tsx</div><pre>import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import '@/styles/globals.css'
 
@@ -23,15 +23,28 @@ export const metadata: Metadata = {
     icon: '/icon-192x192.png',
     apple: '/apple-touch-icon.png',
   },
-  themeColor: '#0ea5e9',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'BataMart',
   },
-  // ⚠️ viewport is intentionally NOT set here — we set it as a raw &lt;meta&gt; tag
-  // in &lt;head&gt; below because Next.js metadata API doesn't always serialize
-  // user-scalable=no correctly, leaving pinch-to-zoom still working.
+}
+
+// ✅ PROPER NEXT.JS VIEWPORT EXPORT
+// This is the ONLY reliable way to lock zoom across ALL route transitions
+// in Next.js App Router. A raw &lt;meta&gt; tag in &lt;head&gt; gets overridden by
+// Next.js during client-side navigation — this export doesn't.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#0ea5e9',
+  // ✅ KEY FIX for bottom nav + keyboard:
+  // 'resizes-visual' means only the VISUAL viewport shrinks when the keyboard
+  // opens — the LAYOUT viewport (where `fixed` positioning is anchored) stays
+  // full height. So `fixed bottom-0` never moves regardless of keyboard state.
+  interactiveWidget: 'resizes-visual',
 }
 
 export default function RootLayout({
@@ -42,21 +55,45 @@ export default function RootLayout({
   return (
     &lt;html lang="en" suppressHydrationWarning&gt;
       &lt;head&gt;
-        {/* ── DISABLE PINCH-TO-ZOOM ────────────────────────────────────────
-            Hard-coded raw meta tag — this is the only reliable way to kill
-            pinch zoom on both iOS Safari and Android Chrome/WebView.
-            Next.js metadata viewport API sometimes omits user-scalable=no.
-        ─────────────────────────────────────────────────────────────────── */}
-        &lt;meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" /&gt;
-
         &lt;meta name="application-name" content="BataMart" /&gt;
         &lt;meta name="mobile-web-app-capable" content="yes" /&gt;
         &lt;meta name="apple-mobile-web-app-capable" content="yes" /&gt;
         &lt;meta name="apple-mobile-web-app-title" content="BataMart" /&gt;
         &lt;meta name="apple-mobile-web-app-status-bar-style" content="default" /&gt;
-        &lt;meta name="theme-color" content="#0ea5e9" /&gt;
         &lt;link rel="manifest" href="/manifest.json" /&gt;
         &lt;link rel="apple-touch-icon" href="/apple-touch-icon.png" /&gt;
+
+        {/*
+          ── BULLETPROOF ZOOM KILLER ──────────────────────────────────────────
+          The viewport export above handles the meta tag, but iOS Safari can
+          STILL allow pinch zoom even with user-scalable=no in some versions.
+          This JS kills it at the touch-event level — works on every page,
+          survives every route transition because it's registered once on the
+          document at app boot.
+        */}
+        &lt;script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                // Kill pinch-to-zoom via touch events (iOS Safari bypass)
+                document.addEventListener('gesturestart', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('gesturechange', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('gestureend', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('touchmove', function(e) {
+                  if (e.touches &amp;&amp; e.touches.length &gt; 1) {
+                    e.preventDefault();
+                  }
+                }, { passive: false });
+              })();
+            `,
+          }}
+        /&gt;
 
         {/*
           ── BULLETPROOF SPLASH BLOCKER ──────────────────────────────────────
@@ -12985,58 +13022,138 @@ import { useEffect, useState } from 'react'
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState&lt;any&gt;(null)
   const [show, setShow] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() =&gt; {
-    // 🚫 Don't show if already installed
+    // Don't show if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) return
+
+    // Don't show if previously dismissed
+    if (localStorage.getItem('installPromptDismissed')) return
 
     const handler = (e: any) =&gt; {
       e.preventDefault()
       setDeferredPrompt(e)
-
-      // show after delay (smooth UX)
       setTimeout(() =&gt; setShow(true), 3000)
     }
 
     window.addEventListener('beforeinstallprompt', handler)
-
     return () =&gt; window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
   const install = async () =&gt; {
     if (!deferredPrompt) return
-
+    setInstalling(true)
     deferredPrompt.prompt()
     const { outcome } = await deferredPrompt.userChoice
-
+    setInstalling(false)
     if (outcome === 'accepted') {
       setShow(false)
     }
   }
 
-  if (!show) return null
+  const dismiss = () =&gt; {
+    setDismissed(true)
+    setShow(false)
+    localStorage.setItem('installPromptDismissed', 'true')
+  }
+
+  if (!show || dismissed) return null
 
   return (
-    &lt;div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-sm"&gt;
-      &lt;div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 flex items-center gap-3"&gt;
-        
-        &lt;img src="/icon-192x192.png" className="w-10 h-10 rounded-xl" /&gt;
+    &lt;div
+      className="fixed bottom-24 left-0 right-0 z-[9999] flex justify-center px-4"
+      style={{ animation: 'slideUpFade 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+    &gt;
+      &lt;style&gt;{`
+        @keyframes slideUpFade {
+          from { opacity: 0; transform: translateY(24px) scale(0.96); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes shimmer {
+          0%   { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        .install-btn-shimmer {
+          background: linear-gradient(90deg, #1a3f8f 0%, #3b9ef5 40%, #1a3f8f 60%, #1a3f8f 100%);
+          background-size: 200% auto;
+          animation: shimmer 2.4s linear infinite;
+        }
+      `}&lt;/style&gt;
 
-        &lt;div className="flex-1"&gt;
-          &lt;p className="font-bold text-sm text-gray-900"&gt;
-            Install BataMart
-          &lt;/p&gt;
-          &lt;p className="text-xs text-gray-500"&gt;
-            Faster access &amp; notifications
-          &lt;/p&gt;
+      &lt;div
+        className="w-full max-w-sm rounded-2xl overflow-hidden"
+        style={{
+          background: '#fff',
+          boxShadow: '0 8px 40px rgba(26,63,143,0.18), 0 2px 8px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(59,158,245,0.2)',
+        }}
+      &gt;
+        {/* Top accent bar */}
+        &lt;div
+          className="h-1 w-full"
+          style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }}
+        /&gt;
+
+        &lt;div className="p-4 flex items-center gap-3"&gt;
+          {/* App icon */}
+          &lt;div
+            className="relative flex-shrink-0"
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 14,
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(26,63,143,0.25)',
+            }}
+          &gt;
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            &lt;img
+              src="/icon-192x192.png"
+              alt="BataMart"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            /&gt;
+          &lt;/div&gt;
+
+          {/* Text */}
+          &lt;div className="flex-1 min-w-0"&gt;
+            &lt;p className="font-bold text-gray-900 text-sm leading-tight"&gt;
+              Install BataMart
+            &lt;/p&gt;
+            &lt;p className="text-xs text-gray-500 mt-0.5"&gt;
+              Add to home screen for the best experience
+            &lt;/p&gt;
+
+            {/* Stars */}
+            &lt;div className="flex items-center gap-1 mt-1"&gt;
+              {[...Array(5)].map((_, i) =&gt; (
+                &lt;svg key={i} className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"&gt;
+                  &lt;path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /&gt;
+                &lt;/svg&gt;
+              ))}
+              &lt;span className="text-[10px] text-gray-400 ml-1"&gt;Free&lt;/span&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          {/* Buttons */}
+          &lt;div className="flex flex-col gap-1.5 flex-shrink-0"&gt;
+            &lt;button
+              onClick={install}
+              disabled={installing}
+              className="install-btn-shimmer text-white text-xs font-bold px-4 py-2 rounded-xl transition-opacity"
+              style={{ opacity: installing ? 0.7 : 1, minWidth: 72 }}
+            &gt;
+              {installing ? 'Opening…' : 'Install'}
+            &lt;/button&gt;
+            &lt;button
+              onClick={dismiss}
+              className="text-[11px] text-gray-400 text-center hover:text-gray-600 transition-colors"
+            &gt;
+              Not now
+            &lt;/button&gt;
+          &lt;/div&gt;
         &lt;/div&gt;
-
-        &lt;button
-          onClick={install}
-          className="bg-BATAMART-primary text-white text-xs font-bold px-3 py-2 rounded-lg"
-        &gt;
-          Install
-        &lt;/button&gt;
       &lt;/div&gt;
     &lt;/div&gt;
   )
@@ -13047,42 +13164,195 @@ import { useEffect, useState } from 'react'
 
 export default function IosInstallPrompt() {
   const [show, setShow] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() =&gt; {
     const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    const wasDismissed = localStorage.getItem('iosInstallDismissed')
 
-    // 🚫 Don't show if already installed
-    const isInStandalone = window.matchMedia('(display-mode: standalone)').matches
+    if (!isIos || isStandalone || wasDismissed) return
 
-    if (!isIos || isInStandalone) return
-
-    // show after delay
     setTimeout(() =&gt; setShow(true), 4000)
   }, [])
 
-  if (!show) return null
+  const dismiss = () =&gt; {
+    setDismissed(true)
+    setShow(false)
+    localStorage.setItem('iosInstallDismissed', 'true')
+  }
+
+  if (!show || dismissed) return null
 
   return (
-    &lt;div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-sm"&gt;
-      &lt;div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4"&gt;
-        
-        &lt;p className="font-bold text-sm text-gray-900 mb-2"&gt;
-          Install BataMart 📱
-        &lt;/p&gt;
+    &lt;&gt;
+      &lt;style&gt;{`
+        @keyframes iosSlideUp {
+          from { opacity: 0; transform: translateY(100%); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounceCaret {
+          0%, 100% { transform: translateY(0); }
+          50%       { transform: translateY(4px); }
+        }
+        .ios-prompt-sheet {
+          animation: iosSlideUp 0.45s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+        }
+        .bounce-caret {
+          animation: bounceCaret 1.4s ease-in-out infinite;
+        }
+      `}&lt;/style&gt;
 
-        &lt;p className="text-xs text-gray-600 leading-relaxed"&gt;
-          1. Tap the &lt;span className="font-bold"&gt;Share&lt;/span&gt; button (⬆️)&lt;br /&gt;
-          2. Tap &lt;span className="font-bold"&gt;“Add to Home Screen”&lt;/span&gt;
-        &lt;/p&gt;
+      {/* Backdrop */}
+      &lt;div
+        className="fixed inset-0 z-[9998]"
+        style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)' }}
+        onClick={dismiss}
+      /&gt;
 
-        &lt;button
-          onClick={() =&gt; setShow(false)}
-          className="mt-3 text-xs text-gray-500"
-        &gt;
-          Got it
-        &lt;/button&gt;
+      {/* Sheet */}
+      &lt;div
+        className="ios-prompt-sheet fixed bottom-0 left-0 right-0 z-[9999] rounded-t-3xl overflow-hidden"
+        style={{
+          background: '#fff',
+          boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
+          paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
+        }}
+      &gt;
+        {/* Drag handle */}
+        &lt;div className="flex justify-center pt-3 pb-1"&gt;
+          &lt;div className="w-10 h-1 bg-gray-200 rounded-full" /&gt;
+        &lt;/div&gt;
+
+        {/* Header */}
+        &lt;div className="px-6 pt-3 pb-5"&gt;
+          &lt;div className="flex items-center gap-3 mb-4"&gt;
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            &lt;img
+              src="/icon-192x192.png"
+              alt="BataMart"
+              className="w-14 h-14 rounded-2xl"
+              style={{ boxShadow: '0 4px 16px rgba(26,63,143,0.2)' }}
+            /&gt;
+            &lt;div&gt;
+              &lt;h2 className="text-lg font-bold text-gray-900 leading-tight"&gt;
+                Add BataMart to
+                &lt;br /&gt;Home Screen
+              &lt;/h2&gt;
+              &lt;p className="text-xs text-gray-500 mt-0.5"&gt;
+                Get the full app experience 🚀
+              &lt;/p&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          {/* Steps */}
+          &lt;div className="space-y-3"&gt;
+
+            {/* Step 1 */}
+            &lt;div
+              className="flex items-center gap-3 p-3 rounded-2xl"
+              style={{ background: 'linear-gradient(135deg, #eff6ff, #f0f9ff)' }}
+            &gt;
+              &lt;div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)', boxShadow: '0 4px 10px rgba(26,63,143,0.3)' }}
+              &gt;
+                {/* iOS Share icon */}
+                &lt;svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+              &lt;div className="flex-1"&gt;
+                &lt;p className="text-sm font-semibold text-gray-800"&gt;
+                  Tap the Share button
+                &lt;/p&gt;
+                &lt;p className="text-xs text-gray-500 mt-0.5"&gt;
+                  At the bottom of your Safari browser
+                &lt;/p&gt;
+              &lt;/div&gt;
+              &lt;div className="bounce-caret"&gt;
+                &lt;svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            {/* Step 2 */}
+            &lt;div
+              className="flex items-center gap-3 p-3 rounded-2xl"
+              style={{ background: 'linear-gradient(135deg, #f0fdf4, #ecfdf5)' }}
+            &gt;
+              &lt;div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 10px rgba(5,150,105,0.3)' }}
+              &gt;
+                {/* Plus icon */}
+                &lt;svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+              &lt;div className="flex-1"&gt;
+                &lt;p className="text-sm font-semibold text-gray-800"&gt;
+                  Tap "Add to Home Screen"
+                &lt;/p&gt;
+                &lt;p className="text-xs text-gray-500 mt-0.5"&gt;
+                  Scroll down in the share sheet to find it
+                &lt;/p&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            {/* Step 3 */}
+            &lt;div
+              className="flex items-center gap-3 p-3 rounded-2xl"
+              style={{ background: 'linear-gradient(135deg, #fff7ed, #fffbeb)' }}
+            &gt;
+              &lt;div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #d97706, #f59e0b)', boxShadow: '0 4px 10px rgba(217,119,6,0.3)' }}
+              &gt;
+                {/* Checkmark icon */}
+                &lt;svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+              &lt;div className="flex-1"&gt;
+                &lt;p className="text-sm font-semibold text-gray-800"&gt;
+                  Tap "Add" to confirm
+                &lt;/p&gt;
+                &lt;p className="text-xs text-gray-500 mt-0.5"&gt;
+                  BataMart will appear on your home screen
+                &lt;/p&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          {/* CTA */}
+          &lt;button
+            onClick={dismiss}
+            className="mt-5 w-full py-3.5 rounded-2xl text-sm font-bold text-white"
+            style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)', boxShadow: '0 4px 16px rgba(26,63,143,0.3)' }}
+          &gt;
+            Got it!
+          &lt;/button&gt;
+
+          &lt;button
+            onClick={dismiss}
+            className="mt-2 w-full py-2 text-xs text-gray-400"
+          &gt;
+            Maybe later
+          &lt;/button&gt;
+        &lt;/div&gt;
       &lt;/div&gt;
-    &lt;/div&gt;
+
+      {/* Arrow pointing to Safari share button */}
+      &lt;div
+        className="fixed bottom-0 left-1/2 z-[9997]"
+        style={{
+          transform: 'translateX(-50%)',
+          pointerEvents: 'none',
+        }}
+      /&gt;
+    &lt;/&gt;
   )
 }</pre></div>
 <div class='file-block'><div class='file-header'>components/PWARegister.tsx</div><pre>'use client'
@@ -13423,6 +13693,8 @@ import {
   ChevronDown, User, LogOut, Store, ShoppingBag, Wallet,
   Package, AlertTriangle, PlusCircle, Globe, Plus,
 } from 'lucide-react'
+
+// ─────────────────────────────────────────────────────────────────────────────
 import { isSplashPending } from '@/components/SplashScreen'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13481,6 +13753,314 @@ function AppTopBar({
         &lt;/div&gt;
       &lt;/div&gt;
     &lt;/nav&gt;
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RIDER PWA — top bar
+// ─────────────────────────────────────────────────────────────────────────────
+function RiderTopBar({
+  isLoggedIn,
+  userName,
+}: {
+  isLoggedIn: boolean
+  userName: string
+}) {
+  return (
+    &lt;nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800"
+      style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)' }}
+    &gt;
+      &lt;div className="flex items-center justify-between h-14 px-4"&gt;
+        {/* Rider brand */}
+        &lt;div className="flex items-center gap-2.5"&gt;
+          &lt;div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+          &gt;
+            {/* Rider / bike icon */}
+            &lt;svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+              &lt;circle cx="5.5" cy="17.5" r="3.5" /&gt;
+              &lt;circle cx="18.5" cy="17.5" r="3.5" /&gt;
+              &lt;path strokeLinecap="round" strokeLinejoin="round" d="M15 6h-4l-2 5.5M9 17.5h5.5l2-5.5H19" /&gt;
+              &lt;path strokeLinecap="round" strokeLinejoin="round" d="M12 6l1.5 5.5" /&gt;
+            &lt;/svg&gt;
+          &lt;/div&gt;
+          &lt;div&gt;
+            &lt;p className="text-white font-bold text-sm leading-none"&gt;BataMart&lt;/p&gt;
+            &lt;p className="text-blue-400 text-[10px] font-medium leading-none mt-0.5"&gt;Rider Mode&lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        {/* Rider name */}
+        {isLoggedIn &amp;&amp; userName &amp;&amp; (
+          &lt;div className="flex items-center gap-2"&gt;
+            &lt;div className="w-7 h-7 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-300 text-xs font-bold"&gt;
+              {userName.charAt(0).toUpperCase()}
+            &lt;/div&gt;
+            &lt;span className="text-gray-300 text-xs font-medium"&gt;{userName.split(' ')[0]}&lt;/span&gt;
+          &lt;/div&gt;
+        )}
+      &lt;/div&gt;
+    &lt;/nav&gt;
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RIDER PWA — bottom tab bar
+// Layout: Dashboard · Deliveries · [Status FAB] · Earnings · Profile
+// ─────────────────────────────────────────────────────────────────────────────
+function RiderBottomNav({ onLogout }: { onLogout: () =&gt; void }) {
+  const pathname = usePathname()
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [isAvailable, setIsAvailable] = useState&lt;boolean | null&gt;(null)
+  const [toggling, setToggling] = useState(false)
+
+  // Load rider availability on mount
+  useEffect(() =&gt; {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r =&gt; r.json())
+      .then(d =&gt; { if (d.user) setIsAvailable(d.user.isAvailable ?? true) })
+      .catch(() =&gt; {})
+  }, [])
+
+  const toggleAvailability = async () =&gt; {
+    if (toggling) return
+    setToggling(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/riders/toggle-availability', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) setIsAvailable(prev =&gt; !prev)
+    } catch {}
+    finally { setToggling(false) }
+  }
+
+  const isActive = (path: string) =&gt;
+    pathname === path || pathname.startsWith(path + '/')
+
+  const leftTabs = [
+    {
+      href: '/rider-dashboard?app=true&amp;rider=true',
+      label: 'Dashboard',
+      match: '/rider-dashboard',
+      icon: (
+        &lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[22px] h-[22px]"&gt;
+          &lt;rect x="3" y="3" width="7" height="7" rx="1" strokeLinecap="round" strokeLinejoin="round" /&gt;
+          &lt;rect x="14" y="3" width="7" height="7" rx="1" strokeLinecap="round" strokeLinejoin="round" /&gt;
+          &lt;rect x="3" y="14" width="7" height="7" rx="1" strokeLinecap="round" strokeLinejoin="round" /&gt;
+          &lt;rect x="14" y="14" width="7" height="7" rx="1" strokeLinecap="round" strokeLinejoin="round" /&gt;
+        &lt;/svg&gt;
+      ),
+    },
+    {
+      href: '/rider-dashboard?app=true&amp;rider=true&amp;tab=deliveries',
+      label: 'Deliveries',
+      match: '/rider-dashboard',
+      icon: (
+        &lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[22px] h-[22px]"&gt;
+          &lt;path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" /&gt;
+          &lt;rect x="9" y="3" width="6" height="4" rx="1" strokeLinecap="round" strokeLinejoin="round" /&gt;
+          &lt;path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6M9 16h4" /&gt;
+        &lt;/svg&gt;
+      ),
+    },
+  ]
+
+  const rightTabs = [
+    {
+      href: '/wallet?app=true&amp;rider=true',
+      label: 'Earnings',
+      match: '/wallet',
+      icon: (
+        &lt;svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-[22px] h-[22px]"&gt;
+          &lt;path strokeLinecap="round" strokeLinejoin="round" d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /&gt;
+          &lt;path strokeLinecap="round" strokeLinejoin="round" d="M3 8V6a2 2 0 012-2h14a2 2 0 012 2v2" /&gt;
+          &lt;circle cx="16" cy="14" r="1.5" fill="currentColor" stroke="none" /&gt;
+        &lt;/svg&gt;
+      ),
+    },
+  ]
+
+  return (
+    &lt;&gt;
+      &lt;nav
+        className="fixed bottom-0 left-0 right-0 z-50 border-t"
+        style={{
+          background: '#0f172a',
+          borderColor: '#1e293b',
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.4)',
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
+          willChange: 'transform',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+        }}
+      &gt;
+        &lt;div
+          className="flex items-stretch"
+          style={{
+            height: 'calc(64px + max(env(safe-area-inset-bottom), 16px))',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
+          }}
+        &gt;
+          {/* LEFT TABS */}
+          {leftTabs.map(({ href, label, match, icon }) =&gt; {
+            const active = isActive(match)
+            return (
+              &lt;Link
+                key={label}
+                href={href}
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                  active ? 'text-blue-400' : 'text-gray-500'
+                }`}
+              &gt;
+                {active &amp;&amp; (
+                  &lt;span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-b-full"
+                    style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }}
+                  /&gt;
+                )}
+                &lt;span className={active ? 'scale-110 transition-transform' : 'transition-transform'}&gt;
+                  {icon}
+                &lt;/span&gt;
+                &lt;span className="text-[10px] font-medium leading-none"&gt;{label}&lt;/span&gt;
+              &lt;/Link&gt;
+            )
+          })}
+
+          {/* CENTER FAB — Availability toggle */}
+          &lt;div className="flex-1 flex items-center justify-center relative"&gt;
+            &lt;div className="absolute inset-0" style={{ background: '#0f172a' }} /&gt;
+            &lt;button
+              onClick={toggleAvailability}
+              disabled={toggling || isAvailable === null}
+              className="relative z-10 flex flex-col items-center justify-center -mt-5"
+            &gt;
+              &lt;div
+                className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
+                style={{
+                  background: isAvailable
+                    ? 'linear-gradient(135deg, #059669, #10b981)'
+                    : 'linear-gradient(135deg, #374151, #4b5563)',
+                  boxShadow: isAvailable
+                    ? '0 4px 20px rgba(5,150,105,0.5)'
+                    : '0 4px 20px rgba(0,0,0,0.4)',
+                  opacity: toggling ? 0.7 : 1,
+                }}
+              &gt;
+                {/* Bike icon */}
+                &lt;svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+                  &lt;circle cx="5.5" cy="17.5" r="3.5" /&gt;
+                  &lt;circle cx="18.5" cy="17.5" r="3.5" /&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M15 6h-4l-2 5.5M9 17.5h5.5l2-5.5H19" /&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M12 6l1.5 5.5" /&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+              &lt;span
+                className="text-[10px] font-semibold mt-1 leading-none"
+                style={{ color: isAvailable ? '#10b981' : '#6b7280' }}
+              &gt;
+                {isAvailable === null ? '…' : isAvailable ? 'Online' : 'Offline'}
+              &lt;/span&gt;
+            &lt;/button&gt;
+          &lt;/div&gt;
+
+          {/* RIGHT TABS */}
+          {rightTabs.map(({ href, label, match, icon }) =&gt; {
+            const active = isActive(match)
+            return (
+              &lt;Link
+                key={label}
+                href={href}
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                  active ? 'text-blue-400' : 'text-gray-500'
+                }`}
+              &gt;
+                {active &amp;&amp; (
+                  &lt;span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-b-full"
+                    style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }}
+                  /&gt;
+                )}
+                &lt;span className={active ? 'scale-110 transition-transform' : 'transition-transform'}&gt;
+                  {icon}
+                &lt;/span&gt;
+                &lt;span className="text-[10px] font-medium leading-none"&gt;{label}&lt;/span&gt;
+              &lt;/Link&gt;
+            )
+          })}
+
+          {/* PROFILE TAB */}
+          &lt;button
+            onClick={() =&gt; setProfileOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+              profileOpen ? 'text-blue-400' : 'text-gray-500'
+            }`}
+          &gt;
+            &lt;div className="w-[26px] h-[26px] rounded-full bg-blue-900/40 border border-blue-700/40 flex items-center justify-center"&gt;
+              &lt;User className="w-3.5 h-3.5 text-blue-400" /&gt;
+            &lt;/div&gt;
+            &lt;span className="text-[10px] font-medium leading-none"&gt;Profile&lt;/span&gt;
+          &lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/nav&gt;
+
+      {/* Rider profile sheet */}
+      {profileOpen &amp;&amp; (
+        &lt;&gt;
+          &lt;div
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[2px]"
+            onClick={() =&gt; setProfileOpen(false)}
+          /&gt;
+          &lt;div
+            className="fixed bottom-0 left-0 right-0 z-[70] rounded-t-3xl shadow-2xl border-t border-gray-800"
+            style={{
+              background: '#0f172a',
+              paddingBottom: 'calc(24px + max(env(safe-area-inset-bottom), 16px))',
+            }}
+          &gt;
+            &lt;div className="flex justify-center pt-3 pb-2"&gt;
+              &lt;div className="w-10 h-1 bg-gray-700 rounded-full" /&gt;
+            &lt;/div&gt;
+
+            &lt;div className="px-4 py-2"&gt;
+              {[
+                { href: '/rider-dashboard?app=true&amp;rider=true', icon: () =&gt; (
+                  &lt;svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+                    &lt;rect x="3" y="3" width="7" height="7" rx="1" /&gt;&lt;rect x="14" y="3" width="7" height="7" rx="1" /&gt;
+                    &lt;rect x="3" y="14" width="7" height="7" rx="1" /&gt;&lt;rect x="14" y="14" width="7" height="7" rx="1" /&gt;
+                  &lt;/svg&gt;
+                ), label: 'Dashboard' },
+                { href: '/myprofile?app=true&amp;rider=true', icon: User, label: 'My Profile' },
+                { href: '/wallet?app=true&amp;rider=true', icon: Wallet, label: 'Earnings' },
+              ].map(({ href, icon: Icon, label }) =&gt; (
+                &lt;Link
+                  key={label}
+                  href={href}
+                  onClick={() =&gt; setProfileOpen(false)}
+                  className="flex items-center gap-3 px-2 py-3.5 text-gray-300 hover:text-blue-400 border-b border-gray-800 last:border-0"
+                &gt;
+                  &lt;Icon className="w-5 h-5 text-gray-500" /&gt;
+                  &lt;span className="font-medium text-sm"&gt;{label}&lt;/span&gt;
+                &lt;/Link&gt;
+              ))}
+            &lt;/div&gt;
+
+            &lt;div className="px-6 pt-3"&gt;
+              &lt;button
+                onClick={() =&gt; { setProfileOpen(false); onLogout() }}
+                className="flex items-center justify-center w-full gap-2 bg-red-950/60 text-red-400 font-semibold py-3 rounded-xl border border-red-900/40"
+              &gt;
+                &lt;LogOut className="w-5 h-5" /&gt;
+                Logout
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/&gt;
+      )}
+    &lt;/&gt;
   )
 }
 
@@ -13751,7 +14331,6 @@ function AppBottomNav({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main exported Navbar
 // No spacer divs here — spacers live in NavbarWrapper
 // ─────────────────────────────────────────────────────────────────────────────
 export function Navbar() {
@@ -13761,6 +14340,7 @@ export function Navbar() {
 
   const isAppParam  = searchParams.get('app')     === 'true'
   const isAndroid   = searchParams.get('android') === 'true'
+  const isRiderParam = searchParams.get('rider')  === 'true'
 
   const [isStandalone, setIsStandalone] = useState(false)
   useEffect(() =&gt; {
@@ -13772,6 +14352,18 @@ export function Navbar() {
   }, [])
 
   const isApp = isAppParam || isStandalone
+
+  // ── RIDER MODE — persisted in sessionStorage so it survives page navigation
+  // Once rider=true is detected in the URL, we keep isRider=true for the session.
+  const [isRider, setIsRider] = useState(false)
+  useEffect(() =&gt; {
+    if (isRiderParam) {
+      sessionStorage.setItem('batamart_rider_mode', 'true')
+      setIsRider(true)
+    } else {
+      setIsRider(sessionStorage.getItem('batamart_rider_mode') === 'true')
+    }
+  }, [isRiderParam])
 
   // ── SPLASH GUARD ─────────────────────────────────────────────────────────
   const [splashDone, setSplashDone] = useState&lt;boolean&gt;(() =&gt; {
@@ -13890,13 +14482,14 @@ export function Navbar() {
 
   const handleLogout = () =&gt; {
     localStorage.clear()
+    sessionStorage.removeItem('batamart_rider_mode')
     setIsLoggedIn(false)
     setUserName('')
     setUserBalance(0)
     setUserRole('')
     setIsSellerMode(true)
     setIsUserDropdownOpen(false)
-    router.push(isApp ? '/marketplace?app=true' : '/')
+    router.push(isRider ? '/rider-dashboard' : isApp ? '/marketplace?app=true' : '/')
   }
 
   const isActive = (path: string) =&gt; pathname === path || pathname.startsWith(path + '/')
@@ -13912,6 +14505,16 @@ export function Navbar() {
 
   // ── PWA / APP MODE — fixed top bar + fixed bottom tab bar ─────────────────
   if (isApp) {
+    // Rider PWA — different top bar label + rider-specific bottom nav
+    if (isRider) {
+      return (
+        &lt;&gt;
+          &lt;RiderTopBar isLoggedIn={isLoggedIn} userName={userName} /&gt;
+          &lt;RiderBottomNav onLogout={handleLogout} /&gt;
+        &lt;/&gt;
+      )
+    }
+
     return (
       &lt;&gt;
         &lt;AppTopBar isLoggedIn={isLoggedIn} cartCount={cartCount} /&gt;
@@ -15810,7 +16413,6 @@ export function usePushNotifications() {
         ...options,
       } as NotificationOptions &amp; { vibrate?: number[] });
 
-      // Add vibration separately if supported
       if ('vibrate' in navigator) {
         navigator.vibrate([200, 100, 200]);
       }
@@ -15837,26 +16439,41 @@ export function usePushNotifications() {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NotificationPrompt — shown to users who haven't granted/denied yet
+// ─────────────────────────────────────────────────────────────────────────────
 export function NotificationPrompt() {
   const { permission, isSupported, requestPermission } = usePushNotifications();
   const [dismissed, setDismissed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() =&gt; {
     const wasDismissed = localStorage.getItem('notificationPromptDismissed');
     if (wasDismissed) {
       setDismissed(true);
+      return;
     }
+    // Slight delay so it doesn't pop in immediately on page load
+    const t = setTimeout(() =&gt; setVisible(true), 2000);
+    return () =&gt; clearTimeout(t);
   }, []);
 
   const handleDismiss = () =&gt; {
-    setDismissed(true);
-    localStorage.setItem('notificationPromptDismissed', 'true');
+    setVisible(false);
+    setTimeout(() =&gt; {
+      setDismissed(true);
+      localStorage.setItem('notificationPromptDismissed', 'true');
+    }, 300);
   };
 
   const handleEnable = async () =&gt; {
+    setLoading(true);
     const granted = await requestPermission();
+    setLoading(false);
     if (granted) {
-      setDismissed(true);
+      setVisible(false);
+      setTimeout(() =&gt; setDismissed(true), 300);
     }
   };
 
@@ -15865,39 +16482,132 @@ export function NotificationPrompt() {
   }
 
   return (
-    &lt;div className="fixed bottom-20 lg:bottom-4 right-4 max-w-sm bg-white rounded-lg shadow-2xl border border-gray-200 p-4 z-40 animate-in slide-in-from-bottom-5 duration-300"&gt;
-      &lt;div className="flex items-start gap-3"&gt;
-        &lt;div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"&gt;
-          🔔
-        &lt;/div&gt;
-        &lt;div className="flex-1"&gt;
-          &lt;h4 className="font-semibold text-gray-900 mb-1"&gt;
-            Stay Updated
-          &lt;/h4&gt;
-          &lt;p className="text-sm text-gray-600 mb-3"&gt;
-            Enable notifications to get updates about your orders, messages, and more.
-          &lt;/p&gt;
-          &lt;div className="flex gap-2"&gt;
-            &lt;button
-              onClick={handleEnable}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-            &gt;
-              Enable
-            &lt;/button&gt;
-            &lt;button
-              onClick={handleDismiss}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 text-sm font-medium rounded-lg transition-colors"
-            &gt;
-              Not Now
-            &lt;/button&gt;
+    &lt;&gt;
+      &lt;style&gt;{`
+        @keyframes notifSlideIn {
+          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes notifSlideOut {
+          from { opacity: 1; transform: translateY(0) scale(1); }
+          to   { opacity: 0; transform: translateY(16px) scale(0.97); }
+        }
+        .notif-prompt-enter { animation: notifSlideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        .notif-prompt-exit  { animation: notifSlideOut 0.25s ease forwards; }
+
+        @keyframes bellRing {
+          0%, 100% { transform: rotate(0); }
+          15%       { transform: rotate(14deg); }
+          30%       { transform: rotate(-10deg); }
+          45%       { transform: rotate(8deg); }
+          60%       { transform: rotate(-6deg); }
+          75%       { transform: rotate(4deg); }
+        }
+        .bell-ring { animation: bellRing 1.6s ease 0.6s both; }
+      `}&lt;/style&gt;
+
+      &lt;div
+        className={`fixed right-4 z-[9990] w-[calc(100vw-2rem)] max-w-[320px] ${
+          visible ? 'notif-prompt-enter' : 'notif-prompt-exit'
+        }`}
+        // sits above bottom nav (64px) + a little gap
+        style={{ bottom: 'calc(72px + max(env(safe-area-inset-bottom), 16px) + 12px)' }}
+      &gt;
+        &lt;div
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: '#fff',
+            boxShadow: '0 8px 32px rgba(26,63,143,0.16), 0 2px 8px rgba(0,0,0,0.06)',
+            border: '1px solid rgba(59,158,245,0.15)',
+          }}
+        &gt;
+          {/* Gradient top bar */}
+          &lt;div
+            className="h-1"
+            style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }}
+          /&gt;
+
+          &lt;div className="p-4"&gt;
+            {/* Header row */}
+            &lt;div className="flex items-start gap-3 mb-3"&gt;
+              {/* Bell icon */}
+              &lt;div
+                className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bell-ring"
+                style={{
+                  background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)',
+                  boxShadow: '0 4px 12px rgba(26,63,143,0.3)',
+                }}
+              &gt;
+                &lt;svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+
+              &lt;div className="flex-1 min-w-0"&gt;
+                &lt;p className="font-bold text-gray-900 text-sm leading-tight"&gt;
+                  Stay in the loop 🔔
+                &lt;/p&gt;
+                &lt;p className="text-xs text-gray-500 mt-1 leading-relaxed"&gt;
+                  Get notified about your orders, deliveries, and messages instantly.
+                &lt;/p&gt;
+              &lt;/div&gt;
+
+              {/* Close */}
+              &lt;button
+                onClick={handleDismiss}
+                className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors -mt-0.5 -mr-0.5"
+              &gt;
+                &lt;svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
+                  &lt;path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /&gt;
+                &lt;/svg&gt;
+              &lt;/button&gt;
+            &lt;/div&gt;
+
+            {/* Benefit pills */}
+            &lt;div className="flex flex-wrap gap-1.5 mb-3"&gt;
+              {['Order updates', 'Delivery alerts', 'New messages'].map((label) =&gt; (
+                &lt;span
+                  key={label}
+                  className="text-[10px] font-medium px-2 py-1 rounded-full"
+                  style={{ background: 'rgba(59,158,245,0.08)', color: '#1a3f8f' }}
+                &gt;
+                  ✓ {label}
+                &lt;/span&gt;
+              ))}
+            &lt;/div&gt;
+
+            {/* Action buttons */}
+            &lt;div className="flex gap-2"&gt;
+              &lt;button
+                onClick={handleEnable}
+                disabled={loading}
+                className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-opacity"
+                style={{
+                  background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)',
+                  boxShadow: '0 4px 12px rgba(26,63,143,0.3)',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              &gt;
+                {loading ? 'Enabling…' : 'Enable Notifications'}
+              &lt;/button&gt;
+              &lt;button
+                onClick={handleDismiss}
+                className="px-3 py-2.5 rounded-xl text-xs font-medium text-gray-500 transition-colors"
+                style={{ background: '#f3f4f6' }}
+              &gt;
+                Later
+              &lt;/button&gt;
+            &lt;/div&gt;
           &lt;/div&gt;
         &lt;/div&gt;
       &lt;/div&gt;
-    &lt;/div&gt;
+    &lt;/&gt;
   );
 }
 
-// Utility to show notification for specific events
+// ─────────────────────────────────────────────────────────────────────────────
+// Notification event helpers — unchanged
+// ─────────────────────────────────────────────────────────────────────────────
 export function useNotificationEvents() {
   const { sendNotification, permission } = usePushNotifications();
 
@@ -25740,6 +26450,38 @@ div.fixed {
   backface-visibility: hidden;
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
+}
+
+/* ── BOTTOM NAV STABILITY (ALL PLATFORMS) ───────────────────────────────────
+   Hard-locks the bottom nav. `transition: none` is critical — without it,
+   iOS re-triggers animations during rubber-band bounce causing the nav to
+   jiggle and snap back.
+──────────────────────────────────────────────────────────────────────────── */
+nav[class*="fixed"][class*="bottom-0"] {
+  position: fixed !important;
+  bottom: 0 !important;
+  transform: translateZ(0) !important;
+  -webkit-transform: translateZ(0) !important;
+  transition: none !important;
+  will-change: transform;
+}
+
+/* ── IOS PWA SCROLL FIX ─────────────────────────────────────────────────────
+   
+──────────────────────────────────────────────────────────────────────────── */
+@supports (-webkit-touch-callout: none) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden; /* body must NOT scroll — this kills the rubber-band */
+  }
+
+  #page-scroll-container {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* smooth native iOS scroll feel */
+    overscroll-behavior: none;         /* no bounce at scroll edges */
+  }
 }</pre></div>
 <div class='file-block'><div class='file-header'>styles/mobile.css</div><pre>/* Mobile-first responsive utilities */
 

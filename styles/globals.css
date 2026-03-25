@@ -182,3 +182,7 @@ nav[class*="fixed"][class*="bottom-0"] {
     overscroll-behavior: none;         /* no bounce at scroll edges */
   }
 }
+
+.pb-nav {
+  padding-bottom: calc(64px + max(env(safe-area-inset-bottom), 16px)) !important;
+}
