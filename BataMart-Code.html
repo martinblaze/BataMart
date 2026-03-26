@@ -5148,14 +5148,27 @@ export default function CheckoutPage() {
     const token = localStorage.getItem('token')
     if (!token) { router.push('/login'); return }
 
+    // ── Show error messages from payment callback ──────────────
     const searchParams = new URLSearchParams(window.location.search)
     const urlError = searchParams.get('error')
     const productName = searchParams.get('product')
 
-    if (urlError === 'payment_failed') setError('Payment verification failed. Please try again.')
-    else if (urlError === 'out_of_stock' &amp;&amp; productName) setError(`Sorry, ${decodeURIComponent(productName)} is now out of stock.`)
-    else if (urlError === 'verification_failed') setError('Payment verification failed. Please contact support if you were charged.')
+    if (urlError === 'payment_failed') {
+      setError('Payment was not successful. Please try again.')
+    } else if (urlError === 'out_of_stock' &amp;&amp; productName) {
+      setError(`Sorry, "${decodeURIComponent(productName)}" went out of stock just before your payment was confirmed. You have not been charged — please try a different item.`)
+    } else if (urlError === 'verification_failed' || urlError === 'order_creation_failed') {
+      setError('Your payment went through but something went wrong on our end. Please contact support — do NOT pay again.')
+    } else if (urlError === 'invalid_metadata' || urlError === 'user_not_found') {
+      setError('There was a problem processing your payment. Please contact support.')
+    } else if (urlError === 'product_not_found' || urlError === 'product_inactive') {
+      const name = productName ? `"${decodeURIComponent(productName)}"` : 'one of the products'
+      setError(`${name} is no longer available. You have not been charged.`)
+    } else if (urlError === 'no_reference') {
+      setError('Payment session expired. Please try again.')
+    }
 
+    // ── Load cart items ────────────────────────────────────────
     const cartData = sessionStorage.getItem('checkout_cart')
     if (cartData) {
       setCartItems(JSON.parse(cartData))
@@ -5187,12 +5200,14 @@ export default function CheckoutPage() {
       const response = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
       const data = await response.json()
       if (response.ok) setUser(data.user)
-    } catch (error) { console.error('Error fetching profile:', error) }
+    } catch (error) {
+      console.error('Error fetching profile:', error)
+    }
   }
 
   const handlePayment = async () =&gt; {
     if (!user?.hostelName) {
-      alert('Please complete your profile first!')
+      alert('Please complete your profile (hostel address) before checking out.')
       router.push('/profile/setup')
       return
     }
@@ -5203,7 +5218,6 @@ export default function CheckoutPage() {
     try {
       const token = localStorage.getItem('token')
 
-      // Attach per-item notes to cart items before sending
       const cartItemsWithNotes = cartItems.map(item =&gt; ({
         ...item,
         orderNote: orderNotes[item.productId]?.trim() || '',
@@ -5217,22 +5231,47 @@ export default function CheckoutPage() {
 
       const data = await response.json()
 
-      if (response.ok) {
+      if (!response.ok) {
+        // Server returned an error — keep cart intact so user can retry
+        setError(data.error || 'Payment initialisation failed. Please try again.')
+        return
+      }
+
+      // ── Redirect to Paystack ───────────────────────────────────
+      // FIX: Cart/session is only cleared HERE — after we are certain
+      // we have a valid Paystack URL and are about to redirect.
+      // Previously the clearCart() ran before the if-check, meaning if
+      // we got an error response the cart was already wiped and the user
+      // couldn't retry without going back to the marketplace.
+      if (data.authorization_url) {
+        // Clear cart now — the order will be created in the verify route
+        // after Paystack calls back. If payment fails, Paystack redirects
+        // to /checkout?error=payment_failed and the user can start fresh.
         sessionStorage.removeItem('checkout_product')
         sessionStorage.removeItem('checkout_cart')
         clearCart()
 
-        if (data.devMode || data.orderId) {
-          router.push(`/orders?payment=success&amp;order=${data.orderNumber || data.orderId}`)
-        } else if (data.authorization_url) {
-          window.location.href = data.authorization_url
-        }
-      } else {
-        setError(data.error || 'Payment failed')
+        // Hard-navigate (not router.push) so the browser actually leaves
+        // the page and Paystack gets a clean load
+        window.location.href = data.authorization_url
+        return
       }
+
+      // devMode path (should only be reached in local dev with useDevMode=true)
+      if (data.devMode || data.orderId) {
+        sessionStorage.removeItem('checkout_product')
+        sessionStorage.removeItem('checkout_cart')
+        clearCart()
+        router.push(`/orders?payment=success&amp;order=${data.orderNumber || data.orderId}`)
+        return
+      }
+
+      // Unexpected response shape
+      setError('Unexpected response from payment server. Please try again.')
+
     } catch (err) {
       console.error('Payment error:', err)
-      setError('Network error. Please try again.')
+      setError('Network error. Please check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -5357,7 +5396,7 @@ export default function CheckoutPage() {
                         &lt;div className="flex-1 min-w-0"&gt;
                           &lt;p className="text-sm font-black text-amber-900"&gt;Note to Seller&lt;/p&gt;
                           &lt;p className="text-xs text-amber-700 mt-0.5"&gt;
-                            Let the seller know your preferences — size, color, variation, or any special request.
+                            Let the seller know your preferences — size, colour, variation, or any special request.
                             This will be sent directly to their notification.
                           &lt;/p&gt;
                         &lt;/div&gt;
@@ -5409,7 +5448,7 @@ export default function CheckoutPage() {
               &lt;/div&gt;
             &lt;/div&gt;
 
-            {/* Error */}
+            {/* Error banner */}
             {error &amp;&amp; (
               &lt;div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3.5 rounded-xl"&gt;
                 &lt;AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /&gt;
@@ -7713,6 +7752,7 @@ import {
   Bike, ChevronRight, ArrowRight, ShoppingBag, Clock,
   X, BadgeCheck, AlertCircle,
 } from 'lucide-react'
+import { OrderNotificationBanner } from '@/components/layout/OrderNotificationBanner'
 
 interface ProductReview { id: string; rating: number; comment: string; createdAt: string }
 interface Review { id: string; type: string; rating: number; comment: string | null; createdAt: string }
@@ -7755,6 +7795,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [postPayment, setPostPayment] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [actionLoading, setActionLoading] = useState&lt;Record&lt;string, boolean&gt;&gt;({})
 
@@ -7768,6 +7809,7 @@ export default function OrdersPage() {
     const orderCount = searchParams.get('count')
 
     if (paymentStatus === 'success') {
+      setPostPayment(true)
       sessionStorage.removeItem('checkout_product')
       sessionStorage.removeItem('checkout_cart')
       const count = orderCount ? parseInt(orderCount) : 1
@@ -7851,6 +7893,11 @@ export default function OrdersPage() {
           &lt;/div&gt;
         &lt;/div&gt;
       )}
+
+      {/* ── Notification banner (post-payment or passive nudge) ─────── */}
+      &lt;div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4"&gt;
+        &lt;OrderNotificationBanner postPayment={postPayment} /&gt;
+      &lt;/div&gt;
 
       {/* ── Page header ───────────────────────────────────────────────── */}
       &lt;div className="bg-white border-b border-gray-100"&gt;
@@ -15203,6 +15250,230 @@ export default function NotificationBell() {
     &lt;/div&gt;
   )
 }</pre></div>
+<div class='file-block'><div class='file-header'>components/layout/OrderNotificationBanner.tsx</div><pre>// components/layout/OrderNotificationBanner.tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Bell, BellOff, X, Loader2 } from 'lucide-react'
+import { usePushSubscription } from '@/hooks/usePushSubscription'
+import { useNotificationNudge } from '@/hooks/useNotificationNudge'
+
+interface Props {
+  postPayment?: boolean
+}
+
+export function OrderNotificationBanner({ postPayment = false }: Props) {
+  const { subscribe, isLoading } = usePushSubscription()
+  const { shouldShowContextual, shouldShowPassive, snooze, markGranted } = useNotificationNudge()
+  const [visible, setVisible]     = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+  const [enabling, setEnabling]   = useState(false)
+
+  useEffect(() =&gt; {
+    if (dismissed) return
+    if (postPayment &amp;&amp; shouldShowContextual) {
+      const t = setTimeout(() =&gt; setVisible(true), 800)
+      return () =&gt; clearTimeout(t)
+    }
+    if (!postPayment &amp;&amp; shouldShowPassive) {
+      const t = setTimeout(() =&gt; setVisible(true), 1500)
+      return () =&gt; clearTimeout(t)
+    }
+  }, [postPayment, shouldShowContextual, shouldShowPassive, dismissed])
+
+  const handleEnable = async () =&gt; {
+    setEnabling(true)
+    const granted = await subscribe()
+    setEnabling(false)
+    if (granted) { markGranted(); setDismissed(true) }
+  }
+
+  const handleDismiss = () =&gt; { setVisible(false); setDismissed(true); snooze() }
+
+  if (!visible || dismissed) return null
+
+  const isBusy = enabling || isLoading
+
+  return (
+    &lt;&gt;
+      &lt;style&gt;{`
+        @keyframes bannerSlideDown {
+          from { opacity: 0; transform: translateY(-10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bellPulse {
+          0%,100% { transform: rotate(0deg) scale(1); }
+          15%      { transform: rotate(14deg) scale(1.05); }
+          30%      { transform: rotate(-10deg) scale(1.05); }
+          45%      { transform: rotate(8deg); }
+          60%      { transform: rotate(-5deg); }
+          75%      { transform: rotate(3deg); }
+        }
+        .notif-banner-enter { animation: bannerSlideDown 0.38s cubic-bezier(0.34,1.2,0.64,1) forwards; }
+        .bell-pulse         { animation: bellPulse 1.8s ease 0.5s both; }
+      `}&lt;/style&gt;
+
+      &lt;div className="notif-banner-enter mb-4 w-full"&gt;
+
+        {postPayment ? (
+          /* ── POST-PAYMENT ─────────────────────────────────────────────── */
+          &lt;div
+            className="relative w-full rounded-2xl overflow-hidden"
+            style={{
+              background: 'linear-gradient(135deg,#0f2464 0%,#1a3f8f 55%,#1e56b0 100%)',
+              boxShadow: '0 4px 24px rgba(26,63,143,0.28)',
+            }}
+          &gt;
+            {/* shimmer top line */}
+            &lt;div className="absolute inset-x-0 top-0 h-px"
+              style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent)' }}
+            /&gt;
+
+            {/* Dismiss sits absolutely so it never squeezes the content */}
+            &lt;button
+              onClick={handleDismiss}
+              aria-label="Dismiss"
+              className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center z-10 transition-colors"
+              style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}
+            &gt;
+              &lt;X className="w-3.5 h-3.5" /&gt;
+            &lt;/button&gt;
+
+            {/* All content — right-padded to clear the dismiss button */}
+            &lt;div className="p-4 pr-12"&gt;
+
+              {/* Icon + headline row */}
+              &lt;div className="flex items-center gap-3 mb-2"&gt;
+                &lt;div
+                  className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bell-pulse"
+                  style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}
+                &gt;
+                  &lt;Bell className="w-5 h-5 text-white" /&gt;
+                &lt;/div&gt;
+                &lt;p className="font-bold text-white text-sm leading-snug"&gt;
+                  🎉 Order placed! Track it with notifications.
+                &lt;/p&gt;
+              &lt;/div&gt;
+
+              {/* Subtext */}
+              &lt;p className="text-xs leading-relaxed mb-3"
+                style={{ color: 'rgba(255,255,255,0.75)' }}
+              &gt;
+                Get real-time alerts when your order is picked up, on the way,
+                and delivered — even when the app is closed.
+              &lt;/p&gt;
+
+              {/* Chips — wrap naturally on any width */}
+              &lt;div className="flex flex-wrap gap-1.5 mb-4"&gt;
+                {[
+                  { icon: '📦', text: 'Pickup alert' },
+                  { icon: '🛵', text: 'On the way' },
+                  { icon: '✅', text: 'Delivered' },
+                ].map(({ icon, text }) =&gt; (
+                  &lt;span key={text}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.92)' }}
+                  &gt;
+                    {icon} {text}
+                  &lt;/span&gt;
+                ))}
+              &lt;/div&gt;
+
+              {/* Buttons — stacked on mobile (full-width), side-by-side on sm+ */}
+              &lt;div className="flex flex-col sm:flex-row gap-2"&gt;
+                &lt;button
+                  onClick={handleEnable}
+                  disabled={isBusy}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 rounded-xl text-sm font-bold transition-all disabled:opacity-60 active:scale-95"
+                  style={{
+                    background: 'rgba(255,255,255,0.96)',
+                    color: '#1a3f8f',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
+                    minHeight: '44px',
+                  }}
+                &gt;
+                  {isBusy
+                    ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt;Enabling…&lt;/&gt;
+                    : &lt;&gt;&lt;Bell className="w-4 h-4" /&gt;Enable Notifications&lt;/&gt;
+                  }
+                &lt;/button&gt;
+
+                &lt;button
+                  onClick={handleDismiss}
+                  className="flex items-center justify-center w-full sm:w-auto px-4 rounded-xl text-sm font-medium transition-colors active:scale-95"
+                  style={{
+                    background: 'rgba(255,255,255,0.13)',
+                    color: 'rgba(255,255,255,0.82)',
+                    minHeight: '44px',
+                  }}
+                &gt;
+                  Maybe Later
+                &lt;/button&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+        ) : (
+          /* ── PASSIVE ──────────────────────────────────────────────────── */
+          &lt;div
+            className="relative w-full rounded-2xl overflow-hidden"
+            style={{
+              background: '#eef3ff',
+              border: '1px solid rgba(59,130,246,0.18)',
+            }}
+          &gt;
+            {/* Dismiss sits absolutely */}
+            &lt;button
+              onClick={handleDismiss}
+              aria-label="Dismiss"
+              className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center z-10 transition-colors text-gray-400 hover:text-gray-600 hover:bg-gray-200"
+            &gt;
+              &lt;X className="w-3.5 h-3.5" /&gt;
+            &lt;/button&gt;
+
+            &lt;div className="p-4 pr-12"&gt;
+              {/* Icon + text */}
+              &lt;div className="flex items-center gap-3 mb-3"&gt;
+                &lt;div
+                  className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'rgba(26,63,143,0.1)' }}
+                &gt;
+                  &lt;BellOff className="w-4 h-4" style={{ color: '#1a3f8f' }} /&gt;
+                &lt;/div&gt;
+                &lt;div className="min-w-0"&gt;
+                  &lt;p className="text-sm font-bold text-gray-800 leading-tight"&gt;
+                    Notifications are off
+                  &lt;/p&gt;
+                  &lt;p className="text-xs text-gray-500 mt-0.5 leading-snug"&gt;
+                    Enable to never miss an order update.
+                  &lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              {/* Enable button — always full width, easy tap target */}
+              &lt;button
+                onClick={handleEnable}
+                disabled={isBusy}
+                className="w-full flex items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-60 active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)',
+                  boxShadow: '0 2px 8px rgba(26,63,143,0.25)',
+                  minHeight: '44px',
+                }}
+              &gt;
+                {isBusy
+                  ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt;Enabling…&lt;/&gt;
+                  : &lt;&gt;&lt;Bell className="w-4 h-4" /&gt;Enable Notifications&lt;/&gt;
+                }
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )}
+
+      &lt;/div&gt;
+    &lt;/&gt;
+  )
+}</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/SuspensionGuard.tsx</div><pre>'use client'
 
 import { useSuspensionGuard } from '@/hooks/Usesuspensionguard'
@@ -16779,13 +17050,11 @@ export function useNotificationEvents() {
   };
 }</pre></div>
 <div class='file-block'><div class='file-header'>hooks/usePushSubscription.tsx</div><pre>// hooks/usePushSubscription.tsx
-// Replaces your old usePushNotifications.ts
-// This one actually works when browser is closed
-
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useToast } from '@/components/ui/Toast'
+import { useNotificationNudge } from '@/hooks/useNotificationNudge'
 
 export function usePushSubscription() {
   const [permission, setPermission] = useState&lt;NotificationPermission&gt;('default')
@@ -16795,79 +17064,126 @@ export function usePushSubscription() {
   const toast = useToast()
 
   useEffect(() =&gt; {
-    // Check if browser supports everything we need
-    if ('Notification' in window &amp;&amp; 'serviceWorker' in navigator &amp;&amp; 'PushManager' in window) {
+    if (
+      typeof window !== 'undefined' &amp;&amp;
+      'Notification' in window &amp;&amp;
+      'serviceWorker' in navigator &amp;&amp;
+      'PushManager' in window
+    ) {
       setIsSupported(true)
       setPermission(Notification.permission)
+      checkSubscription()
     }
-
-    // Check if user is already subscribed
-    checkSubscription()
   }, [])
 
   const checkSubscription = async () =&gt; {
     try {
-      if (!('serviceWorker' in navigator)) return
-
-      const registration = await navigator.serviceWorker.ready
+      const registration = await getServiceWorkerRegistration()
+      if (!registration) return
       const subscription = await registration.pushManager.getSubscription()
       setIsSubscribed(!!subscription)
     } catch (error) {
-      console.error('Check subscription error:', error)
+      console.error('[Push] Check subscription error:', error)
     }
   }
 
-  const subscribe = async () =&gt; {
+  const getServiceWorkerRegistration = async (): Promise&lt;ServiceWorkerRegistration | null&gt; =&gt; {
+    try {
+      await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      const registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise&lt;never&gt;((_, reject) =&gt;
+          setTimeout(() =&gt; reject(new Error('Service worker ready timeout')), 10000)
+        ),
+      ])
+      return registration as ServiceWorkerRegistration
+    } catch (error) {
+      console.error('[Push] Service worker registration failed:', error)
+      return null
+    }
+  }
+
+  const subscribe = async (): Promise&lt;boolean&gt; =&gt; {
     if (!isSupported) {
-      toast.error('Push notifications not supported in this browser')
+      toast.error('Push notifications are not supported in this browser')
+      return false
+    }
+
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    if (!vapidKey) {
+      console.error('[Push] NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set')
+      toast.error('Notifications are not configured yet. Please try again later.')
       return false
     }
 
     setIsLoading(true)
 
     try {
-      // Step 1: Ask browser permission
       const result = await Notification.requestPermission()
       setPermission(result)
 
-      if (result !== 'granted') {
-        toast.error('Notification permission denied')
+      if (result === 'denied') {
+        toast.error('Notification permission denied. You can enable it in your browser settings.')
         return false
       }
 
-      // Step 2: Register the service worker
-      const registration = await navigator.serviceWorker.register('/sw.js')
-      await navigator.serviceWorker.ready
+      if (result !== 'granted') return false
 
-      // Step 3: Subscribe to push with your VAPID public key
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true, // Required by browsers — all pushes must show a notification
-        applicationServerKey: urlBase64ToUint8Array(
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-        )
-      })
+      const registration = await getServiceWorkerRegistration()
+      if (!registration) {
+        toast.error('Failed to set up notifications. Please reload the page and try again.')
+        return false
+      }
 
-      // Step 4: Send subscription to your server to save in DB
+      let subscription: PushSubscription
+      try {
+        const existing = await registration.pushManager.getSubscription()
+        if (existing) {
+          subscription = existing
+        } else {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          })
+        }
+      } catch (subError: any) {
+        console.error('[Push] pushManager.subscribe failed:', subError)
+        if (subError.name === 'InvalidStateError') {
+          toast.error('Notification setup conflict. Please reload and try again.')
+        } else {
+          toast.error('Failed to subscribe to notifications.')
+        }
+        return false
+      }
+
       const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Please log in to enable notifications.')
+        return false
+      }
+
       const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(subscription)
+        body: JSON.stringify(subscription),
       })
 
-      if (response.ok) {
-        setIsSubscribed(true)
-        toast.success("Notifications enabled! You'll get updates even when browser is closed.")
-        return true
+      if (!response.ok) {
+        console.error('[Push] Server failed to save subscription:', await response.text())
+        toast.error('Failed to save notification settings. Please try again.')
+        return false
       }
 
-      return false
+      setIsSubscribed(true)
+      toast.success("Notifications enabled! You'll get updates even when your browser is closed.")
+      return true
+
     } catch (error) {
-      console.error('Subscribe error:', error)
-      toast.error('Failed to enable notifications')
+      console.error('[Push] Subscribe error:', error)
+      toast.error('Something went wrong. Please try again.')
       return false
     } finally {
       setIsLoading(false)
@@ -16877,29 +17193,27 @@ export function usePushSubscription() {
   const unsubscribe = async () =&gt; {
     setIsLoading(true)
     try {
-      const registration = await navigator.serviceWorker.ready
-      const subscription = await registration.pushManager.getSubscription()
+      const registration = await getServiceWorkerRegistration()
+      if (!registration) return
 
+      const subscription = await registration.pushManager.getSubscription()
       if (subscription) {
-        // Remove from server DB first
         const token = localStorage.getItem('token')
         await fetch('/api/push/subscribe', {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ endpoint: subscription.endpoint })
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
         })
-
-        // Then unsubscribe from browser
         await subscription.unsubscribe()
       }
 
       setIsSubscribed(false)
       toast.success('Notifications disabled')
     } catch (error) {
-      console.error('Unsubscribe error:', error)
+      console.error('[Push] Unsubscribe error:', error)
       toast.error('Failed to disable notifications')
     } finally {
       setIsLoading(false)
@@ -16916,65 +17230,134 @@ export function usePushSubscription() {
   }
 }
 
-// Helper: Convert VAPID key from base64 to Uint8Array (required by browser API)
-function urlBase64ToUint8Array(base64String: string) {
+// ── Helper ────────────────────────────────────────────────────────────────────
+function urlBase64ToUint8Array(base64String: string): Uint8Array&lt;ArrayBuffer&gt; {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
   const rawData = window.atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
+  const outputArray = new Uint8Array(rawData.length) as Uint8Array&lt;ArrayBuffer&gt;
   for (let i = 0; i &lt; rawData.length; ++i) {
     outputArray[i] = rawData.charCodeAt(i)
   }
   return outputArray
 }
 
-// -----------------------------------------------
-// NotificationPrompt component
-// Drop this anywhere in your layout to prompt users
-// -----------------------------------------------
+// ── Global floating NotificationPrompt (passive nudge) ───────────────────────
+// Shown on every page except when snoozed.
+// "Not Now" snoozes for 24h, then shows again — never dismisses forever.
 export function NotificationPrompt() {
-  const { permission, isSupported, isSubscribed, isLoading, subscribe } = usePushSubscription()
-  const [dismissed, setDismissed] = useState(false)
+  const { shouldShowPassive, snooze, markGranted } = useNotificationNudge()
+  const { isLoading, subscribe } = usePushSubscription()
+  const [visible, setVisible] = useState(false)
 
   useEffect(() =&gt; {
-    const wasDismissed = localStorage.getItem('pushPromptDismissed')
-    if (wasDismissed) setDismissed(true)
-  }, [])
+    if (!shouldShowPassive) return
+    // Delay so it doesn't slam in on page load
+    const t = setTimeout(() =&gt; setVisible(true), 3000)
+    return () =&gt; clearTimeout(t)
+  }, [shouldShowPassive])
 
-  const handleDismiss = () =&gt; {
-    setDismissed(true)
-    localStorage.setItem('pushPromptDismissed', 'true')
+  const handleEnable = async () =&gt; {
+    const granted = await subscribe()
+    if (granted) {
+      markGranted()
+      setVisible(false)
+    }
   }
 
-  // Don't show if: not supported, already subscribed, permission denied, or dismissed
-  if (!isSupported || isSubscribed || permission === 'denied' || dismissed) {
-    return null
+  const handleSnooze = () =&gt; {
+    setVisible(false)
+    snooze()
   }
+
+  if (!visible) return null
 
   return (
-    &lt;div className="fixed bottom-20 lg:bottom-4 right-4 max-w-sm bg-white rounded-lg shadow-2xl border border-gray-200 p-4 z-40 animate-in slide-in-from-bottom-5 duration-300"&gt;
-      &lt;div className="flex items-start gap-3"&gt;
-        &lt;div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-xl"&gt;
-          🔔
-        &lt;/div&gt;
-        &lt;div className="flex-1"&gt;
-          &lt;h4 className="font-semibold text-gray-900 mb-1"&gt;Stay Updated&lt;/h4&gt;
-          &lt;p className="text-sm text-gray-600 mb-3"&gt;
-            Get order updates, payment alerts, and messages — even when your browser is closed.
-          &lt;/p&gt;
+    &lt;div
+      className="fixed right-4 z-[9990] w-[calc(100vw-2rem)] max-w-[320px]"
+      style={{
+        bottom: 'calc(72px + max(env(safe-area-inset-bottom), 16px) + 12px)',
+        animation: 'notifSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards',
+      }}
+    &gt;
+      &lt;style&gt;{`
+        @keyframes notifSlideIn {
+          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes bellRing {
+          0%,100% { transform: rotate(0); }
+          15%      { transform: rotate(14deg); }
+          30%      { transform: rotate(-10deg); }
+          45%      { transform: rotate(8deg); }
+          60%      { transform: rotate(-6deg); }
+          75%      { transform: rotate(4deg); }
+        }
+        .bell-ring-anim { animation: bellRing 1.6s ease 0.6s both; }
+      `}&lt;/style&gt;
+
+      &lt;div className="rounded-2xl overflow-hidden"
+        style={{
+          background: '#fff',
+          boxShadow: '0 8px 32px rgba(26,63,143,0.16), 0 2px 8px rgba(0,0,0,0.06)',
+          border: '1px solid rgba(59,158,245,0.15)',
+        }}
+      &gt;
+        &lt;div className="h-1" style={{ background: 'linear-gradient(90deg,#1a3f8f,#3b9ef5)' }} /&gt;
+        &lt;div className="p-4"&gt;
+          &lt;div className="flex items-start gap-3 mb-3"&gt;
+            &lt;div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bell-ring-anim"
+              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)', boxShadow: '0 4px 12px rgba(26,63,143,0.3)' }}
+            &gt;
+              &lt;svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+                &lt;path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /&gt;
+              &lt;/svg&gt;
+            &lt;/div&gt;
+            &lt;div className="flex-1 min-w-0"&gt;
+              &lt;p className="font-bold text-gray-900 text-sm leading-tight"&gt;Stay in the loop 🔔&lt;/p&gt;
+              &lt;p className="text-xs text-gray-500 mt-1 leading-relaxed"&gt;
+                Get notified about your orders, deliveries, and messages instantly.
+              &lt;/p&gt;
+            &lt;/div&gt;
+            &lt;button
+              onClick={handleSnooze}
+              className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors -mt-0.5 -mr-0.5"
+            &gt;
+              &lt;svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
+                &lt;path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /&gt;
+              &lt;/svg&gt;
+            &lt;/button&gt;
+          &lt;/div&gt;
+
+          &lt;div className="flex flex-wrap gap-1.5 mb-3"&gt;
+            {['Order updates', 'Delivery alerts', 'New messages'].map((label) =&gt; (
+              &lt;span key={label} className="text-[10px] font-medium px-2 py-1 rounded-full"
+                style={{ background: 'rgba(59,158,245,0.08)', color: '#1a3f8f' }}
+              &gt;
+                ✓ {label}
+              &lt;/span&gt;
+            ))}
+          &lt;/div&gt;
+
           &lt;div className="flex gap-2"&gt;
             &lt;button
-              onClick={subscribe}
+              onClick={handleEnable}
               disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+              className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-opacity"
+              style={{
+                background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)',
+                boxShadow: '0 4px 12px rgba(26,63,143,0.3)',
+                opacity: isLoading ? 0.7 : 1,
+              }}
             &gt;
-              {isLoading ? 'Enabling...' : 'Enable'}
+              {isLoading ? 'Enabling…' : 'Enable Notifications'}
             &lt;/button&gt;
             &lt;button
-              onClick={handleDismiss}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 text-sm font-medium rounded-lg transition-colors"
+              onClick={handleSnooze}
+              className="px-3 py-2.5 rounded-xl text-xs font-medium text-gray-500 transition-colors"
+              style={{ background: '#f3f4f6' }}
             &gt;
-              Not Now
+              Later
             &lt;/button&gt;
           &lt;/div&gt;
         &lt;/div&gt;
@@ -20242,7 +20625,7 @@ export async function GET(req: NextRequest) {
   }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/orders/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/payments/initialize/route.ts</div><pre>// app/api/payments/initialize/route.ts - FULLY CORRECTED WITH ORDER NOTES
+<div class='file-block'><div class='file-header'>app/api/payments/initialize/route.ts</div><pre>// app/api/payments/initialize/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
@@ -20251,7 +20634,9 @@ import { notifyOrderPlaced } from '@/lib/notification'
 export const dynamic = 'force-dynamic'
 
 // ============================================================
-// STANDARDIZED FEE STRUCTURE (used everywhere consistently)
+// STANDARDIZED FEE STRUCTURE
+// Keep in sync with the verify route — both import calculateFees
+// from here so fees are always computed identically.
 // ============================================================
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
   const PLATFORM_RATE = 0.05
@@ -20287,7 +20672,7 @@ export async function POST(request: NextRequest) {
     const { productId, cartItems, deliveryFee = 800 } = body
 
     // ── Build items list ──────────────────────────────────────
-    let items: {
+    type CartItem = {
       productId: string
       name: string
       price: number
@@ -20296,7 +20681,9 @@ export async function POST(request: NextRequest) {
       sellerId: string
       sellerName: string
       orderNote?: string
-    }[] = []
+    }
+
+    let items: CartItem[] = []
 
     if (cartItems &amp;&amp; Array.isArray(cartItems) &amp;&amp; cartItems.length &gt; 0) {
       for (const item of cartItems) {
@@ -20346,7 +20733,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
     }
 
-    // Can't buy your own product
+    // Can't buy own product
     const ownProduct = items.find(i =&gt; i.sellerId === user.id)
     if (ownProduct) {
       return NextResponse.json({ error: 'You cannot buy your own product' }, { status: 400 })
@@ -20361,46 +20748,22 @@ export async function POST(request: NextRequest) {
       ...fees,
     })
 
-    // ── DEV MODE: skip Paystack, create orders directly ───────
-    const useDevMode = false // ← Set to false for production
-
-    if (useDevMode &amp;&amp; process.env.NODE_ENV === 'development') {
-      console.log('🔧 DEV MODE: Creating orders without Paystack')
-      const createdOrders = await createOrders(items, user, fees)
-
-      return NextResponse.json({
-        success: true,
-        devMode: true,
-        message: 'Orders placed (Dev Mode)',
-        orders: createdOrders.map(o =&gt; ({
-          orderNumber: o.orderNumber,
-          orderId: o.id
-        })),
-        orderId: createdOrders[0].id,
-        orderNumber: createdOrders[0].orderNumber,
-        breakdown: fees,
-      })
-    }
-
     // ── PRODUCTION: Initialize Paystack ───────────────────────
-    console.log('💳 PROD MODE: Initializing Paystack payment')
-    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
-
-    // ✅ FIX: Always use the real production URL for the callback.
-    // NEXT_PUBLIC_APP_URL must be set in Vercel environment variables.
-    // Never rely on a localhost fallback — if the env var is missing,
-    // throw a clear error instead of silently sending users to localhost.
+    // DEV MODE is intentionally disabled. Even in local development you should
+    // test with Paystack test keys so the full verify flow runs correctly.
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL
     if (!APP_URL) {
-      console.error('❌ NEXT_PUBLIC_APP_URL is not set! Cannot initialize payment.')
+      console.error('❌ NEXT_PUBLIC_APP_URL is not set!')
       return NextResponse.json(
         { error: 'Server misconfiguration: NEXT_PUBLIC_APP_URL is not set.' },
         { status: 500 }
       )
     }
 
-    const callbackUrl = `${APP_URL}/api/payments/verify`
-    console.log('📍 Paystack callback_url:', callbackUrl)
+    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
+    // Strip trailing slash from APP_URL just in case
+    const callbackUrl = `${APP_URL.replace(/\/$/, '')}/api/payments/verify`
+    console.log('💳 Initializing Paystack — callback:', callbackUrl)
 
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -20409,7 +20772,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: user.email || `${user.id}@BATAMART.app`,
+        email: user.email || `${user.id}@batamart.app`,
         amount: fees.totalAmount * 100, // kobo
         reference,
         callback_url: callbackUrl,
@@ -20432,8 +20795,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('✅ Paystack initialized:', reference)
+    console.log('✅ Paystack initialized — reference:', reference)
 
+    // ⚠️  IMPORTANT: We return the authorization_url to the frontend here and
+    // do NOT create the order yet. The order is only created in /verify after
+    // Paystack confirms the payment. The frontend is responsible for keeping
+    // the cart/session alive until the user is redirected to Paystack.
     return NextResponse.json({
       success: true,
       authorization_url: paystackData.data.authorization_url,
@@ -20449,7 +20816,8 @@ export async function POST(request: NextRequest) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ✅ FIXED createOrders - WITH ORDER NOTES ADDED
+// createOrders — called ONLY from the verify route after
+// Paystack has confirmed the payment is successful.
 // ══════════════════════════════════════════════════════════════
 export async function createOrders(
   items: {
@@ -20472,16 +20840,17 @@ export async function createOrders(
   fees: ReturnType&lt;typeof calculateFees&gt;,
   paymentReference?: string
 ) {
-  console.log('📝 createOrders called')
+  console.log('📝 createOrders called — reference:', paymentReference)
 
-  // Group items by seller
+  // Group items by seller so each seller gets their own Order record
   const sellerGroups = items.reduce&lt;Record&lt;string, typeof items&gt;&gt;((acc, item) =&gt; {
     if (!acc[item.sellerId]) acc[item.sellerId] = []
     acc[item.sellerId].push(item)
     return acc
   }, {})
 
-  const createdOrders = []
+  const createdOrders: Awaited&lt;ReturnType&lt;typeof prisma.order.create&gt;&gt;[] = []
+
   const notificationQueue: Array&lt;{
     orderId: string
     buyerId: string
@@ -20495,10 +20864,12 @@ export async function createOrders(
     const proportion = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
     const orderFees = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
 
+    // Ensure order numbers are unique even when multiple orders are created
+    // in rapid succession (timestamp alone can collide)
     const orderNumber = `BATAMART-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
     const itemsList = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
 
-    console.log('🔨 Creating order:', orderNumber)
+    console.log('🔨 Creating order:', orderNumber, 'for seller:', sellerId)
 
     try {
       const order = await prisma.$transaction(async (tx) =&gt; {
@@ -20507,39 +20878,48 @@ export async function createOrders(
           select: { pendingBalance: true, availableBalance: true },
         })
 
-        if (!seller) {
-          throw new Error(`Seller not found: ${sellerId}`)
-        }
+        if (!seller) throw new Error(`Seller not found: ${sellerId}`)
 
-        // Combine order notes from all items in this order
-        const orderNotes = sellerItems
+        // Merge all notes from items in this order into one field
+        const orderNote = sellerItems
           .map(item =&gt; item.orderNote?.trim())
-          .filter(note =&gt; note &amp;&amp; note.length &gt; 0)
-          .join(' | ')
+          .filter((note): note is string =&gt; Boolean(note &amp;&amp; note.length &gt; 0))
+          .join(' | ') || null
 
-        const orderData = {
-          orderNumber,
-          buyerId: user.id,
-          sellerId,
-          productId: sellerItems[0].productId,
-          productPrice: Number(orderSubtotal),
-          deliveryFee: Number(orderFees.deliveryFee),
-          totalAmount: Number(orderFees.totalAmount),
-          platformCommission: Number(orderFees.platformTotal),
-          quantity: Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
-          deliveryHostel: String(user.hostelName || ''),
-          deliveryRoom: String(user.roomNumber || ''),
-          deliveryPhone: String(user.phone || ''),
-          deliveryLandmark: String(user.landmark || ''),
-          isPaid: true,
-          paymentId: paymentReference || `dev_${Date.now()}`,
-          status: 'PENDING' as const,
-          orderNote: orderNotes || null,
-        }
+        const newOrder = await tx.order.create({
+          data: {
+            orderNumber,
+            buyerId: user.id,
+            sellerId,
+            productId: sellerItems[0].productId,
+            productPrice: Number(orderSubtotal),
+            deliveryFee: Number(orderFees.deliveryFee),
+            totalAmount: Number(orderFees.totalAmount),
+            platformCommission: Number(orderFees.platformTotal),
+            quantity: Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
+            deliveryHostel: String(user.hostelName ?? ''),
+            deliveryRoom: String(user.roomNumber ?? ''),
+            deliveryPhone: String(user.phone ?? ''),
+            deliveryLandmark: String(user.landmark ?? ''),
+            isPaid: true,
+            status: 'PENDING' as const,
+            orderNote,
+            // Create the Payment record (one-to-one relation) at the same time.
+            // This is how we track the Paystack reference for duplicate-payment
+            // detection in the verify route — Payment.transactionId = reference.
+            payment: paymentReference ? {
+              create: {
+                amount: Number(orderFees.totalAmount),
+                method: 'CARD' as const,
+                status: 'COMPLETED' as const,
+                transactionId: paymentReference,
+                paidAt: new Date(),
+              },
+            } : undefined,
+          },
+        })
 
-        const newOrder = await tx.order.create({ data: orderData })
-
-        // Reduce stock
+        // Decrement stock for each product in this order
         for (const item of sellerItems) {
           await tx.product.update({
             where: { id: item.productId },
@@ -20547,16 +20927,16 @@ export async function createOrders(
           })
         }
 
-        // Update balances
+        // Credit seller's pending (escrow) balance
         const sellerShare = Number(orderFees.sellerShare)
-        const sellerPendingBalance = Number(seller.pendingBalance || 0)
+        const sellerPendingBalance = Number(seller.pendingBalance ?? 0)
 
         await tx.user.update({
           where: { id: sellerId },
           data: { pendingBalance: { increment: sellerShare } },
         })
 
-        // Create transaction records
+        // Create transaction ledger entries
         await tx.transaction.createMany({
           data: [
             {
@@ -20586,7 +20966,7 @@ export async function createOrders(
               balanceBefore: 0,
               balanceAfter: 0,
             },
-          ]
+          ],
         })
 
         return newOrder
@@ -20596,7 +20976,6 @@ export async function createOrders(
       })
 
       createdOrders.push(order)
-
       notificationQueue.push({
         orderId: order.id,
         buyerId: user.id,
@@ -20608,43 +20987,48 @@ export async function createOrders(
       console.log('✅ Order created:', orderNumber)
 
     } catch (orderError) {
-      console.error('❌ Failed to create order:', orderNumber, orderError)
+      console.error('❌ Failed to create order for seller', sellerId, orderError)
       throw orderError
     }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // ✅ SEND NOTIFICATIONS AFTER ALL ORDERS CREATED
-  // ═══════════════════════════════════════════════════════
-  console.log(`📧 Sending ${notificationQueue.length} notifications...`)
-
-  for (const notification of notificationQueue) {
-    notifyOrderPlaced(
-      notification.orderId,
-      notification.buyerId,
-      notification.sellerId,
-      notification.orderNumber,
-      notification.itemsList
-    )
-      .then(() =&gt; console.log(`✅ Notification sent for ${notification.orderNumber}`))
-      .catch(err =&gt; console.error(`⚠️ Notification failed:`, err))
+  // Fire in-app notifications for each order — non-blocking
+  for (const n of notificationQueue) {
+    notifyOrderPlaced(n.orderId, n.buyerId, n.sellerId, n.orderNumber, n.itemsList)
+      .then(() =&gt; console.log(`✅ Notification sent for ${n.orderNumber}`))
+      .catch(err =&gt; console.error(`⚠️  Notification failed for ${n.orderNumber}:`, err))
   }
 
-  console.log('🎉 All orders created successfully:', createdOrders.length)
+  console.log('🎉 All orders created:', createdOrders.length)
   return createdOrders
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/payments/verify/route.ts</div><pre>// app/api/payments/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOrders, calculateFees } from '../initialize/route'
-import { notifyOrderPlaced } from '@/lib/push/sendPushNotification'
+
+// ⚠️  REMOVED the top-level import of @/lib/push/sendPushNotification.
+//     That import was causing the ENTIRE module to fail to load whenever
+//     the push notification env vars (VAPID keys etc.) were missing or
+//     the module had any runtime error — which crashes the verify route
+//     before a single line of code runs, sending every user to the
+//     catch block → /checkout?error=verification_failed → /marketplace.
+//     All push/notification calls are now done with dynamic imports inside
+//     a fire-and-forget Promise.allSettled so they NEVER block the redirect.
 
 export const dynamic = 'force-dynamic'
 
-// ── Helper: always use the public app URL for redirects ──────────────────────
+// ── Helper: redirect to the correct app domain ──────────────────────────────
 function appRedirect(path: string) {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app'
-  return NextResponse.redirect(`${base}${path}`)
+  const base = process.env.NEXT_PUBLIC_APP_URL
+  if (!base) {
+    // Hard-fail loudly rather than silently redirecting to the wrong place
+    console.error('❌ CRITICAL: NEXT_PUBLIC_APP_URL is not set in environment variables!')
+    // Still fall back so the user is not left on a blank Paystack page
+    return NextResponse.redirect(`https://bata-mart.vercel.app${path}`)
+  }
+  // Strip any accidental trailing slash from the env var before building URL
+  return NextResponse.redirect(`${base.replace(/\/$/, '')}${path}`)
 }
 
 export async function GET(request: NextRequest) {
@@ -20656,6 +21040,7 @@ export async function GET(request: NextRequest) {
   console.log('═'.repeat(70))
   console.log('📍 Reference:', reference)
   console.log('📍 Timestamp:', new Date().toISOString())
+  console.log('📍 APP_URL:', process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
 
   if (!reference) {
     console.error('❌ ERROR: No reference in URL')
@@ -20663,86 +21048,95 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // ── STEP 1: Verify with Paystack ───────────────────────────────────────
     console.log('\n📞 STEP 1: Verifying with Paystack')
 
-    const verifyRes = await fetch(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
-    )
-
-    console.log('HTTP Status:', verifyRes.status)
-    const verifyData = await verifyRes.json()
-    console.log('📦 Paystack Response status:', verifyData?.status, '| tx status:', verifyData?.data?.status)
-
-    if (!verifyData.status) {
-      console.error('❌ Paystack status is false')
+    let verifyData: any
+    try {
+      const verifyRes = await fetch(
+        `https://api.paystack.co/transaction/verify/${reference}`,
+        { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
+      )
+      console.log('HTTP Status:', verifyRes.status)
+      verifyData = await verifyRes.json()
+    } catch (fetchErr) {
+      console.error('❌ Network error calling Paystack:', fetchErr)
       return appRedirect('/checkout?error=payment_failed')
     }
 
-    if (verifyData.data.status !== 'success') {
-      console.error('❌ Payment status not success:', verifyData.data.status)
+    console.log('📦 Paystack Response status:', verifyData?.status, '| tx status:', verifyData?.data?.status)
+
+    if (!verifyData?.status) {
+      console.error('❌ Paystack returned status=false:', verifyData?.message)
+      return appRedirect('/checkout?error=payment_failed')
+    }
+
+    if (verifyData.data?.status !== 'success') {
+      console.error('❌ Payment not successful. Status:', verifyData.data?.status)
       return appRedirect('/checkout?error=payment_failed')
     }
 
     console.log('✅ Payment verified with Paystack')
 
-    // ── Duplicate check via Payment model ──────────────────────────────────
-    // Check if a payment with this transaction reference already exists
-    console.log('\n🔄 STEP 2: Checking for Duplicate Payment')
+    // ── STEP 2: Duplicate-payment guard ───────────────────────────────────
+    // The Payment model stores the Paystack reference in transactionId.
+    // The Order model has NO paymentId field — it has a `payment` relation.
+    // So we query Payment by transactionId and navigate to the order through
+    // the relation. This correctly prevents double-processing the same webhook.
+    console.log('\n🔄 STEP 2: Duplicate-payment guard')
+
     const existingPayment = await prisma.payment.findFirst({
-      where: { 
-        transactionId: reference 
-      },
+      where: { transactionId: reference },
       include: {
-        order: {
-          select: {
-            id: true,
-            orderNumber: true
-          }
-        }
-      }
+        order: { select: { id: true, orderNumber: true } },
+      },
     })
 
-    if (existingPayment &amp;&amp; existingPayment.order) {
-      console.log('⚠️ Payment already exists for this reference. Order:', existingPayment.order.orderNumber)
+    if (existingPayment?.order) {
+      console.log('⚠️  Payment already processed — idempotent redirect')
+      console.log('   Order:', existingPayment.order.orderNumber)
       return appRedirect(`/orders?payment=success&amp;order=${existingPayment.order.orderNumber}`)
     }
 
-    console.log('✅ No duplicate found — proceeding to create order')
+    console.log('✅ No duplicate found — safe to create order')
 
-    // ── Metadata ───────────────────────────────────────────────────────────
+    // ── STEP 3: Extract metadata ───────────────────────────────────────────
     console.log('\n📋 STEP 3: Extracting Metadata')
+
+    type CartItem = {
+      productId: string
+      name: string
+      price: number
+      quantity: number
+      category: string
+      sellerId: string
+      sellerName: string
+      orderNote?: string
+    }
+
     const meta = verifyData.data.metadata as {
       userId: string
-      cartItems: {
-        productId: string
-        name: string
-        price: number
-        quantity: number
-        category: string
-        sellerId: string
-        sellerName: string
-        orderNote?: string
-      }[]
+      cartItems: CartItem[]
       deliveryFee: number
       fees: ReturnType&lt;typeof calculateFees&gt;
     }
 
-    console.log('📋 Metadata received:', JSON.stringify({
+    console.log('📋 Metadata snapshot:', JSON.stringify({
       userId: meta?.userId,
       itemCount: meta?.cartItems?.length,
       deliveryFee: meta?.deliveryFee,
     }))
 
-    if (!meta || !meta.userId || !meta.cartItems || meta.cartItems.length === 0) {
-      console.error('❌ Invalid or missing metadata:', JSON.stringify(meta))
+    if (!meta?.userId || !Array.isArray(meta?.cartItems) || meta.cartItems.length === 0) {
+      console.error('❌ Invalid/missing metadata:', JSON.stringify(meta))
       return appRedirect('/checkout?error=invalid_metadata')
     }
 
-    console.log('✅ Metadata valid — User:', meta.userId, '| Items:', meta.cartItems.length)
+    console.log('✅ Metadata OK — User:', meta.userId, '| Items:', meta.cartItems.length)
 
-    // ── Fetch buyer ────────────────────────────────────────────────────────
+    // ── STEP 4: Fetch buyer ────────────────────────────────────────────────
     console.log('\n👤 STEP 4: Fetching Buyer')
+
     const buyer = await prisma.user.findUnique({
       where: { id: meta.userId },
       select: {
@@ -20759,8 +21153,9 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Buyer found:', buyer.name)
 
-    // ── Validate products ──────────────────────────────────────────────────
+    // ── STEP 5: Validate products are still in stock ───────────────────────
     console.log('\n📦 STEP 5: Validating Products')
+
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
         where: { id: item.productId },
@@ -20776,16 +21171,17 @@ export async function GET(request: NextRequest) {
         return appRedirect(`/checkout?error=product_inactive&amp;product=${encodeURIComponent(item.name)}`)
       }
       if (product.quantity &lt; item.quantity) {
-        console.error('❌ Insufficient stock for:', item.name, '| has:', product.quantity, '| needs:', item.quantity)
+        console.error('❌ Insufficient stock:', item.name, '| has:', product.quantity, '| needs:', item.quantity)
         return appRedirect(`/checkout?error=out_of_stock&amp;product=${encodeURIComponent(item.name)}`)
       }
       console.log(`✅ ${item.name}: OK (stock: ${product.quantity})`)
     }
 
-    // ── Create orders ──────────────────────────────────────────────────────
+    // ── STEP 6: Create orders ──────────────────────────────────────────────
     console.log('\n💰 STEP 6: Creating Orders')
+
     const subtotal = meta.cartItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const fees = meta.fees || calculateFees(subtotal, meta.deliveryFee)
+    const fees = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
 
     console.log('💰 Fees:', JSON.stringify(fees))
 
@@ -20796,11 +21192,12 @@ export async function GET(request: NextRequest) {
       return appRedirect('/checkout?error=order_creation_failed')
     }
 
-    console.log('✅ Orders created:', orders.map(o =&gt; o.orderNumber))
+    console.log('✅ Orders created:', orders.map(o =&gt; o.orderNumber).join(', '))
 
-    // ── Fire notifications (non-blocking) ─────────────────────────────────
-    console.log('\n🔔 STEP 7: Sending Notifications')
+    // ── STEP 7: Fire notifications (non-blocking — NEVER delay the redirect) ─
+    console.log('\n🔔 STEP 7: Queueing Notifications (fire-and-forget)')
 
+    // Build a map of sellerId → order info for per-seller notifications
     const sellerMap = new Map&lt;string, {
       orderId: string
       orderNumber: string
@@ -20810,67 +21207,89 @@ export async function GET(request: NextRequest) {
 
     for (const order of orders) {
       if (order.sellerId &amp;&amp; !sellerMap.has(order.sellerId)) {
-        const matchingItem = meta.cartItems.find(i =&gt; i.sellerId === order.sellerId)
         const sellerItems = meta.cartItems.filter(i =&gt; i.sellerId === order.sellerId)
-        const itemsList = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
+        const matchingItem = sellerItems[0]
         sellerMap.set(order.sellerId, {
           orderId: order.id,
           orderNumber: order.orderNumber,
           orderNote: matchingItem?.orderNote,
-          itemsList,
+          itemsList: sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
         })
       }
     }
 
-    // Fire without await — never block the redirect
+    // All notification work happens inside a fire-and-forget block.
+    // If ANY of these fail they log an error but DO NOT affect the redirect.
     Promise.allSettled([
-
-      // 1. In-app bell notification for buyer
-      import('@/lib/notification').then(({ notifyOrderPlaced: createBuyerNotif }) =&gt;
-        createBuyerNotif(
-          orders[0].id,
-          buyer.id,
-          orders[0].sellerId,
-          orders[0].orderNumber,
-          meta.cartItems.map(i =&gt; i.name).join(', ')
+      // 1. In-app bell for buyer
+      import('@/lib/notification')
+        .then(({ notifyOrderPlaced: createBuyerNotif }) =&gt;
+          createBuyerNotif(
+            orders[0].id,
+            buyer.id,
+            orders[0].sellerId,
+            orders[0].orderNumber,
+            meta.cartItems.map(i =&gt; i.name).join(', ')
+          )
         )
-      ),
+        .catch(err =&gt; console.error('⚠️  Buyer bell notification failed:', err)),
 
       // 2. Push notification for buyer
-      notifyOrderPlaced(buyer.id, orders[0].orderNumber),
+      import('@/lib/push/sendPushNotification')
+        .then(({ notifyOrderPlaced: pushBuyer }) =&gt; pushBuyer(buyer.id, orders[0].orderNumber))
+        .catch(err =&gt; console.error('⚠️  Buyer push notification failed:', err)),
 
-      // 3. Notify each seller
-      ...Array.from(sellerMap.entries()).map(([sellerId, { orderId, orderNumber, orderNote, itemsList }]) =&gt;
-        notifyNewOrderWithNote(sellerId, orderId, orderNumber, orderNote, buyer.name, itemsList)
+      // 3. Per-seller notifications
+      ...Array.from(sellerMap.entries()).map(([sellerId, info]) =&gt;
+        notifySellerOfNewOrder(
+          sellerId,
+          info.orderId,
+          info.orderNumber,
+          info.orderNote,
+          buyer.name ?? 'A buyer',
+          info.itemsList,
+        ).catch(err =&gt; console.error(`⚠️  Seller notification failed for ${sellerId}:`, err))
       ),
 
+      // 4. Push notification to all available riders — so they know a new
+      //    order is waiting without having to manually refresh their dashboard
+      ...orders.map((order) =&gt;
+        import('@/lib/push/sendPushNotification')
+          .then(({ notifyAvailableRiders }) =&gt; notifyAvailableRiders(order.orderNumber))
+          .catch(err =&gt; console.error(`⚠️  Rider push notification failed for ${order.orderNumber}:`, err))
+      ),
     ]).then(results =&gt; {
       results.forEach((r, i) =&gt; {
-        if (r.status === 'rejected') console.error(`Notification ${i} failed:`, r.reason)
-        else console.log(`✅ Notification ${i} sent`)
+        if (r.status === 'rejected') {
+          console.error(`Notification slot ${i} rejected:`, r.reason)
+        }
       })
     })
 
-    const firstOrderNumber = orders[0]?.orderNumber || orders[0]?.id
+    // ── SUCCESS ────────────────────────────────────────────────────────────
+    const firstOrderNumber = orders[0]?.orderNumber ?? orders[0]?.id
+    const redirectUrl = `/orders?payment=success&amp;order=${firstOrderNumber}&amp;count=${orders.length}`
 
-    console.log('\n🎉 SUCCESS — Redirecting to Orders Page')
-    console.log('Order:', firstOrderNumber, '| Total orders:', orders.length)
+    console.log('\n🎉 SUCCESS — Redirecting to:', redirectUrl)
     console.log('═'.repeat(70))
 
-    return appRedirect(`/orders?payment=success&amp;order=${firstOrderNumber}&amp;count=${orders.length}`)
+    return appRedirect(redirectUrl)
 
   } catch (error) {
     console.error('\n💥 FATAL ERROR in payment verification:')
     console.error(error instanceof Error ? error.message : error)
     if (error instanceof Error) console.error(error.stack)
+    // Redirect to checkout with error flag — checkout page will display the
+    // "verification failed, contact support" message.
     return appRedirect('/checkout?error=verification_failed&amp;reason=exception')
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Seller notification: 2 separate in-app bells + push + email
+// Seller notification helper (all imports are dynamic so a missing module
+// never crashes the verify route)
 // ─────────────────────────────────────────────────────────────────────────────
-async function notifyNewOrderWithNote(
+async function notifySellerOfNewOrder(
   sellerId: string,
   orderId: string,
   orderNumber: string,
@@ -20878,57 +21297,72 @@ async function notifyNewOrderWithNote(
   buyerName: string,
   itemsList: string,
 ) {
-  const hasNote = orderNote &amp;&amp; orderNote.trim().length &gt; 0
+  const hasNote = Boolean(orderNote?.trim())
 
-  const { subject, html } = buildSellerOrderEmail(orderNumber, buyerName, orderNote)
+  const [notifMod, pushMod, emailMod, prismaMod] = await Promise.all([
+    import('@/lib/notification').catch(() =&gt; null),
+    import('@/lib/push/sendPushNotification').catch(() =&gt; null),
+    import('@/lib/email/sendEmail').catch(() =&gt; null),
+    import('@/lib/prisma').catch(() =&gt; null),
+  ])
 
-  const { notifyNewOrder } = await import('@/lib/push/sendPushNotification')
-  const { sendEmail } = await import('@/lib/email/sendEmail')
-  const { prisma: db } = await import('@/lib/prisma')
-  const { createNotification } = await import('@/lib/notification')
+  const seller = prismaMod
+    ? await prismaMod.prisma.user.findUnique({
+        where: { id: sellerId },
+        select: { email: true },
+      }).catch(() =&gt; null)
+    : null
 
-  const seller = await db.user.findUnique({
-    where: { id: sellerId },
-    select: { email: true },
-  })
+  const tasks: Promise&lt;any&gt;[] = []
 
-  await Promise.allSettled([
-
-    createNotification({
-      userId: sellerId,
-      type: 'ORDER_PLACED',
-      title: '🛒 New Order Received!',
-      message: `You have a new order (#${orderNumber}) for ${itemsList}`,
-      orderId,
-      metadata: { orderNumber, buyerName, itemsList },
-    }),
-
-    ...(hasNote ? [
-      createNotification({
+  // In-app bell: new order
+  if (notifMod?.createNotification) {
+    tasks.push(
+      notifMod.createNotification({
         userId: sellerId,
         type: 'ORDER_PLACED',
-        title: '📝 Note from Buyer',
-        message: `For order #${orderNumber}: "${orderNote}"`,
+        title: '🛒 New Order Received!',
+        message: `You have a new order (#${orderNumber}) for ${itemsList}`,
         orderId,
-        metadata: { orderNumber, orderNote },
-      }),
-    ] : []),
+        metadata: { orderNumber, buyerName, itemsList },
+      })
+    )
 
-    notifyNewOrder(sellerId, orderNumber),
+    // In-app bell: buyer note (separate notification so it stands out)
+    if (hasNote) {
+      tasks.push(
+        notifMod.createNotification({
+          userId: sellerId,
+          type: 'ORDER_PLACED',
+          title: '📝 Note from Buyer',
+          message: `For order #${orderNumber}: "${orderNote}"`,
+          orderId,
+          metadata: { orderNumber, orderNote },
+        })
+      )
+    }
+  }
 
-    ...(hasNote &amp;&amp; seller?.email ? [
-      sendEmail({ to: seller.email, subject, html })
-    ] : []),
+  // Push notification
+  if (pushMod?.notifyNewOrder) {
+    tasks.push(pushMod.notifyNewOrder(sellerId, orderNumber))
+  }
 
-  ])
+  // Email to seller (only when there is a buyer note — keeps inbox clean)
+  if (hasNote &amp;&amp; seller?.email &amp;&amp; emailMod?.sendEmail) {
+    const { subject, html } = buildSellerOrderEmail(orderNumber, buyerName, orderNote)
+    tasks.push(emailMod.sendEmail({ to: seller.email, subject, html }))
+  }
+
+  await Promise.allSettled(tasks)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Email template for seller
+// Seller email template
 // ─────────────────────────────────────────────────────────────────────────────
 function buildSellerOrderEmail(orderNumber: string, buyerName: string, orderNote?: string) {
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app'
-  const hasNote = orderNote &amp;&amp; orderNote.trim().length &gt; 0
+  const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+  const hasNote = Boolean(orderNote?.trim())
 
   const noteBlock = hasNote
     ? `
@@ -20951,7 +21385,7 @@ function buildSellerOrderEmail(orderNumber: string, buyerName: string, orderNote
 &lt;head&gt;&lt;meta charset="UTF-8"/&gt;&lt;meta name="viewport" content="width=device-width,initial-scale=1.0"/&gt;&lt;/head&gt;
 &lt;body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Helvetica,Arial,sans-serif;"&gt;
   &lt;table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"&gt;
-     &lt;tr&gt;
+    &lt;tr&gt;
       &lt;td align="center"&gt;
         &lt;table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;"&gt;
           &lt;tr&gt;
@@ -23872,6 +24306,146 @@ export function useOnScreen(ref: React.RefObject&lt;HTMLElement&gt;, rootMargin 
 
   return isVisible;
 }</pre></div>
+<div class='file-block'><div class='file-header'>hooks/useNotificationNudge.ts</div><pre>// hooks/useNotificationNudge.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// Smart notification nudge system.
+//
+// RULES:
+//  • If push is already enabled        → never show
+//  • If browser denied permission       → never show (user must go to settings)
+//  • If user clicks "Not Now"           → snooze for 24 hours, then show again
+//  • If user manually turns off notifs  → snooze resets so we start nudging again
+//  • Contextual triggers (e.g. after payment) bypass the time-gate once per trigger
+//  • Never show more than once per page visit for non-contextual prompts
+// ─────────────────────────────────────────────────────────────────────────────
+
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+
+const STORAGE_KEY = 'batamart_notif_nudge'
+const SNOOZE_HOURS = 24 // hours between passive nudges
+
+interface NudgeState {
+  snoozeUntil: number   // timestamp ms — 0 means not snoozed
+  grantedAt:   number   // timestamp ms when user last granted — used to detect revocation
+}
+
+function loadState(): NudgeState {
+  if (typeof window === 'undefined') return { snoozeUntil: 0, grantedAt: 0 }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { snoozeUntil: 0, grantedAt: 0 }
+    return JSON.parse(raw)
+  } catch {
+    return { snoozeUntil: 0, grantedAt: 0 }
+  }
+}
+
+function saveState(s: NudgeState) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch {}
+}
+
+// ── Main hook ─────────────────────────────────────────────────────────────────
+export function useNotificationNudge() {
+  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [permission, setPermission]     = useState&lt;NotificationPermission&gt;('default')
+  const [isSupported, setIsSupported]   = useState(false)
+  const [nudgeState, setNudgeState]     = useState&lt;NudgeState&gt;({ snoozeUntil: 0, grantedAt: 0 })
+
+  // ── Initialise on mount ────────────────────────────────────────────────────
+  useEffect(() =&gt; {
+    if (
+      typeof window === 'undefined' ||
+      !('Notification' in window) ||
+      !('serviceWorker' in navigator) ||
+      !('PushManager' in window)
+    ) return
+
+    setIsSupported(true)
+    setPermission(Notification.permission)
+    setNudgeState(loadState())
+
+    // Check actual push subscription state
+    navigator.serviceWorker.ready
+      .then((reg) =&gt; reg.pushManager.getSubscription())
+      .then((sub) =&gt; {
+        setIsSubscribed(!!sub)
+        if (sub) {
+          // Record when we confirmed subscription (used to detect later revocation)
+          const s = loadState()
+          if (!s.grantedAt) {
+            const updated = { ...s, grantedAt: Date.now() }
+            saveState(updated)
+            setNudgeState(updated)
+          }
+        }
+      })
+      .catch(() =&gt; {})
+  }, [])
+
+  // ── Detect if user revoked permission outside the app ─────────────────────
+  //    (e.g. turned off in browser settings) — reset snooze so we nudge again
+  useEffect(() =&gt; {
+    if (!isSupported) return
+    if (permission === 'granted' &amp;&amp; !isSubscribed) {
+      // Was subscribed, now isn't — clear any "dismissed forever" state
+      const s = loadState()
+      const updated = { snoozeUntil: 0, grantedAt: 0 }
+      saveState(updated)
+      setNudgeState(updated)
+    }
+  }, [permission, isSubscribed, isSupported])
+
+  // ── Snooze (user clicked "Not Now") ───────────────────────────────────────
+  const snooze = useCallback(() =&gt; {
+    const updated: NudgeState = {
+      snoozeUntil: Date.now() + SNOOZE_HOURS * 60 * 60 * 1000,
+      grantedAt: nudgeState.grantedAt,
+    }
+    saveState(updated)
+    setNudgeState(updated)
+  }, [nudgeState.grantedAt])
+
+  // ── Mark as granted (call after successful subscribe) ─────────────────────
+  const markGranted = useCallback(() =&gt; {
+    const updated: NudgeState = { snoozeUntil: 0, grantedAt: Date.now() }
+    saveState(updated)
+    setNudgeState(updated)
+    setIsSubscribed(true)
+    setPermission('granted')
+  }, [])
+
+  // ── Should we show a passive (background) nudge? ──────────────────────────
+  const shouldShowPassive = (
+    isSupported &amp;&amp;
+    !isSubscribed &amp;&amp;
+    permission !== 'denied' &amp;&amp;
+    permission !== 'granted' &amp;&amp;
+    Date.now() &gt; nudgeState.snoozeUntil
+  )
+
+  // ── Should we show a contextual nudge (e.g. after order)? ─────────────────
+  //    Same rules but we ignore the snooze — a fresh order is high motivation.
+  //    The caller is responsible for only triggering this once per visit.
+  const shouldShowContextual = (
+    isSupported &amp;&amp;
+    !isSubscribed &amp;&amp;
+    permission !== 'denied' &amp;&amp;
+    permission !== 'granted'
+  )
+
+  return {
+    isSubscribed,
+    isSupported,
+    permission,
+    shouldShowPassive,
+    shouldShowContextual,
+    snooze,
+    markGranted,
+    nudgeState,
+  }
+}</pre></div>
 <div class='file-block'><div class='file-header'>hooks/useReviews.ts</div><pre>'use client';
 
 import { useState, useCallback } from 'react';
@@ -25361,6 +25935,65 @@ export async function notifyNewReview(sellerId: string, productName: string) {
     { title: '⭐ New Review', message: `${productName} just received a new review.`, url: `/reviews`, tag: 'new-review' },
     async () =&gt; newReviewEmail(productName)
   )
+}
+
+// ─── NEW: Notify all available riders of a new order ─────────────────────────
+// Finds every rider who is available, has no active delivery, and has a push
+// subscription, then fires a push to each of them.
+// This is fire-and-forget safe — individual rider push failures are logged
+// but do not affect the order flow.
+export async function notifyAvailableRiders(orderNumber: string): Promise&lt;void&gt; {
+  try {
+    // Find all available riders who have no active delivery in progress
+    const availableRiders = await prisma.user.findMany({
+      where: {
+        role: 'RIDER',
+        isAvailable: true,
+        isDeleted: false,
+        isSuspended: false,
+        // Exclude riders who already have an active delivery
+        riderDeliveries: {
+          none: {
+            status: {
+              in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'],
+            },
+            isDisputed: false,
+          },
+        },
+        // Only target riders who have a push subscription (no point querying others)
+        pushSubscriptions: {
+          some: {},
+        },
+      },
+      select: { id: true },
+    })
+
+    if (availableRiders.length === 0) {
+      console.log(`[Push] No available riders with push subscriptions for order #${orderNumber}`)
+      return
+    }
+
+    const payload: PushPayload = {
+      title: '🛵 New Order Available!',
+      message: `Order #${orderNumber} is ready for pickup. Open the app to accept it.`,
+      url: '/rider-dashboard',
+      tag: 'new-order-available',
+      requireInteraction: true,
+    }
+
+    console.log(`[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`)
+
+    // Push to all available riders in parallel — failures are isolated
+    const results = await Promise.allSettled(
+      availableRiders.map((rider) =&gt; sendPushToUser(rider.id, payload))
+    )
+
+    const succeeded = results.filter((r) =&gt; r.status === 'fulfilled' &amp;&amp; r.value === true).length
+    const failed = results.length - succeeded
+    console.log(`[Push] Rider notifications: ${succeeded} delivered, ${failed} failed for order #${orderNumber}`)
+  } catch (error) {
+    console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
+  }
 }</pre></div>
 <div class='file-block'><div class='file-header'>lib/referral/generateReferralCode.ts</div><pre>// lib/referral/generateReferralCode.ts
 // Utility to generate unique BATAMART-XXXXXX referral codes

@@ -9,6 +9,7 @@ import {
   Bike, ChevronRight, ArrowRight, ShoppingBag, Clock,
   X, BadgeCheck, AlertCircle,
 } from 'lucide-react'
+import { OrderNotificationBanner } from '@/components/layout/OrderNotificationBanner'
 
 interface ProductReview { id: string; rating: number; comment: string; createdAt: string }
 interface Review { id: string; type: string; rating: number; comment: string | null; createdAt: string }
@@ -51,6 +52,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [postPayment, setPostPayment] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
 
@@ -64,6 +66,7 @@ export default function OrdersPage() {
     const orderCount = searchParams.get('count')
 
     if (paymentStatus === 'success') {
+      setPostPayment(true)
       sessionStorage.removeItem('checkout_product')
       sessionStorage.removeItem('checkout_cart')
       const count = orderCount ? parseInt(orderCount) : 1
@@ -147,6 +150,11 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
+
+      {/* ── Notification banner (post-payment or passive nudge) ─────── */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4">
+        <OrderNotificationBanner postPayment={postPayment} />
+      </div>
 
       {/* ── Page header ───────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100">

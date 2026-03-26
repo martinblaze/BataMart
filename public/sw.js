@@ -1,54 +1,49 @@
-const CACHE_NAME = 'batamart-static-v1'
+// public/sw.js
+// Service Worker for BataMart push notifications
 
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icon-192x192.png'
-]
+const CACHE_NAME = 'batamart-v1'
 
+// ── Install: activate immediately, don't wait ────────────────────────────────
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installing...')
   self.skipWaiting()
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
-  )
 })
 
+// ── Activate: take control of all clients immediately ────────────────────────
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim())
+  console.log('[SW] Activated')
+  event.waitUntil(self.clients.claim())
 })
 
-// ⚠️ SAFE caching (DO NOT cache API)
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url)
-
-  // 🚫 NEVER cache API (VERY IMPORTANT)
-  if (url.pathname.startsWith('/api')) return
-
-  // Cache first for static assets
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request)
-    })
-  )
-})
-
-
-// PUSH (your original code)
+// ── Push: show notification when server sends a push ─────────────────────────
 self.addEventListener('push', (event) => {
-  if (!event.data) return
+  console.log('[SW] Push received')
 
-  const data = event.data.json()
+  let data = {
+    title: 'BataMart',
+    message: 'You have a new notification',
+    url: '/',
+    tag: 'default',
+    requireInteraction: false,
+  }
+
+  try {
+    if (event.data) {
+      const parsed = event.data.json()
+      data = { ...data, ...parsed }
+    }
+  } catch (e) {
+    console.error('[SW] Failed to parse push data:', e)
+  }
 
   const options = {
     body: data.message,
     icon: '/icon-192x192.png',
-    badge: '/icon-192x192.png',
-    tag: data.tag || 'default',
-    data: {
-      url: data.url || '/'
-    },
-    actions: data.actions || [],
+    badge: '/icon-72x72.png',
+    tag: data.tag || 'batamart-notification',
     requireInteraction: data.requireInteraction || false,
+    data: { url: data.url || '/' },
+    vibrate: [200, 100, 200],
   }
 
   event.waitUntil(
@@ -56,21 +51,32 @@ self.addEventListener('push', (event) => {
   )
 })
 
+// ── Notification click: open the relevant page ───────────────────────────────
 self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification clicked:', event.notification.tag)
   event.notification.close()
 
-  const urlToOpen = event.notification.data?.url || '/'
+  const url = event.notification.data?.url || '/'
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
-      for (const client of clientsArr) {
-        if (client.url.includes(self.location.origin)) {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // If a BataMart tab is already open, focus it and navigate
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus()
-          client.navigate(urlToOpen)
+          client.navigate(url)
           return
         }
       }
-      return clients.openWindow(urlToOpen)
+      // Otherwise open a new tab
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url)
+      }
     })
   )
+})
+
+// ── Notification close: cleanup ──────────────────────────────────────────────
+self.addEventListener('notificationclose', (event) => {
+  console.log('[SW] Notification dismissed:', event.notification.tag)
 })

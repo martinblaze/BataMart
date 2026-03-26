@@ -153,3 +153,62 @@ export async function notifyNewReview(sellerId: string, productName: string) {
     async () => newReviewEmail(productName)
   )
 }
+
+// ─── NEW: Notify all available riders of a new order ─────────────────────────
+// Finds every rider who is available, has no active delivery, and has a push
+// subscription, then fires a push to each of them.
+// This is fire-and-forget safe — individual rider push failures are logged
+// but do not affect the order flow.
+export async function notifyAvailableRiders(orderNumber: string): Promise<void> {
+  try {
+    // Find all available riders who have no active delivery in progress
+    const availableRiders = await prisma.user.findMany({
+      where: {
+        role: 'RIDER',
+        isAvailable: true,
+        isDeleted: false,
+        isSuspended: false,
+        // Exclude riders who already have an active delivery
+        riderDeliveries: {
+          none: {
+            status: {
+              in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'],
+            },
+            isDisputed: false,
+          },
+        },
+        // Only target riders who have a push subscription (no point querying others)
+        pushSubscriptions: {
+          some: {},
+        },
+      },
+      select: { id: true },
+    })
+
+    if (availableRiders.length === 0) {
+      console.log(`[Push] No available riders with push subscriptions for order #${orderNumber}`)
+      return
+    }
+
+    const payload: PushPayload = {
+      title: '🛵 New Order Available!',
+      message: `Order #${orderNumber} is ready for pickup. Open the app to accept it.`,
+      url: '/rider-dashboard',
+      tag: 'new-order-available',
+      requireInteraction: true,
+    }
+
+    console.log(`[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`)
+
+    // Push to all available riders in parallel — failures are isolated
+    const results = await Promise.allSettled(
+      availableRiders.map((rider) => sendPushToUser(rider.id, payload))
+    )
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
+    const failed = results.length - succeeded
+    console.log(`[Push] Rider notifications: ${succeeded} delivered, ${failed} failed for order #${orderNumber}`)
+  } catch (error) {
+    console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
+  }
+}

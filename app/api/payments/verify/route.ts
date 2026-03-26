@@ -246,6 +246,14 @@ export async function GET(request: NextRequest) {
           info.itemsList,
         ).catch(err => console.error(`⚠️  Seller notification failed for ${sellerId}:`, err))
       ),
+
+      // 4. Push notification to all available riders — so they know a new
+      //    order is waiting without having to manually refresh their dashboard
+      ...orders.map((order) =>
+        import('@/lib/push/sendPushNotification')
+          .then(({ notifyAvailableRiders }) => notifyAvailableRiders(order.orderNumber))
+          .catch(err => console.error(`⚠️  Rider push notification failed for ${order.orderNumber}:`, err))
+      ),
     ]).then(results => {
       results.forEach((r, i) => {
         if (r.status === 'rejected') {
