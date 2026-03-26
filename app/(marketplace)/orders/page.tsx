@@ -135,16 +135,19 @@ export default function OrdersPage() {
 
       {/* ── Success toast ─────────────────────────────────────────────── */}
       {showSuccess && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 animate-in slide-in-from-top-3 duration-300">
-          <div className="bg-gray-900 text-white rounded-2xl px-5 py-4 shadow-2xl flex items-start gap-3">
+        <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 animate-in slide-in-from-top-3 duration-300">
+          <div className="w-full max-w-md bg-gray-900 text-white rounded-2xl px-4 py-3 shadow-2xl flex items-start gap-3">
             <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
               <CheckCircle className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm">🎉 {successMessage}</p>
+              <p className="font-bold text-sm leading-snug break-words">🎉 {successMessage}</p>
               <p className="text-xs text-gray-400 mt-0.5">Seller has been notified!</p>
             </div>
-            <button onClick={() => setShowSuccess(false)} className="text-gray-400 hover:text-white flex-shrink-0">
+            <button
+              onClick={() => setShowSuccess(false)}
+              className="text-gray-400 hover:text-white flex-shrink-0 ml-1 mt-0.5"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>

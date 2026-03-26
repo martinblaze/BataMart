@@ -1,3 +1,4 @@
+// lib/push/sendPushNotification.ts
 import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email/sendEmail'
@@ -22,7 +23,9 @@ interface PushPayload {
   requireInteraction?: boolean
 }
 
-// Returns true if at least one push was delivered
+// ─── Send push to all subscriptions for a user ───────────────────────────────
+// Returns true if at least one push succeeded.
+// Stale/expired subscriptions (410/404) are auto-deleted.
 async function sendPushToUser(userId: string, payload: PushPayload): Promise<boolean> {
   try {
     const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } })
@@ -35,40 +38,74 @@ async function sendPushToUser(userId: string, payload: PushPayload): Promise<boo
           keys: { p256dh: sub.p256dh, auth: sub.auth },
         }
         try {
-          await webpush.sendNotification(pushSub, JSON.stringify(payload))
+          await webpush.sendNotification(
+            pushSub,
+            JSON.stringify({
+              title: payload.title,
+              body: payload.message,
+              url: payload.url || '/',
+              tag: payload.tag,
+              requireInteraction: payload.requireInteraction ?? false,
+              icon: '/icon-192x192.png',
+              badge: '/badge-72x72.png',
+            })
+          )
         } catch (error: any) {
+          // 410 Gone / 404 Not Found = subscription is dead, remove it
           if (error.statusCode === 410 || error.statusCode === 404) {
-            await prisma.pushSubscription.delete({ where: { id: sub.id } })
+            console.log(`[Push] Removing stale subscription for user ${userId}`)
+            await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
+          } else {
+            console.error(`[Push] Failed to send to ${sub.endpoint.slice(0, 40)}:`, error.statusCode, error.body)
           }
           throw error
         }
       })
     )
 
-    return results.some((r) => r.status === 'fulfilled')
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length
+    const failed = results.length - succeeded
+    if (succeeded > 0) {
+      console.log(`[Push] ✅ ${succeeded}/${results.length} push(es) delivered to user ${userId}`)
+    }
+    return succeeded > 0
   } catch {
     return false
   }
 }
 
+// ─── Get user email ───────────────────────────────────────────────────────────
 async function getUserEmail(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } })
   return user?.email ?? null
 }
 
-// Push first — email only if push fails or no subscription
+// ─── Core notify function ─────────────────────────────────────────────────────
+// STRATEGY: Always try push first.
+// If push fails (no subscription or all pushes fail) → send email as fallback.
+// This ensures the user ALWAYS gets the notification one way or another.
 async function notify(
   userId: string,
   push: PushPayload,
   emailFn: () => Promise<{ subject: string; html: string }>
 ) {
-  const pushed = await sendPushToUser(userId, push)
-  if (!pushed) {
-    const email = await getUserEmail(userId)
-    if (email) {
-      const { subject, html } = await emailFn()
-      await sendEmail({ to: email, subject, html })
+  try {
+    const pushed = await sendPushToUser(userId, push)
+
+    if (!pushed) {
+      // No push subscription or all pushes failed — send email instead
+      const email = await getUserEmail(userId)
+      if (email) {
+        const { subject, html } = await emailFn()
+        await sendEmail({ to: email, subject, html })
+        console.log(`[Notify] 📧 Email fallback sent to ${email} for "${push.title}"`)
+      } else {
+        console.warn(`[Notify] ⚠️ No push & no email found for user ${userId}`)
+      }
     }
+  } catch (error) {
+    console.error(`[Notify] ❌ Failed to notify user ${userId}:`, error)
+    // Never let notification failure crash the caller
   }
 }
 
@@ -77,7 +114,12 @@ async function notify(
 export async function notifyOrderPlaced(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '🛒 Order Placed!', message: `Your order #${orderNumber} was placed successfully.`, url: `/orders/${orderNumber}`, tag: 'order-placed' },
+    {
+      title: '🛒 Order Placed!',
+      message: `Your order #${orderNumber} was placed successfully. The seller has been notified.`,
+      url: `/orders`,
+      tag: 'order-placed',
+    },
     async () => orderPlacedEmail(orderNumber)
   )
 }
@@ -85,7 +127,13 @@ export async function notifyOrderPlaced(buyerId: string, orderNumber: string) {
 export async function notifyNewOrder(sellerId: string, orderNumber: string) {
   await notify(
     sellerId,
-    { title: '🎉 New Order!', message: `You have a new order #${orderNumber}. Confirm it now.`, url: `/orders/sales`, tag: 'new-order', requireInteraction: true },
+    {
+      title: '🎉 New Order!',
+      message: `You have a new order #${orderNumber}. Check your dashboard to confirm it now.`,
+      url: `/my-shop`,
+      tag: 'new-order',
+      requireInteraction: true,
+    },
     async () => newOrderEmail(orderNumber)
   )
 }
@@ -93,7 +141,12 @@ export async function notifyNewOrder(sellerId: string, orderNumber: string) {
 export async function notifyRiderAssigned(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '🚴 Rider Assigned', message: `A rider has been assigned to order #${orderNumber}.`, url: `/orders/${orderNumber}`, tag: 'rider-assigned' },
+    {
+      title: '🚴 Rider Assigned',
+      message: `A rider has been assigned to your order #${orderNumber}. They will pick it up soon.`,
+      url: `/orders`,
+      tag: 'rider-assigned',
+    },
     async () => riderAssignedEmail(orderNumber)
   )
 }
@@ -101,7 +154,13 @@ export async function notifyRiderAssigned(buyerId: string, orderNumber: string) 
 export async function notifyOrderOnTheWay(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '🛵 Order On The Way!', message: `Your order #${orderNumber} is on its way.`, url: `/orders/${orderNumber}`, tag: 'order-on-the-way', requireInteraction: true },
+    {
+      title: '🛵 Order On The Way!',
+      message: `Your order #${orderNumber} has been picked up and is heading to you now!`,
+      url: `/orders`,
+      tag: 'order-on-the-way',
+      requireInteraction: true,
+    },
     async () => orderOnTheWayEmail(orderNumber)
   )
 }
@@ -109,7 +168,13 @@ export async function notifyOrderOnTheWay(buyerId: string, orderNumber: string) 
 export async function notifyOrderDelivered(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '✅ Order Delivered!', message: `Your order #${orderNumber} has been delivered.`, url: `/orders/${orderNumber}`, tag: 'order-delivered', requireInteraction: true },
+    {
+      title: '✅ Order Delivered!',
+      message: `Your order #${orderNumber} has been delivered. Please confirm receipt to release payment.`,
+      url: `/orders`,
+      tag: 'order-delivered',
+      requireInteraction: true,
+    },
     async () => orderDeliveredEmail(orderNumber)
   )
 }
@@ -117,7 +182,13 @@ export async function notifyOrderDelivered(buyerId: string, orderNumber: string)
 export async function notifyPaymentReceived(sellerId: string, amount: string) {
   await notify(
     sellerId,
-    { title: '💰 Payment Received', message: `You received a payment of ${amount}.`, url: `/wallet`, tag: 'payment-received' },
+    {
+      title: '💰 Payment Received!',
+      message: `You received a payment of ${amount}. It has been added to your wallet.`,
+      url: `/wallet`,
+      tag: 'payment-received',
+      requireInteraction: true,
+    },
     async () => paymentReceivedEmail(amount)
   )
 }
@@ -125,7 +196,12 @@ export async function notifyPaymentReceived(sellerId: string, amount: string) {
 export async function notifyWithdrawalProcessed(userId: string, amount: string) {
   await notify(
     userId,
-    { title: '💸 Withdrawal Processed', message: `Your withdrawal of ${amount} has been processed.`, url: `/wallet`, tag: 'withdrawal-processed' },
+    {
+      title: '💸 Withdrawal Processed',
+      message: `Your withdrawal of ${amount} has been processed successfully.`,
+      url: `/wallet`,
+      tag: 'withdrawal-processed',
+    },
     async () => withdrawalProcessedEmail(amount)
   )
 }
@@ -133,7 +209,13 @@ export async function notifyWithdrawalProcessed(userId: string, amount: string) 
 export async function notifyDisputeOpened(userId: string, orderNumber: string) {
   await notify(
     userId,
-    { title: '⚠️ Dispute Opened', message: `A dispute was opened for order #${orderNumber}.`, url: `/disputes`, tag: 'dispute-opened', requireInteraction: true },
+    {
+      title: '⚠️ Dispute Opened',
+      message: `A dispute was opened for order #${orderNumber}. Please respond as soon as possible.`,
+      url: `/disputes`,
+      tag: 'dispute-opened',
+      requireInteraction: true,
+    },
     async () => disputeOpenedEmail(orderNumber)
   )
 }
@@ -141,7 +223,12 @@ export async function notifyDisputeOpened(userId: string, orderNumber: string) {
 export async function notifyDisputeResolved(userId: string, orderNumber: string) {
   await notify(
     userId,
-    { title: '✅ Dispute Resolved', message: `The dispute for order #${orderNumber} has been resolved.`, url: `/disputes`, tag: 'dispute-resolved' },
+    {
+      title: '✅ Dispute Resolved',
+      message: `The dispute for order #${orderNumber} has been resolved. Check the outcome.`,
+      url: `/disputes`,
+      tag: 'dispute-resolved',
+    },
     async () => disputeResolvedEmail(orderNumber)
   )
 }
@@ -149,38 +236,35 @@ export async function notifyDisputeResolved(userId: string, orderNumber: string)
 export async function notifyNewReview(sellerId: string, productName: string) {
   await notify(
     sellerId,
-    { title: '⭐ New Review', message: `${productName} just received a new review.`, url: `/reviews`, tag: 'new-review' },
+    {
+      title: '⭐ New Review',
+      message: `"${productName}" just received a new review. Check it out!`,
+      url: `/my-shop`,
+      tag: 'new-review',
+    },
     async () => newReviewEmail(productName)
   )
 }
 
-// ─── NEW: Notify all available riders of a new order ─────────────────────────
-// Finds every rider who is available, has no active delivery, and has a push
-// subscription, then fires a push to each of them.
-// This is fire-and-forget safe — individual rider push failures are logged
-// but do not affect the order flow.
+// ─── Notify all available riders of a new order ──────────────────────────────
+// Fire-and-forget: failures are isolated and logged but never crash the order flow.
 export async function notifyAvailableRiders(orderNumber: string): Promise<void> {
   try {
-    // Find all available riders who have no active delivery in progress
     const availableRiders = await prisma.user.findMany({
       where: {
         role: 'RIDER',
         isAvailable: true,
         isDeleted: false,
         isSuspended: false,
-        // Exclude riders who already have an active delivery
+        // Exclude riders already on an active delivery
         riderDeliveries: {
           none: {
-            status: {
-              in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'],
-            },
+            status: { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'] },
             isDisputed: false,
           },
         },
-        // Only target riders who have a push subscription (no point querying others)
-        pushSubscriptions: {
-          some: {},
-        },
+        // Only target riders with a push subscription
+        pushSubscriptions: { some: {} },
       },
       select: { id: true },
     })
@@ -192,7 +276,7 @@ export async function notifyAvailableRiders(orderNumber: string): Promise<void> 
 
     const payload: PushPayload = {
       title: '🛵 New Order Available!',
-      message: `Order #${orderNumber} is ready for pickup. Open the app to accept it.`,
+      message: `Order #${orderNumber} is ready for pickup. Open the app to accept it now.`,
       url: '/rider-dashboard',
       tag: 'new-order-available',
       requireInteraction: true,
@@ -200,14 +284,12 @@ export async function notifyAvailableRiders(orderNumber: string): Promise<void> 
 
     console.log(`[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`)
 
-    // Push to all available riders in parallel — failures are isolated
     const results = await Promise.allSettled(
       availableRiders.map((rider) => sendPushToUser(rider.id, payload))
     )
 
     const succeeded = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
-    const failed = results.length - succeeded
-    console.log(`[Push] Rider notifications: ${succeeded} delivered, ${failed} failed for order #${orderNumber}`)
+    console.log(`[Push] Rider notifications: ${succeeded}/${results.length} delivered for order #${orderNumber}`)
   } catch (error) {
     console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
   }
