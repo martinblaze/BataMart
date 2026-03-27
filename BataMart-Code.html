@@ -164,7 +164,6 @@ export default function RootLayout({
           &lt;SuspensionGuard /&gt;
           &lt;NavbarWrapper /&gt;
           &lt;NotificationPrompt /&gt;
-          &lt;NavbarWrapper /&gt;
           &lt;IOSAppShell&gt;
             {children}
           &lt;/IOSAppShell&gt;
@@ -7878,16 +7877,19 @@ export default function OrdersPage() {
 
       {/* ── Success toast ─────────────────────────────────────────────── */}
       {showSuccess &amp;&amp; (
-        &lt;div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 animate-in slide-in-from-top-3 duration-300"&gt;
-          &lt;div className="bg-gray-900 text-white rounded-2xl px-5 py-4 shadow-2xl flex items-start gap-3"&gt;
+        &lt;div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 animate-in slide-in-from-top-3 duration-300"&gt;
+          &lt;div className="w-full max-w-md bg-gray-900 text-white rounded-2xl px-4 py-3 shadow-2xl flex items-start gap-3"&gt;
             &lt;div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"&gt;
               &lt;CheckCircle className="w-4 h-4" /&gt;
             &lt;/div&gt;
             &lt;div className="flex-1 min-w-0"&gt;
-              &lt;p className="font-bold text-sm"&gt;🎉 {successMessage}&lt;/p&gt;
+              &lt;p className="font-bold text-sm leading-snug break-words"&gt;🎉 {successMessage}&lt;/p&gt;
               &lt;p className="text-xs text-gray-400 mt-0.5"&gt;Seller has been notified!&lt;/p&gt;
             &lt;/div&gt;
-            &lt;button onClick={() =&gt; setShowSuccess(false)} className="text-gray-400 hover:text-white flex-shrink-0"&gt;
+            &lt;button
+              onClick={() =&gt; setShowSuccess(false)}
+              className="text-gray-400 hover:text-white flex-shrink-0 ml-1 mt-0.5"
+            &gt;
               &lt;X className="w-4 h-4" /&gt;
             &lt;/button&gt;
           &lt;/div&gt;
@@ -13406,16 +13408,34 @@ export default function IosInstallPrompt() {
 }</pre></div>
 <div class='file-block'><div class='file-header'>components/PWARegister.tsx</div><pre>'use client'
 
+// components/PWARegister.tsx
+// Registers the service worker and sets up token message handler
+// so the SW can re-subscribe when push subscription auto-refreshes.
+
 import { useEffect } from 'react'
 
 export default function PWARegister() {
   useEffect(() =&gt; {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then(() =&gt; console.log('SW registered'))
-        .catch(err =&gt; console.log('SW error', err))
-    }
+    if (!('serviceWorker' in navigator)) return
+
+    // Register SW
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then((registration) =&gt; {
+        console.log('[PWA] Service worker registered:', registration.scope)
+      })
+      .catch((err) =&gt; {
+        console.error('[PWA] Service worker registration failed:', err)
+      })
+
+    // Listen for token requests from the service worker
+    // (used during pushsubscriptionchange to re-save the subscription)
+    navigator.serviceWorker.addEventListener('message', (event) =&gt; {
+      if (event.data?.type === 'GET_TOKEN') {
+        const token = localStorage.getItem('token')
+        event.ports[0]?.postMessage(token)
+      }
+    })
   }, [])
 
   return null
@@ -14968,8 +14988,11 @@ export function NavbarWrapper() {
 }</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/NotificationBell.tsx</div><pre>'use client'
 
-import { useState, useEffect } from 'react'
-import { Bell, X, Check, Trash2 } from 'lucide-react'
+// components/layout/NotificationBell.tsx
+// Real-time notification bell with polling, mark-as-read, and delete.
+
+import { useState, useEffect, useCallback } from 'react'
+import { Bell, X, Trash2, CheckCheck } from 'lucide-react'
 import Link from 'next/link'
 
 interface Notification {
@@ -14986,247 +15009,266 @@ interface Notification {
   metadata?: any
 }
 
+const NOTIFICATION_ICONS: Record&lt;string, string&gt; = {
+  ORDER_PLACED: '🛒',
+  RIDER_ASSIGNED: '🚴',
+  ORDER_PICKED_UP: '📦',
+  ORDER_ON_THE_WAY: '🛵',
+  ORDER_DELIVERED: '✅',
+  ORDER_COMPLETED: '🎉',
+  PRODUCT_REVIEWED: '⭐',
+  SELLER_REVIEWED: '⭐',
+  RIDER_REVIEWED: '⭐',
+  DISPUTE_OPENED: '⚠️',
+  DISPUTE_MESSAGE: '💬',
+  DISPUTE_RESOLVED: '✅',
+  REPORT_SUBMITTED: '⚠️',
+  REPORT_RESOLVED: '✅',
+  PENALTY_ISSUED: '🚫',
+  PAYMENT_RECEIVED: '💰',
+  WITHDRAWAL_PROCESSED: '💸',
+  ACCOUNT_SUSPENDED: '🚫',
+  ACCOUNT_UNSUSPENDED: '✅',
+  REFERRAL_REWARD: '🎁',
+}
+
+function getNotificationLink(notification: Notification): string {
+  if (notification.orderId) return `/orders/${notification.orderId}`
+  if (notification.disputeId) return `/disputes/${notification.disputeId}`
+  if (notification.productId) return `/product/${notification.productId}`
+  if (notification.type === 'PAYMENT_RECEIVED' || notification.type === 'WITHDRAWAL_PROCESSED') return '/wallet'
+  if (notification.type === 'ACCOUNT_SUSPENDED' || notification.type === 'ACCOUNT_UNSUSPENDED') return '/myprofile'
+  return '/notifications'
+}
+
+function timeAgo(dateString: string): string {
+  const diff = Date.now() - new Date(dateString).getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  if (minutes &lt; 1) return 'Just now'
+  if (minutes &lt; 60) return `${minutes}m ago`
+  if (hours &lt; 24) return `${hours}h ago`
+  if (days &lt; 7) return `${days}d ago`
+  return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState&lt;Notification[]&gt;([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [lastFetched, setLastFetched] = useState(0)
 
-  // Fetch notifications
-  const fetchNotifications = async () =&gt; {
+  // ── Fetch notifications ──────────────────────────────────────────────────
+  const fetchNotifications = useCallback(async (force = false) =&gt; {
+    // Debounce: don't re-fetch if fetched within last 10s unless forced
+    if (!force &amp;&amp; Date.now() - lastFetched &lt; 10_000) return
+
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('/api/notifications', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      if (!token) return
+
+      const res = await fetch('/api/notifications?limit=50', {
+        headers: { Authorization: `Bearer ${token}` },
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        setNotifications(data.notifications)
-        setUnreadCount(data.unreadCount)
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data.notifications || [])
+        setUnreadCount(data.unreadCount || 0)
+        setLastFetched(Date.now())
       }
-    } catch (error) {
-      console.error('Fetch notifications error:', error)
+    } catch (err) {
+      console.error('[NotificationBell] Fetch error:', err)
     }
-  }
+  }, [lastFetched])
 
-  // Mark as read
-  const markAsRead = async (notificationIds: string[]) =&gt; {
+  // Poll every 30s; also fetch immediately on mount
+  useEffect(() =&gt; {
+    fetchNotifications(true)
+    const interval = setInterval(() =&gt; fetchNotifications(true), 30_000)
+    return () =&gt; clearInterval(interval)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch fresh when opening the dropdown
+  useEffect(() =&gt; {
+    if (isOpen) fetchNotifications(true)
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Mark as read ─────────────────────────────────────────────────────────
+  const markAsRead = async (ids: string[]) =&gt; {
+    // Optimistic update
+    setNotifications((prev) =&gt;
+      prev.map((n) =&gt; (ids.includes(n.id) ? { ...n, isRead: true } : n))
+    )
+    setUnreadCount((prev) =&gt; Math.max(0, prev - ids.filter((id) =&gt; {
+      const n = notifications.find((n) =&gt; n.id === id)
+      return n &amp;&amp; !n.isRead
+    }).length))
+
     try {
       const token = localStorage.getItem('token')
       await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ notificationIds })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ notificationIds: ids }),
       })
-
-      // Update local state
-      setNotifications(prev =&gt;
-        prev.map(n =&gt;
-          notificationIds.includes(n.id) ? { ...n, isRead: true } : n
-        )
-      )
-      setUnreadCount(prev =&gt; Math.max(0, prev - notificationIds.length))
-    } catch (error) {
-      console.error('Mark as read error:', error)
+    } catch (err) {
+      console.error('[NotificationBell] markAsRead error:', err)
     }
   }
 
-  // Mark all as read
   const markAllAsRead = async () =&gt; {
+    // Optimistic update
+    setNotifications((prev) =&gt; prev.map((n) =&gt; ({ ...n, isRead: true })))
+    setUnreadCount(0)
+
     try {
       const token = localStorage.getItem('token')
       await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ markAllAsRead: true })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ markAllAsRead: true }),
       })
-
-      setNotifications(prev =&gt; prev.map(n =&gt; ({ ...n, isRead: true })))
-      setUnreadCount(0)
-    } catch (error) {
-      console.error('Mark all as read error:', error)
+    } catch (err) {
+      console.error('[NotificationBell] markAllAsRead error:', err)
     }
   }
 
-  // Delete notification
-  const deleteNotification = async (id: string) =&gt; {
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const deleteNotification = async (id: string, e: React.MouseEvent) =&gt; {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const notif = notifications.find((n) =&gt; n.id === id)
+    setNotifications((prev) =&gt; prev.filter((n) =&gt; n.id !== id))
+    if (notif &amp;&amp; !notif.isRead) setUnreadCount((prev) =&gt; Math.max(0, prev - 1))
+
     try {
       const token = localStorage.getItem('token')
       await fetch(`/api/notifications?id=${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` },
       })
-
-      setNotifications(prev =&gt; prev.filter(n =&gt; n.id !== id))
-      setUnreadCount(prev =&gt; Math.max(0, prev - (notifications.find(n =&gt; n.id === id)?.isRead ? 0 : 1)))
-    } catch (error) {
-      console.error('Delete notification error:', error)
+    } catch (err) {
+      console.error('[NotificationBell] delete error:', err)
     }
   }
 
-  // Get link for notification
-  const getNotificationLink = (notification: Notification) =&gt; {
-    if (notification.orderId) return `/orders/${notification.orderId}`
-    if (notification.productId) return `/product/${notification.productId}`
-    if (notification.disputeId) return `/disputes/${notification.disputeId}`
-    return '#'
-  }
-
-  // Format time ago
-  const timeAgo = (dateString: string) =&gt; {
-    const now = new Date().getTime()
-    const created = new Date(dateString).getTime()
-    const diff = now - created
-
-    const minutes = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days = Math.floor(diff / 86400000)
-
-    if (minutes &lt; 1) return 'Just now'
-    if (minutes &lt; 60) return `${minutes}m ago`
-    if (hours &lt; 24) return `${hours}h ago`
-    if (days &lt; 7) return `${days}d ago`
-    return new Date(dateString).toLocaleDateString()
-  }
-
-  // Get notification icon/emoji
-  const getNotificationIcon = (type: string) =&gt; {
-    const icons: Record&lt;string, string&gt; = {
-      ORDER_PLACED: '🛒',
-      RIDER_ASSIGNED: '🚴',
-      ORDER_PICKED_UP: '📦',
-      ORDER_ON_THE_WAY: '🛵',
-      ORDER_DELIVERED: '✅',
-      ORDER_COMPLETED: '🎉',
-      PRODUCT_REVIEWED: '⭐',
-      SELLER_REVIEWED: '⭐',
-      RIDER_REVIEWED: '⭐',
-      DISPUTE_OPENED: '⚠️',
-      DISPUTE_MESSAGE: '💬',
-      DISPUTE_RESOLVED: '✅',
-      REPORT_SUBMITTED: '⚠️',
-      REPORT_RESOLVED: '✅',
-      PENALTY_ISSUED: '⚠️',
-      PAYMENT_RECEIVED: '💰',
-      WITHDRAWAL_PROCESSED: '💸',
-      REFERRAL_REWARD: '🎁',
-    }
-    return icons[type] || '🔔'
-  }
-
-  // Poll for new notifications every 30 seconds
-  useEffect(() =&gt; {
-    fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30000)
-    return () =&gt; clearInterval(interval)
-  }, [])
-
-  // Handle notification click
-  const handleNotificationClick = (notification: Notification) =&gt; {
-    if (!notification.isRead) {
-      markAsRead([notification.id])
-    }
+  // ── Notification click ────────────────────────────────────────────────────
+  const handleClick = (notification: Notification) =&gt; {
+    if (!notification.isRead) markAsRead([notification.id])
     setIsOpen(false)
   }
 
   return (
     &lt;div className="relative"&gt;
-      {/* Bell Icon - Updated styling to match Cart size */}
+      {/* ── Bell button ── */}
       &lt;button
         onClick={() =&gt; setIsOpen(!isOpen)}
         className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+        aria-label={`Notifications${unreadCount &gt; 0 ? ` (${unreadCount} unread)` : ''}`}
       &gt;
         &lt;Bell className="w-6 h-6" /&gt;
         {unreadCount &gt; 0 &amp;&amp; (
-          &lt;span className="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center"&gt;
+          &lt;span className="absolute top-0 right-0 min-w-[20px] h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 leading-none"&gt;
             {unreadCount &gt; 99 ? '99+' : unreadCount}
           &lt;/span&gt;
         )}
       &lt;/button&gt;
 
-      {/* Dropdown */}
+      {/* ── Dropdown ── */}
       {isOpen &amp;&amp; (
         &lt;&gt;
-          &lt;div
-            className="fixed inset-0 z-40"
-            onClick={() =&gt; setIsOpen(false)}
-          /&gt;
-          &lt;div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-[384px] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-[70vh] overflow-hidden flex flex-col"&gt;
+          {/* Backdrop */}
+          &lt;div className="fixed inset-0 z-40" onClick={() =&gt; setIsOpen(false)} /&gt;
+
+          &lt;div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-[384px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 flex flex-col overflow-hidden"
+            style={{ maxHeight: '75vh' }}
+          &gt;
             {/* Header */}
-            &lt;div className="p-4 border-b border-gray-200 flex items-center justify-between"&gt;
-              &lt;h3 className="font-bold text-lg"&gt;Notifications&lt;/h3&gt;
-              &lt;div className="flex items-center gap-2"&gt;
+            &lt;div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0"&gt;
+              &lt;h3 className="font-black text-gray-900 text-base"&gt;
+                Notifications
+                {unreadCount &gt; 0 &amp;&amp; (
+                  &lt;span className="ml-2 text-xs font-bold text-white bg-red-500 px-2 py-0.5 rounded-full"&gt;
+                    {unreadCount} new
+                  &lt;/span&gt;
+                )}
+              &lt;/h3&gt;
+              &lt;div className="flex items-center gap-1"&gt;
                 {unreadCount &gt; 0 &amp;&amp; (
                   &lt;button
                     onClick={markAllAsRead}
-                    className="text-sm text-BATAMART-primary hover:text-BATAMART-dark font-medium"
+                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                    title="Mark all as read"
                   &gt;
-                    Mark all read
+                    &lt;CheckCheck className="w-3.5 h-3.5" /&gt;
+                    All read
                   &lt;/button&gt;
                 )}
                 &lt;button
                   onClick={() =&gt; setIsOpen(false)}
-                  className="p-1 hover:bg-gray-100 rounded-full"
+                  className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
                 &gt;
-                  &lt;X className="w-5 h-5" /&gt;
+                  &lt;X className="w-4 h-4 text-gray-500" /&gt;
                 &lt;/button&gt;
               &lt;/div&gt;
             &lt;/div&gt;
 
-            {/* Notifications List */}
+            {/* List */}
             &lt;div className="overflow-y-auto flex-1"&gt;
               {notifications.length === 0 ? (
-                &lt;div className="p-8 text-center text-gray-500"&gt;
-                  &lt;Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" /&gt;
-                  &lt;p&gt;No notifications yet&lt;/p&gt;
+                &lt;div className="flex flex-col items-center justify-center py-12 px-6 text-center"&gt;
+                  &lt;div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mb-3 ring-1 ring-gray-100"&gt;
+                    &lt;Bell className="w-7 h-7 text-gray-300" /&gt;
+                  &lt;/div&gt;
+                  &lt;p className="font-bold text-gray-700 text-sm"&gt;No notifications yet&lt;/p&gt;
+                  &lt;p className="text-xs text-gray-400 mt-1"&gt;You're all caught up!&lt;/p&gt;
                 &lt;/div&gt;
               ) : (
-                &lt;div className="divide-y divide-gray-100"&gt;
+                &lt;div className="divide-y divide-gray-50"&gt;
                   {notifications.map((notification) =&gt; (
-                    &lt;div
+                    &lt;Link
                       key={notification.id}
-                      className={`p-4 hover:bg-gray-50 transition-colors ${!notification.isRead ? 'bg-blue-50' : ''
-                        }`}
+                      href={getNotificationLink(notification)}
+                      onClick={() =&gt; handleClick(notification)}
+                      className={`flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 group ${
+                        !notification.isRead ? 'bg-blue-50/60' : ''
+                      }`}
                     &gt;
-                      &lt;div className="flex items-start gap-3"&gt;
-                        &lt;span className="text-2xl flex-shrink-0"&gt;
-                          {getNotificationIcon(notification.type)}
-                        &lt;/span&gt;
-                        &lt;div className="flex-1 min-w-0"&gt;
-                          &lt;Link
-                            href={getNotificationLink(notification)}
-                            onClick={() =&gt; handleNotificationClick(notification)}
-                          &gt;
-                            &lt;h4 className="font-semibold text-gray-900 text-sm mb-1"&gt;
-                              {notification.title}
-                            &lt;/h4&gt;
-                            &lt;p className="text-sm text-gray-600 line-clamp-2"&gt;
-                              {notification.message}
-                            &lt;/p&gt;
-                            &lt;p className="text-xs text-gray-400 mt-1"&gt;
-                              {timeAgo(notification.createdAt)}
-                            &lt;/p&gt;
-                          &lt;/Link&gt;
-                        &lt;/div&gt;
+                      {/* Icon */}
+                      &lt;span className="text-xl flex-shrink-0 mt-0.5"&gt;
+                        {NOTIFICATION_ICONS[notification.type] || '🔔'}
+                      &lt;/span&gt;
+
+                      {/* Content */}
+                      &lt;div className="flex-1 min-w-0"&gt;
+                        &lt;p className={`text-sm leading-snug ${!notification.isRead ? 'font-bold text-gray-900' : 'font-semibold text-gray-700'}`}&gt;
+                          {notification.title}
+                        &lt;/p&gt;
+                        &lt;p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-relaxed"&gt;
+                          {notification.message}
+                        &lt;/p&gt;
+                        &lt;p className="text-[10px] text-gray-400 mt-1 font-medium"&gt;
+                          {timeAgo(notification.createdAt)}
+                        &lt;/p&gt;
+                      &lt;/div&gt;
+
+                      {/* Unread dot + delete */}
+                      &lt;div className="flex flex-col items-center gap-2 flex-shrink-0"&gt;
+                        {!notification.isRead &amp;&amp; (
+                          &lt;span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" /&gt;
+                        )}
                         &lt;button
-                          onClick={() =&gt; deleteNotification(notification.id)}
-                          className="p-1 hover:bg-gray-200 rounded-full flex-shrink-0"
+                          onClick={(e) =&gt; deleteNotification(notification.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded-full transition-all"
+                          title="Delete"
                         &gt;
-                          &lt;Trash2 className="w-4 h-4 text-gray-400" /&gt;
+                          &lt;Trash2 className="w-3.5 h-3.5 text-gray-400" /&gt;
                         &lt;/button&gt;
                       &lt;/div&gt;
-                    &lt;/div&gt;
+                    &lt;/Link&gt;
                   ))}
                 &lt;/div&gt;
               )}
@@ -15234,13 +15276,13 @@ export default function NotificationBell() {
 
             {/* Footer */}
             {notifications.length &gt; 0 &amp;&amp; (
-              &lt;div className="p-3 border-t border-gray-200 text-center"&gt;
+              &lt;div className="px-4 py-3 border-t border-gray-100 flex-shrink-0 text-center"&gt;
                 &lt;Link
                   href="/notifications"
-                  className="text-sm text-BATAMART-primary hover:text-BATAMART-dark font-medium"
                   onClick={() =&gt; setIsOpen(false)}
+                  className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
                 &gt;
-                  View All Notifications
+                  View all notifications →
                 &lt;/Link&gt;
               &lt;/div&gt;
             )}
@@ -17242,127 +17284,158 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array&lt;ArrayBuffer&
   return outputArray
 }
 
-// ── Global floating NotificationPrompt (passive nudge) ───────────────────────
-// Shown on every page except when snoozed.
-// "Not Now" snoozes for 24h, then shows again — never dismisses forever.
+// ── Global NotificationPrompt ─────────────────────────────────────────────────
+// Rendered as a BOTTOM SHEET — slides up from below the bottom nav.
+// Does NOT use fixed positioning that fights with IOSAppShell / z-index stacks.
+// Backdrop dims the page, sheet sits above everything at z-[9999].
 export function NotificationPrompt() {
   const { shouldShowPassive, snooze, markGranted } = useNotificationNudge()
   const { isLoading, subscribe } = usePushSubscription()
   const [visible, setVisible] = useState(false)
+  const [animOut, setAnimOut] = useState(false)
 
   useEffect(() =&gt; {
     if (!shouldShowPassive) return
-    // Delay so it doesn't slam in on page load
     const t = setTimeout(() =&gt; setVisible(true), 3000)
     return () =&gt; clearTimeout(t)
   }, [shouldShowPassive])
+
+  const dismiss = (andSnooze = true) =&gt; {
+    setAnimOut(true)
+    setTimeout(() =&gt; {
+      setVisible(false)
+      setAnimOut(false)
+      if (andSnooze) snooze()
+    }, 280)
+  }
 
   const handleEnable = async () =&gt; {
     const granted = await subscribe()
     if (granted) {
       markGranted()
-      setVisible(false)
+      dismiss(false)
     }
-  }
-
-  const handleSnooze = () =&gt; {
-    setVisible(false)
-    snooze()
   }
 
   if (!visible) return null
 
   return (
-    &lt;div
-      className="fixed right-4 z-[9990] w-[calc(100vw-2rem)] max-w-[320px]"
-      style={{
-        bottom: 'calc(72px + max(env(safe-area-inset-bottom), 16px) + 12px)',
-        animation: 'notifSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards',
-      }}
-    &gt;
+    &lt;&gt;
       &lt;style&gt;{`
-        @keyframes notifSlideIn {
-          from { opacity: 0; transform: translateY(16px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes npBackdropIn  { from{opacity:0} to{opacity:1} }
+        @keyframes npBackdropOut { from{opacity:1} to{opacity:0} }
+        @keyframes npSheetIn     { from{transform:translateY(100%)} to{transform:translateY(0)} }
+        @keyframes npSheetOut    { from{transform:translateY(0)} to{transform:translateY(100%)} }
+        @keyframes npBellRing {
+          0%,100%{transform:rotate(0)}
+          15%{transform:rotate(14deg)}
+          30%{transform:rotate(-10deg)}
+          45%{transform:rotate(8deg)}
+          60%{transform:rotate(-5deg)}
+          75%{transform:rotate(3deg)}
         }
-        @keyframes bellRing {
-          0%,100% { transform: rotate(0); }
-          15%      { transform: rotate(14deg); }
-          30%      { transform: rotate(-10deg); }
-          45%      { transform: rotate(8deg); }
-          60%      { transform: rotate(-6deg); }
-          75%      { transform: rotate(4deg); }
+        .np-backdrop {
+          animation: ${animOut ? 'npBackdropOut' : 'npBackdropIn'} 0.28s ease forwards;
         }
-        .bell-ring-anim { animation: bellRing 1.6s ease 0.6s both; }
+        .np-sheet {
+          animation: ${animOut ? 'npSheetOut' : 'npSheetIn'} 0.32s cubic-bezier(0.32,0.72,0,1) forwards;
+        }
+        .np-bell { animation: npBellRing 1.6s ease 0.5s both; }
       `}&lt;/style&gt;
 
-      &lt;div className="rounded-2xl overflow-hidden"
-        style={{
-          background: '#fff',
-          boxShadow: '0 8px 32px rgba(26,63,143,0.16), 0 2px 8px rgba(0,0,0,0.06)',
-          border: '1px solid rgba(59,158,245,0.15)',
-        }}
+      {/* Backdrop — tapping it snoozes */}
+      &lt;div
+        className="np-backdrop fixed inset-0 z-[9998] bg-black/30"
+        onClick={() =&gt; dismiss(true)}
+      /&gt;
+
+      {/* Sheet — anchored to viewport bottom, full width, never clips content */}
+      &lt;div
+        className="np-sheet fixed left-0 right-0 bottom-0 z-[9999] bg-white rounded-t-3xl overflow-hidden"
+        style={{ boxShadow: '0 -8px 40px rgba(0,0,0,0.18)' }}
       &gt;
-        &lt;div className="h-1" style={{ background: 'linear-gradient(90deg,#1a3f8f,#3b9ef5)' }} /&gt;
-        &lt;div className="p-4"&gt;
-          &lt;div className="flex items-start gap-3 mb-3"&gt;
-            &lt;div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bell-ring-anim"
-              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)', boxShadow: '0 4px 12px rgba(26,63,143,0.3)' }}
+        {/* Gradient accent bar */}
+        &lt;div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#1a3f8f,#3b9ef5)' }} /&gt;
+
+        {/* Drag handle */}
+        &lt;div className="flex justify-center pt-3 pb-1"&gt;
+          &lt;div className="w-10 h-1 bg-gray-200 rounded-full" /&gt;
+        &lt;/div&gt;
+
+        &lt;div className="px-5 pt-2 pb-6" style={{ paddingBottom: 'calc(24px + max(env(safe-area-inset-bottom), 16px))' }}&gt;
+
+          {/* Header row */}
+          &lt;div className="flex items-start gap-3 mb-4"&gt;
+            &lt;div
+              className="np-bell flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)', boxShadow: '0 4px 14px rgba(26,63,143,0.35)' }}
             &gt;
-              &lt;svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
+              &lt;svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}&gt;
                 &lt;path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /&gt;
               &lt;/svg&gt;
             &lt;/div&gt;
+
             &lt;div className="flex-1 min-w-0"&gt;
-              &lt;p className="font-bold text-gray-900 text-sm leading-tight"&gt;Stay in the loop 🔔&lt;/p&gt;
-              &lt;p className="text-xs text-gray-500 mt-1 leading-relaxed"&gt;
-                Get notified about your orders, deliveries, and messages instantly.
+              &lt;p className="font-bold text-gray-900 text-base leading-snug"&gt;Stay in the loop 🔔&lt;/p&gt;
+              &lt;p className="text-sm text-gray-500 mt-1 leading-relaxed"&gt;
+                Get notified about your orders, deliveries, and messages — even when the app is closed.
               &lt;/p&gt;
             &lt;/div&gt;
+
             &lt;button
-              onClick={handleSnooze}
-              className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors -mt-0.5 -mr-0.5"
+              onClick={() =&gt; dismiss(true)}
+              className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-gray-200 transition-colors -mt-0.5 -mr-1"
             &gt;
-              &lt;svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
+              &lt;svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}&gt;
                 &lt;path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /&gt;
               &lt;/svg&gt;
             &lt;/button&gt;
           &lt;/div&gt;
 
-          &lt;div className="flex flex-wrap gap-1.5 mb-3"&gt;
-            {['Order updates', 'Delivery alerts', 'New messages'].map((label) =&gt; (
-              &lt;span key={label} className="text-[10px] font-medium px-2 py-1 rounded-full"
-                style={{ background: 'rgba(59,158,245,0.08)', color: '#1a3f8f' }}
+          {/* Benefit chips */}
+          &lt;div className="flex flex-wrap gap-2 mb-5"&gt;
+            {[
+              { icon: '📦', text: 'Order updates' },
+              { icon: '🛵', text: 'Delivery alerts' },
+              { icon: '💬', text: 'New messages' },
+            ].map(({ icon, text }) =&gt; (
+              &lt;span
+                key={text}
+                className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full"
+                style={{ background: 'rgba(59,158,245,0.09)', color: '#1a3f8f' }}
               &gt;
-                ✓ {label}
+                {icon} {text}
               &lt;/span&gt;
             ))}
           &lt;/div&gt;
 
-          &lt;div className="flex gap-2"&gt;
-            &lt;button
-              onClick={handleEnable}
-              disabled={isLoading}
-              className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-opacity"
-              style={{
-                background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)',
-                boxShadow: '0 4px 12px rgba(26,63,143,0.3)',
-                opacity: isLoading ? 0.7 : 1,
-              }}
-            &gt;
-              {isLoading ? 'Enabling…' : 'Enable Notifications'}
-            &lt;/button&gt;
-            &lt;button
-              onClick={handleSnooze}
-              className="px-3 py-2.5 rounded-xl text-xs font-medium text-gray-500 transition-colors"
-              style={{ background: '#f3f4f6' }}
-            &gt;
-              Later
-            &lt;/button&gt;
-          &lt;/div&gt;
+          {/* Buttons */}
+          &lt;button
+            onClick={handleEnable}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white text-sm font-bold transition-all disabled:opacity-60 active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)',
+              boxShadow: '0 4px 16px rgba(26,63,143,0.35)',
+              minHeight: '52px',
+            }}
+          &gt;
+            {isLoading
+              ? &lt;&gt;&lt;svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"&gt;&lt;circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/&gt;&lt;path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/&gt;&lt;/svg&gt; Enabling…&lt;/&gt;
+              : 'Enable Notifications'
+            }
+          &lt;/button&gt;
+
+          &lt;button
+            onClick={() =&gt; dismiss(true)}
+            className="w-full mt-2.5 py-3 rounded-2xl text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors active:scale-[0.98]"
+            style={{ minHeight: '44px' }}
+          &gt;
+            Maybe Later
+          &lt;/button&gt;
         &lt;/div&gt;
       &lt;/div&gt;
-    &lt;/div&gt;
+    &lt;/&gt;
   )
 }</pre></div>
 <div class='file-block'><div class='file-header'>create-admin.ts</div><pre>import { PrismaClient } from '@prisma/client';
@@ -25781,7 +25854,8 @@ export async function sendEmail({ to, subject, html }: EmailPayload) {
     console.error('Send email error:', error)
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>lib/push/sendPushNotification.ts</div><pre>import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
+<div class='file-block'><div class='file-header'>lib/push/sendPushNotification.ts</div><pre>// lib/push/sendPushNotification.ts
+import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email/sendEmail'
 import {
@@ -25805,7 +25879,9 @@ interface PushPayload {
   requireInteraction?: boolean
 }
 
-// Returns true if at least one push was delivered
+// ─── Send push to all subscriptions for a user ───────────────────────────────
+// Returns true if at least one push succeeded.
+// Stale/expired subscriptions (410/404) are auto-deleted.
 async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;boolean&gt; {
   try {
     const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } })
@@ -25818,40 +25894,74 @@ async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;
           keys: { p256dh: sub.p256dh, auth: sub.auth },
         }
         try {
-          await webpush.sendNotification(pushSub, JSON.stringify(payload))
+          await webpush.sendNotification(
+            pushSub,
+            JSON.stringify({
+              title: payload.title,
+              body: payload.message,
+              url: payload.url || '/',
+              tag: payload.tag,
+              requireInteraction: payload.requireInteraction ?? false,
+              icon: '/icon-192x192.png',
+              badge: '/badge-72x72.png',
+            })
+          )
         } catch (error: any) {
+          // 410 Gone / 404 Not Found = subscription is dead, remove it
           if (error.statusCode === 410 || error.statusCode === 404) {
-            await prisma.pushSubscription.delete({ where: { id: sub.id } })
+            console.log(`[Push] Removing stale subscription for user ${userId}`)
+            await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() =&gt; {})
+          } else {
+            console.error(`[Push] Failed to send to ${sub.endpoint.slice(0, 40)}:`, error.statusCode, error.body)
           }
           throw error
         }
       })
     )
 
-    return results.some((r) =&gt; r.status === 'fulfilled')
+    const succeeded = results.filter((r) =&gt; r.status === 'fulfilled').length
+    const failed = results.length - succeeded
+    if (succeeded &gt; 0) {
+      console.log(`[Push] ✅ ${succeeded}/${results.length} push(es) delivered to user ${userId}`)
+    }
+    return succeeded &gt; 0
   } catch {
     return false
   }
 }
 
+// ─── Get user email ───────────────────────────────────────────────────────────
 async function getUserEmail(userId: string): Promise&lt;string | null&gt; {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } })
   return user?.email ?? null
 }
 
-// Push first — email only if push fails or no subscription
+// ─── Core notify function ─────────────────────────────────────────────────────
+// STRATEGY: Always try push first.
+// If push fails (no subscription or all pushes fail) → send email as fallback.
+// This ensures the user ALWAYS gets the notification one way or another.
 async function notify(
   userId: string,
   push: PushPayload,
   emailFn: () =&gt; Promise&lt;{ subject: string; html: string }&gt;
 ) {
-  const pushed = await sendPushToUser(userId, push)
-  if (!pushed) {
-    const email = await getUserEmail(userId)
-    if (email) {
-      const { subject, html } = await emailFn()
-      await sendEmail({ to: email, subject, html })
+  try {
+    const pushed = await sendPushToUser(userId, push)
+
+    if (!pushed) {
+      // No push subscription or all pushes failed — send email instead
+      const email = await getUserEmail(userId)
+      if (email) {
+        const { subject, html } = await emailFn()
+        await sendEmail({ to: email, subject, html })
+        console.log(`[Notify] 📧 Email fallback sent to ${email} for "${push.title}"`)
+      } else {
+        console.warn(`[Notify] ⚠️ No push &amp; no email found for user ${userId}`)
+      }
     }
+  } catch (error) {
+    console.error(`[Notify] ❌ Failed to notify user ${userId}:`, error)
+    // Never let notification failure crash the caller
   }
 }
 
@@ -25860,7 +25970,12 @@ async function notify(
 export async function notifyOrderPlaced(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '🛒 Order Placed!', message: `Your order #${orderNumber} was placed successfully.`, url: `/orders/${orderNumber}`, tag: 'order-placed' },
+    {
+      title: '🛒 Order Placed!',
+      message: `Your order #${orderNumber} was placed successfully. The seller has been notified.`,
+      url: `/orders`,
+      tag: 'order-placed',
+    },
     async () =&gt; orderPlacedEmail(orderNumber)
   )
 }
@@ -25868,7 +25983,13 @@ export async function notifyOrderPlaced(buyerId: string, orderNumber: string) {
 export async function notifyNewOrder(sellerId: string, orderNumber: string) {
   await notify(
     sellerId,
-    { title: '🎉 New Order!', message: `You have a new order #${orderNumber}. Confirm it now.`, url: `/orders/sales`, tag: 'new-order', requireInteraction: true },
+    {
+      title: '🎉 New Order!',
+      message: `You have a new order #${orderNumber}. Check your dashboard to confirm it now.`,
+      url: `/my-shop`,
+      tag: 'new-order',
+      requireInteraction: true,
+    },
     async () =&gt; newOrderEmail(orderNumber)
   )
 }
@@ -25876,7 +25997,12 @@ export async function notifyNewOrder(sellerId: string, orderNumber: string) {
 export async function notifyRiderAssigned(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '🚴 Rider Assigned', message: `A rider has been assigned to order #${orderNumber}.`, url: `/orders/${orderNumber}`, tag: 'rider-assigned' },
+    {
+      title: '🚴 Rider Assigned',
+      message: `A rider has been assigned to your order #${orderNumber}. They will pick it up soon.`,
+      url: `/orders`,
+      tag: 'rider-assigned',
+    },
     async () =&gt; riderAssignedEmail(orderNumber)
   )
 }
@@ -25884,7 +26010,13 @@ export async function notifyRiderAssigned(buyerId: string, orderNumber: string) 
 export async function notifyOrderOnTheWay(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '🛵 Order On The Way!', message: `Your order #${orderNumber} is on its way.`, url: `/orders/${orderNumber}`, tag: 'order-on-the-way', requireInteraction: true },
+    {
+      title: '🛵 Order On The Way!',
+      message: `Your order #${orderNumber} has been picked up and is heading to you now!`,
+      url: `/orders`,
+      tag: 'order-on-the-way',
+      requireInteraction: true,
+    },
     async () =&gt; orderOnTheWayEmail(orderNumber)
   )
 }
@@ -25892,7 +26024,13 @@ export async function notifyOrderOnTheWay(buyerId: string, orderNumber: string) 
 export async function notifyOrderDelivered(buyerId: string, orderNumber: string) {
   await notify(
     buyerId,
-    { title: '✅ Order Delivered!', message: `Your order #${orderNumber} has been delivered.`, url: `/orders/${orderNumber}`, tag: 'order-delivered', requireInteraction: true },
+    {
+      title: '✅ Order Delivered!',
+      message: `Your order #${orderNumber} has been delivered. Please confirm receipt to release payment.`,
+      url: `/orders`,
+      tag: 'order-delivered',
+      requireInteraction: true,
+    },
     async () =&gt; orderDeliveredEmail(orderNumber)
   )
 }
@@ -25900,7 +26038,13 @@ export async function notifyOrderDelivered(buyerId: string, orderNumber: string)
 export async function notifyPaymentReceived(sellerId: string, amount: string) {
   await notify(
     sellerId,
-    { title: '💰 Payment Received', message: `You received a payment of ${amount}.`, url: `/wallet`, tag: 'payment-received' },
+    {
+      title: '💰 Payment Received!',
+      message: `You received a payment of ${amount}. It has been added to your wallet.`,
+      url: `/wallet`,
+      tag: 'payment-received',
+      requireInteraction: true,
+    },
     async () =&gt; paymentReceivedEmail(amount)
   )
 }
@@ -25908,7 +26052,12 @@ export async function notifyPaymentReceived(sellerId: string, amount: string) {
 export async function notifyWithdrawalProcessed(userId: string, amount: string) {
   await notify(
     userId,
-    { title: '💸 Withdrawal Processed', message: `Your withdrawal of ${amount} has been processed.`, url: `/wallet`, tag: 'withdrawal-processed' },
+    {
+      title: '💸 Withdrawal Processed',
+      message: `Your withdrawal of ${amount} has been processed successfully.`,
+      url: `/wallet`,
+      tag: 'withdrawal-processed',
+    },
     async () =&gt; withdrawalProcessedEmail(amount)
   )
 }
@@ -25916,7 +26065,13 @@ export async function notifyWithdrawalProcessed(userId: string, amount: string) 
 export async function notifyDisputeOpened(userId: string, orderNumber: string) {
   await notify(
     userId,
-    { title: '⚠️ Dispute Opened', message: `A dispute was opened for order #${orderNumber}.`, url: `/disputes`, tag: 'dispute-opened', requireInteraction: true },
+    {
+      title: '⚠️ Dispute Opened',
+      message: `A dispute was opened for order #${orderNumber}. Please respond as soon as possible.`,
+      url: `/disputes`,
+      tag: 'dispute-opened',
+      requireInteraction: true,
+    },
     async () =&gt; disputeOpenedEmail(orderNumber)
   )
 }
@@ -25924,7 +26079,12 @@ export async function notifyDisputeOpened(userId: string, orderNumber: string) {
 export async function notifyDisputeResolved(userId: string, orderNumber: string) {
   await notify(
     userId,
-    { title: '✅ Dispute Resolved', message: `The dispute for order #${orderNumber} has been resolved.`, url: `/disputes`, tag: 'dispute-resolved' },
+    {
+      title: '✅ Dispute Resolved',
+      message: `The dispute for order #${orderNumber} has been resolved. Check the outcome.`,
+      url: `/disputes`,
+      tag: 'dispute-resolved',
+    },
     async () =&gt; disputeResolvedEmail(orderNumber)
   )
 }
@@ -25932,38 +26092,35 @@ export async function notifyDisputeResolved(userId: string, orderNumber: string)
 export async function notifyNewReview(sellerId: string, productName: string) {
   await notify(
     sellerId,
-    { title: '⭐ New Review', message: `${productName} just received a new review.`, url: `/reviews`, tag: 'new-review' },
+    {
+      title: '⭐ New Review',
+      message: `"${productName}" just received a new review. Check it out!`,
+      url: `/my-shop`,
+      tag: 'new-review',
+    },
     async () =&gt; newReviewEmail(productName)
   )
 }
 
-// ─── NEW: Notify all available riders of a new order ─────────────────────────
-// Finds every rider who is available, has no active delivery, and has a push
-// subscription, then fires a push to each of them.
-// This is fire-and-forget safe — individual rider push failures are logged
-// but do not affect the order flow.
+// ─── Notify all available riders of a new order ──────────────────────────────
+// Fire-and-forget: failures are isolated and logged but never crash the order flow.
 export async function notifyAvailableRiders(orderNumber: string): Promise&lt;void&gt; {
   try {
-    // Find all available riders who have no active delivery in progress
     const availableRiders = await prisma.user.findMany({
       where: {
         role: 'RIDER',
         isAvailable: true,
         isDeleted: false,
         isSuspended: false,
-        // Exclude riders who already have an active delivery
+        // Exclude riders already on an active delivery
         riderDeliveries: {
           none: {
-            status: {
-              in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'],
-            },
+            status: { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'] },
             isDisputed: false,
           },
         },
-        // Only target riders who have a push subscription (no point querying others)
-        pushSubscriptions: {
-          some: {},
-        },
+        // Only target riders with a push subscription
+        pushSubscriptions: { some: {} },
       },
       select: { id: true },
     })
@@ -25975,7 +26132,7 @@ export async function notifyAvailableRiders(orderNumber: string): Promise&lt;voi
 
     const payload: PushPayload = {
       title: '🛵 New Order Available!',
-      message: `Order #${orderNumber} is ready for pickup. Open the app to accept it.`,
+      message: `Order #${orderNumber} is ready for pickup. Open the app to accept it now.`,
       url: '/rider-dashboard',
       tag: 'new-order-available',
       requireInteraction: true,
@@ -25983,14 +26140,12 @@ export async function notifyAvailableRiders(orderNumber: string): Promise&lt;voi
 
     console.log(`[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`)
 
-    // Push to all available riders in parallel — failures are isolated
     const results = await Promise.allSettled(
       availableRiders.map((rider) =&gt; sendPushToUser(rider.id, payload))
     )
 
     const succeeded = results.filter((r) =&gt; r.status === 'fulfilled' &amp;&amp; r.value === true).length
-    const failed = results.length - succeeded
-    console.log(`[Push] Rider notifications: ${succeeded} delivered, ${failed} failed for order #${orderNumber}`)
+    console.log(`[Push] Rider notifications: ${succeeded}/${results.length} delivered for order #${orderNumber}`)
   } catch (error) {
     console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
   }

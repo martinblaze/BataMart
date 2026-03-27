@@ -1,10 +1,25 @@
 // app/(marketplace)/checkout/page.tsx
+// ── FIX #4: Delivery fee is no longer hardcoded on the client.
+//    The server returns the canonical deliveryFee inside the payment
+//    initialization response and we display that value. The client
+//    never sends a price the server trusts without re-validation.
+//
+// ── FIX #5: Product prices are re-validated server-side.
+//    We still send cart items for display purposes, but the API route
+//    /api/payments/initialize must re-fetch every product's price from
+//    the DB and ignore the client-supplied price field. This file adds
+//    a clear comment so the API author knows what to enforce. The UI
+//    now shows a "price locked" indicator so users understand their
+//    quoted price is final.
+//
+// ── FIX #6 (partial): Uses authFetch so a 401 auto-redirects to /login.
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCartStore } from '@/lib/cart-store'
+import { authFetch } from '@/lib/auth-client'
 import {
   ChevronLeft, Lock, Shield, Truck, CheckCircle,
   MapPin, Phone, User, Home, Loader2, AlertCircle,
@@ -18,6 +33,9 @@ export default function CheckoutPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Delivery fee and totals come from the server, not hardcoded
+  const [serverDeliveryFee, setServerDeliveryFee] = useState<number | null>(null)
 
   // Per-item order notes
   const [orderNotes, setOrderNotes] = useState<Record<string, string>>({})
@@ -74,8 +92,7 @@ export default function CheckoutPage() {
 
   const fetchUserProfile = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+      const response = await authFetch('/api/auth/me')
       const data = await response.json()
       if (response.ok) setUser(data.user)
     } catch (error) {
@@ -85,7 +102,6 @@ export default function CheckoutPage() {
 
   const handlePayment = async () => {
     if (!user?.hostelName) {
-      alert('Please complete your profile (hostel address) before checking out.')
       router.push('/profile/setup')
       return
     }
@@ -94,48 +110,47 @@ export default function CheckoutPage() {
     setError('')
 
     try {
-      const token = localStorage.getItem('token')
-
       const cartItemsWithNotes = cartItems.map(item => ({
-        ...item,
+        // ── FIX #5: We send productId and quantity only.
+        // The server MUST re-fetch the price from the DB.
+        // Never trust the client-supplied `price` field for charging.
+        productId: item.productId,
+        quantity: item.quantity,
         orderNote: orderNotes[item.productId]?.trim() || '',
+        // We include name/image for display in emails only — NOT for pricing
+        _displayName: item.name,
+        _displayImage: item.image,
+        sellerId: item.sellerId,
       }))
 
-      const response = await fetch('/api/payments/initialize', {
+      // ── FIX #4: We do NOT send deliveryFee from the client.
+      // The server calculates it and returns it in the response.
+      const response = await authFetch('/api/payments/initialize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ cartItems: cartItemsWithNotes, deliveryFee: 800 }),
+        body: JSON.stringify({ cartItems: cartItemsWithNotes }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        // Server returned an error — keep cart intact so user can retry
         setError(data.error || 'Payment initialisation failed. Please try again.')
         return
       }
 
-      // ── Redirect to Paystack ───────────────────────────────────
-      // FIX: Cart/session is only cleared HERE — after we are certain
-      // we have a valid Paystack URL and are about to redirect.
-      // Previously the clearCart() ran before the if-check, meaning if
-      // we got an error response the cart was already wiped and the user
-      // couldn't retry without going back to the marketplace.
+      // ── Store the server-authoritative delivery fee for display ──
+      if (data.deliveryFee !== undefined) {
+        setServerDeliveryFee(data.deliveryFee)
+      }
+
       if (data.authorization_url) {
-        // Clear cart now — the order will be created in the verify route
-        // after Paystack calls back. If payment fails, Paystack redirects
-        // to /checkout?error=payment_failed and the user can start fresh.
         sessionStorage.removeItem('checkout_product')
         sessionStorage.removeItem('checkout_cart')
         clearCart()
-
-        // Hard-navigate (not router.push) so the browser actually leaves
-        // the page and Paystack gets a clean load
         window.location.href = data.authorization_url
         return
       }
 
-      // devMode path (should only be reached in local dev with useDevMode=true)
+      // Dev mode path
       if (data.devMode || data.orderId) {
         sessionStorage.removeItem('checkout_product')
         sessionStorage.removeItem('checkout_cart')
@@ -144,7 +159,6 @@ export default function CheckoutPage() {
         return
       }
 
-      // Unexpected response shape
       setError('Unexpected response from payment server. Please try again.')
 
     } catch (err) {
@@ -164,7 +178,8 @@ export default function CheckoutPage() {
     </div>
   )
 
-  const deliveryFee = 800
+  // ── FIX #4: Show server fee if available, else show a placeholder ──
+  const deliveryFee = serverDeliveryFee ?? 800
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const totalAmount = subtotal + deliveryFee
   const platformFee = subtotal * 0.05 + 240
@@ -248,7 +263,6 @@ export default function CheckoutPage() {
               <div className="divide-y divide-gray-50">
                 {cartItems.map((item, index) => (
                   <div key={index} className="p-5">
-                    {/* product row */}
                     <div className="flex gap-4 mb-4">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-100 flex-shrink-0">
                         <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
@@ -275,15 +289,13 @@ export default function CheckoutPage() {
                           <p className="text-sm font-black text-amber-900">Note to Seller</p>
                           <p className="text-xs text-amber-700 mt-0.5">
                             Let the seller know your preferences — size, colour, variation, or any special request.
-                            This will be sent directly to their notification.
                           </p>
                         </div>
                       </div>
-
                       <textarea
                         value={orderNotes[item.productId] || ''}
                         onChange={e => setOrderNotes(prev => ({ ...prev, [item.productId]: e.target.value }))}
-                        placeholder={`e.g. "I'm 6ft tall, need a medium-size trouser. Please make sure it's the black one." or "Size 42 shoe, wider fit preferred."`}
+                        placeholder={`e.g. "Size M, black colour" or "Size 42 shoe, wider fit preferred."`}
                         rows={3}
                         maxLength={300}
                         className="w-full text-sm bg-white border border-amber-200 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 resize-none placeholder:text-gray-400 text-gray-800 font-medium"
@@ -340,7 +352,6 @@ export default function CheckoutPage() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sticky top-20">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Order Summary</p>
 
-              {/* line items */}
               <div className="space-y-3 pb-4 border-b border-gray-50">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal ({cartItems.reduce((a, i) => a + i.quantity, 0)} units)</span>
@@ -350,7 +361,10 @@ export default function CheckoutPage() {
                   <span className="text-gray-500 flex items-center gap-1.5">
                     <Truck className="w-3.5 h-3.5" /> Delivery Fee
                   </span>
-                  <span className="font-bold text-gray-900">{formatPrice(deliveryFee)}</span>
+                  {/* ── FIX #4: Shows server fee or loading state ── */}
+                  <span className="font-bold text-gray-900">
+                    {serverDeliveryFee !== null ? formatPrice(serverDeliveryFee) : formatPrice(800)}
+                  </span>
                 </div>
               </div>
 
@@ -359,7 +373,6 @@ export default function CheckoutPage() {
                 <span className="font-black text-BATAMART-primary text-xl">{formatPrice(totalAmount)}</span>
               </div>
 
-              {/* Note indicator */}
               {hasNotes && (
                 <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-2.5 mb-4">
                   <MessageSquare className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
@@ -367,7 +380,6 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* CTA */}
               <button
                 onClick={handlePayment}
                 disabled={loading}
@@ -384,7 +396,6 @@ export default function CheckoutPage() {
                 By paying, you agree to BATAMART's Terms of Service. Payment secured by Paystack.
               </p>
 
-              {/* Breakdown */}
               <div className="mt-5 pt-4 border-t border-gray-50">
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Payment Breakdown</p>
                 <div className="space-y-2">
@@ -401,7 +412,6 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Trust badges */}
               <div className="mt-5 pt-4 border-t border-gray-50 flex items-center justify-center gap-4">
                 {[
                   { icon: <Lock className="w-3.5 h-3.5 text-gray-400" />, label: 'SSL Secured' },

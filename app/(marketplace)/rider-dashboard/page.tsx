@@ -1,9 +1,43 @@
 // app/(marketplace)/rider-dashboard/page.tsx
+// ── FIX #7 (race condition): acceptOrder uses authFetch which handles 409
+//    conflict responses from the server. The server must use a DB transaction
+//    to atomically check + assign the order, so only one rider wins.
+//
+// ── FIX #8 (stock reservation): No change needed here — stock locking
+//    is handled server-side in the payment flow.
+//
+// ── FIX #10 (alert/confirm dialogs): All alert() and confirm() calls
+//    replaced with inline toast/banner UI. No more browser popups.
+//
+// ── FIX #6: Uses authFetch so expired tokens auto-redirect to /login.
+//
+// ── Rider availability: If the toggle API fails, the UI reverts to the
+//    previous state instead of staying optimistically wrong.
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, AlertTriangle, MapPin, Phone, Package } from 'lucide-react'
+import { Loader2, AlertTriangle, MapPin, Phone, Package, CheckCircle, X } from 'lucide-react'
+import { authFetch } from '@/lib/auth-client'
+
+// ── Simple inline toast — no alert() ─────────────────────────────────────────
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) {
+  const colors = {
+    success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    error:   'bg-red-50 border-red-200 text-red-800',
+    info:    'bg-blue-50 border-blue-200 text-blue-800',
+  }
+  return (
+    <div className={`fixed top-4 left-0 right-0 z-50 flex justify-center px-4`}>
+      <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg max-w-sm w-full ${colors[type]}`}>
+        <p className="text-sm font-semibold flex-1">{message}</p>
+        <button onClick={onClose} className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function RiderDashboardPage() {
   const router = useRouter()
@@ -15,6 +49,13 @@ export default function RiderDashboardPage() {
   const [isAvailable, setIsAvailable] = useState(true)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
 
+  // ── FIX #10: Toast state instead of alert() ───────────────────────────────
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 4000)
+  }
+
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) { router.push('/login'); return }
@@ -23,15 +64,14 @@ export default function RiderDashboardPage() {
 
   const fetchRiderData = async () => {
     try {
-      const token = localStorage.getItem('token')
       const [profileRes, ordersRes, deliveriesRes] = await Promise.all([
-        fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/riders/available-orders', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/riders/my-deliveries', { headers: { 'Authorization': `Bearer ${token}` } }),
+        authFetch('/api/auth/me'),
+        authFetch('/api/riders/available-orders'),
+        authFetch('/api/riders/my-deliveries'),
       ])
 
-      const profileData = await profileRes.json()
-      const ordersData = await ordersRes.json()
+      const profileData    = await profileRes.json()
+      const ordersData     = await ordersRes.json()
       const deliveriesData = await deliveriesRes.json()
 
       setRider(profileData.user)
@@ -40,85 +80,106 @@ export default function RiderDashboardPage() {
       setMyDeliveries(deliveriesData.deliveries || [])
       setIsAvailable(profileData.user.isAvailable)
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error fetching rider data:', error)
     } finally {
       setLoading(false)
     }
   }
 
+  // ── FIX (availability revert): Save previous state so we can roll back ────
   const toggleAvailability = async () => {
     if (actionLoading['toggle-availability']) return
+    const previousState = isAvailable
     setActionLoading(prev => ({ ...prev, 'toggle-availability': true }))
+
+    // Optimistic update
+    setIsAvailable(!previousState)
+
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/riders/toggle-availability', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-      })
-      if (res.ok) setIsAvailable(!isAvailable)
-      else alert('Failed to update availability')
-    } catch { alert('Error updating availability') }
-    finally { setActionLoading(prev => ({ ...prev, 'toggle-availability': false })) }
+      const res = await authFetch('/api/riders/toggle-availability', { method: 'POST' })
+      if (!res.ok) {
+        // Revert on failure instead of staying in wrong state
+        setIsAvailable(previousState)
+        showToast('Failed to update availability. Please try again.', 'error')
+      } else {
+        showToast(`You are now ${!previousState ? 'available' : 'unavailable'} for orders.`, 'success')
+      }
+    } catch {
+      setIsAvailable(previousState)
+      showToast('Network error updating availability.', 'error')
+    } finally {
+      setActionLoading(prev => ({ ...prev, 'toggle-availability': false }))
+    }
   }
 
+  // ── FIX #7: Handle 409 conflict (another rider grabbed this order) ────────
   const acceptOrder = async (orderId: string) => {
     if (actionLoading[`accept-${orderId}`]) return
     setActionLoading(prev => ({ ...prev, [`accept-${orderId}`]: true }))
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/riders/accept-order', {
+      const res = await authFetch('/api/riders/accept-order', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ orderId }),
       })
       const data = await res.json()
       if (res.ok) {
-        alert('Order accepted! Proceed to pickup.')
+        showToast('Order accepted! Head to pickup location.', 'success')
+        await fetchRiderData()
+      } else if (res.status === 409) {
+        // Race condition — another rider accepted first
+        showToast('Sorry, another rider just accepted this order. Refreshing available orders.', 'info')
         await fetchRiderData()
       } else {
-        alert(data.error || 'Failed to accept order')
+        showToast(data.error || 'Failed to accept order. Please try again.', 'error')
       }
-    } catch { alert('Error accepting order') }
-    finally { setActionLoading(prev => ({ ...prev, [`accept-${orderId}`]: false })) }
+    } catch {
+      showToast('Network error. Please check your connection.', 'error')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`accept-${orderId}`]: false }))
+    }
   }
 
   const updateStatus = async (orderId: string, status: string) => {
     if (actionLoading[`status-${orderId}`]) return
     setActionLoading(prev => ({ ...prev, [`status-${orderId}`]: true }))
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/riders/update-status', {
+      const res = await authFetch('/api/riders/update-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ orderId, status }),
       })
       const data = await res.json()
-      if (res.ok) { await fetchRiderData() }
-      else { alert(data.error || 'Failed to update status') }
-    } catch { alert('Error updating status') }
-    finally { setActionLoading(prev => ({ ...prev, [`status-${orderId}`]: false })) }
+      if (res.ok) {
+        await fetchRiderData()
+      } else {
+        showToast(data.error || 'Failed to update status.', 'error')
+      }
+    } catch {
+      showToast('Network error updating status.', 'error')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`status-${orderId}`]: false }))
+    }
   }
 
-  // Mark dispute item as picked up from buyer — tells admin rider is on the way back
   const markDisputePickedUp = async (orderId: string) => {
     if (actionLoading[`dispute-pickup-${orderId}`]) return
     setActionLoading(prev => ({ ...prev, [`dispute-pickup-${orderId}`]: true }))
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/riders/dispute-picked-up', {
+      const res = await authFetch('/api/riders/dispute-picked-up', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ orderId }),
       })
       const data = await res.json()
       if (res.ok) {
-        alert('Marked as picked up. Return the item to complete this job.')
+        showToast('Marked as collected. Return the item to complete this job.', 'success')
         await fetchRiderData()
       } else {
-        alert(data.error || 'Failed to update')
+        showToast(data.error || 'Failed to update.', 'error')
       }
-    } catch { alert('Error') }
-    finally { setActionLoading(prev => ({ ...prev, [`dispute-pickup-${orderId}`]: false })) }
+    } catch {
+      showToast('Network error.', 'error')
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`dispute-pickup-${orderId}`]: false }))
+    }
   }
 
   const hasDisputePickupPending = disputePickups.length > 0
@@ -133,6 +194,9 @@ export default function RiderDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
+      {/* ── FIX #10: Toast notification instead of alert() ── */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
@@ -140,13 +204,14 @@ export default function RiderDashboardPage() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Rider Dashboard</h1>
-              <p className="text-gray-600 mt-1">Welcome, {rider?.name}! 🚴</p>
+              <p className="text-gray-600 mt-1">Welcome, {rider?.name}!</p>
             </div>
             <button
               onClick={toggleAvailability}
               disabled={actionLoading['toggle-availability']}
-              className={`px-6 py-3 rounded-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${isAvailable ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-                }`}
+              className={`px-6 py-3 rounded-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isAvailable ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+              }`}
             >
               {actionLoading['toggle-availability']
                 ? <><Loader2 className="w-5 h-5 animate-spin" /> Updating...</>
@@ -171,7 +236,7 @@ export default function RiderDashboardPage() {
           </div>
         </div>
 
-        {/* ── Dispute Pickup Jobs (urgent — shown first) ───────────────────── */}
+        {/* Dispute Pickup Jobs */}
         {hasDisputePickupPending && (
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-4">
@@ -185,7 +250,7 @@ export default function RiderDashboardPage() {
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 mb-4 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>
-                You must complete this return pickup before you can accept any new orders.
+                You must complete this return pickup before accepting new orders.
                 You will earn <strong>₦560</strong> once the item is confirmed received.
               </span>
             </div>
@@ -208,7 +273,6 @@ export default function RiderDashboardPage() {
                       </span>
                     </div>
 
-                    {/* Buyer complaint */}
                     {order.dispute?.reason && (
                       <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
                         <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Reason for return</p>
@@ -216,13 +280,10 @@ export default function RiderDashboardPage() {
                       </div>
                     )}
 
-                    {/* Pickup address (from buyer's confirmed address on dispute form) */}
                     <div className="mb-4 p-3 bg-blue-50 rounded-lg">
                       <div className="flex items-center gap-1.5 mb-2">
                         <MapPin className="w-4 h-4 text-blue-500" />
-                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                          Collect from buyer
-                        </p>
+                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Collect from buyer</p>
                       </div>
                       {pickup ? (
                         <div className="text-sm space-y-0.5">
@@ -243,13 +304,10 @@ export default function RiderDashboardPage() {
                       )}
                     </div>
 
-                    {/* Return to */}
                     <div className="mb-4 p-3 bg-orange-50 rounded-lg">
                       <div className="flex items-center gap-1.5 mb-1">
                         <Package className="w-4 h-4 text-orange-500" />
-                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">
-                          Return item to admin / store
-                        </p>
+                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Return item to admin / store</p>
                       </div>
                       <p className="text-sm text-gray-600">Contact admin for drop-off location if unsure.</p>
                     </div>
@@ -271,13 +329,12 @@ export default function RiderDashboardPage() {
           </div>
         )}
 
-        {/* ── Available Orders ─────────────────────────────────────────────── */}
+        {/* Available Orders */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
             Available Orders ({availableOrders.length})
           </h2>
 
-          {/* Blocked banner when dispute pickup pending */}
           {hasDisputePickupPending && (
             <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded-xl text-sm text-yellow-800 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -323,7 +380,7 @@ export default function RiderDashboardPage() {
           )}
         </div>
 
-        {/* ── My Active Deliveries ─────────────────────────────────────────── */}
+        {/* My Active Deliveries */}
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">My Active Deliveries</h2>
           {myDeliveries.length === 0 ? (

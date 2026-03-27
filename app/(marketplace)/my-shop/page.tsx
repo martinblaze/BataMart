@@ -1,3 +1,8 @@
+// app/(marketplace)/my-shop/page.tsx
+// ── FIX #10: Replaced all alert(), confirm() browser dialogs with:
+//   - Inline toast notifications for success/error feedback
+//   - A proper inline confirmation dialog for destructive actions (delete)
+// ── FIX #6: Uses authFetch so expired tokens auto-redirect to /login.
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,15 +11,70 @@ import Link from 'next/link'
 import {
   ShoppingBag, Package, TrendingUp, Award, Eye,
   CheckCircle, XCircle, Plus, Trash2, BarChart3,
-  Grid, List, Filter, Search, ArrowRight, Tag,
-  Zap, Star, X,
+  Grid, List, Search, ArrowRight, X, AlertTriangle,
 } from 'lucide-react'
+import { authFetch } from '@/lib/auth-client'
 
 interface Product {
   id: string; name: string; price: number; quantity: number
   images: string[]; category: string; isActive: boolean
   viewCount: number; createdAt: string
   _count: { orders: number }
+}
+
+// ── Inline toast ──────────────────────────────────────────────────────────────
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
+  const colors = type === 'success'
+    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+    : 'bg-red-50 border-red-200 text-red-800'
+  return (
+    <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+      <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg max-w-sm w-full pointer-events-auto ${colors}`}>
+        <p className="text-sm font-semibold flex-1">{message}</p>
+        <button onClick={onClose} className="flex-shrink-0 opacity-60 hover:opacity-100">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Inline confirmation dialog ────────────────────────────────────────────────
+function ConfirmDialog({
+  title, message, confirmLabel, onConfirm, onCancel
+}: {
+  title: string; message: string; confirmLabel: string
+  onConfirm: () => void; onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <h3 className="font-black text-gray-900 text-base">{title}</h3>
+            <p className="text-sm text-gray-500 mt-1">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-all"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function MyShopPage() {
@@ -29,13 +89,28 @@ export default function MyShopPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [searchTerm, setSearchTerm] = useState('')
 
+  // ── FIX #10: Toast + confirm dialog state ──────────────────────────────────
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string; message: string; confirmLabel: string; onConfirm: () => void
+  } | null>(null)
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  const showConfirm = (title: string, message: string, confirmLabel: string, onConfirm: () => void) => {
+    setConfirmDialog({ title, message, confirmLabel, onConfirm })
+  }
+
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) { router.push('/login'); return }
 
     const loadUserData = async () => {
       try {
-        const response = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+        const response = await authFetch('/api/auth/me')
         const data = await response.json()
         if (response.ok && data.user) {
           setUserRole(data.user.role || 'BUYER')
@@ -56,55 +131,75 @@ export default function MyShopPage() {
   const fetchMyProducts = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch('/api/products/my-products', { headers: { 'Authorization': `Bearer ${token}` } })
+      const response = await authFetch('/api/products/my-products')
       const data = await response.json()
       if (response.ok) setProducts(data.products || [])
-      else alert(data.error || 'Failed to fetch products')
-    } catch { alert('Network error') }
-    finally { setLoading(false) }
+      else showToast(data.error || 'Failed to fetch products', 'error')
+    } catch {
+      showToast('Network error loading products', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleRestock = async (productId: string) => {
-    if (restockAmount < 1) { alert('Please enter a valid quantity'); return }
+    if (restockAmount < 1) { showToast('Please enter a valid quantity', 'error'); return }
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/products/${productId}/restock`, {
+      const response = await authFetch(`/api/products/${productId}/restock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ quantity: restockAmount }),
       })
       const data = await response.json()
       if (response.ok) {
-        alert(`✅ Restocked ${restockAmount} items!`)
+        showToast(`Restocked ${restockAmount} item${restockAmount !== 1 ? 's' : ''} successfully!`, 'success')
         setRestockingId(null); setRestockAmount(1); fetchMyProducts()
-      } else alert(data.error || 'Failed to restock')
-    } catch { alert('Network error') }
+      } else {
+        showToast(data.error || 'Failed to restock', 'error')
+      }
+    } catch {
+      showToast('Network error', 'error')
+    }
   }
 
-  const handleDelete = async (productId: string, productName: string) => {
-    if (!confirm(`Delete "${productName}"? This cannot be undone.`)) return
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/products/${productId}`, {
-        method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
-      })
-      if (response.ok) { alert('Product deleted'); fetchMyProducts() }
-      else { const data = await response.json(); alert(data.error || 'Failed') }
-    } catch { alert('Network error') }
+  const handleDelete = (productId: string, productName: string) => {
+    showConfirm(
+      'Delete product',
+      `Are you sure you want to delete "${productName}"? This cannot be undone.`,
+      'Delete',
+      async () => {
+        setConfirmDialog(null)
+        try {
+          const response = await authFetch(`/api/products/${productId}`, { method: 'DELETE' })
+          if (response.ok) {
+            showToast('Product deleted successfully', 'success')
+            fetchMyProducts()
+          } else {
+            const data = await response.json()
+            showToast(data.error || 'Failed to delete product', 'error')
+          }
+        } catch {
+          showToast('Network error', 'error')
+        }
+      }
+    )
   }
 
   const toggleActive = async (productId: string, currentStatus: boolean) => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/products/${productId}`, {
+      const response = await authFetch(`/api/products/${productId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ isActive: !currentStatus }),
       })
-      if (response.ok) fetchMyProducts()
-      else { const data = await response.json(); alert(data.error || 'Failed') }
-    } catch { alert('Network error') }
+      if (response.ok) {
+        showToast(`Product ${!currentStatus ? 'activated' : 'deactivated'}`, 'success')
+        fetchMyProducts()
+      } else {
+        const data = await response.json()
+        showToast(data.error || 'Failed to update product', 'error')
+      }
+    } catch {
+      showToast('Network error', 'error')
+    }
   }
 
   const toggleSellerMode = async () => {
@@ -113,10 +208,8 @@ export default function MyShopPage() {
     localStorage.setItem('sellerMode', newMode.toString())
     if (userRole === 'SELLER' || userRole === 'ADMIN') {
       try {
-        const token = localStorage.getItem('token')
-        await fetch('/api/auth/toggle-seller-mode', {
+        await authFetch('/api/auth/toggle-seller-mode', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ isSellerMode: newMode }),
         })
       } catch { console.error('Error updating seller mode') }
@@ -136,8 +229,8 @@ export default function MyShopPage() {
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(price)
 
-  const totalOrders = products.reduce((sum, p) => sum + (p._count?.orders || 0), 0)
-  const activeCount = products.filter(p => p.quantity > 0 && p.isActive).length
+  const totalOrders  = products.reduce((sum, p) => sum + (p._count?.orders || 0), 0)
+  const activeCount  = products.filter(p => p.quantity > 0 && p.isActive).length
   const outOfStockCount = products.filter(p => p.quantity === 0).length
 
   if (loading) return (
@@ -148,8 +241,19 @@ export default function MyShopPage() {
 
   return (
     <div className="min-h-screen bg-[#f7f8fa] pb-24">
+      {/* ── FIX #10: Toast + Confirm dialog ── */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmDialog && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
 
-      {/* ── Header ────────────────────────────────────────────────────── */}
+      {/* ── Header ── */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -163,26 +267,22 @@ export default function MyShopPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Mode toggle */}
               {(userRole === 'SELLER' || userRole === 'ADMIN') && (
                 <div className="flex items-center bg-gray-100 rounded-xl p-1 border border-gray-200">
                   <button
                     onClick={() => !isSellerMode && toggleSellerMode()}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${isSellerMode ? 'bg-BATAMART-primary text-white shadow-md' : 'text-gray-500 hover:text-gray-700'
-                      }`}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${isSellerMode ? 'bg-BATAMART-primary text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
                   >
                     <ShoppingBag className="w-3.5 h-3.5" /> Seller
                   </button>
                   <button
                     onClick={() => isSellerMode && toggleSellerMode()}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${!isSellerMode ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'
-                      }`}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${!isSellerMode ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
                   >
                     <Package className="w-3.5 h-3.5" /> Buyer
                   </button>
                 </div>
               )}
-
               {isSellerMode && (
                 <Link
                   href="/sell"
@@ -197,10 +297,9 @@ export default function MyShopPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-
         {isSellerMode ? (
           <>
-            {/* ── Stats cards ─────────────────────────────────────────── */}
+            {/* Stats cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
               {[
                 { icon: <ShoppingBag className="w-5 h-5 text-BATAMART-primary" />, bg: 'bg-BATAMART-primary/8', value: products.length, label: 'Listed', sub: 'Total products' },
@@ -217,9 +316,8 @@ export default function MyShopPage() {
               ))}
             </div>
 
-            {/* ── Search + controls ────────────────────────────────────── */}
+            {/* Search + controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-5">
-              {/* search */}
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 <input
@@ -236,8 +334,7 @@ export default function MyShopPage() {
                 )}
               </div>
 
-              {/* filter tabs */}
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
                 {[
                   { key: 'all', label: `All (${products.length})`, activeClass: 'bg-BATAMART-primary text-white' },
                   { key: 'active', label: `Active (${activeCount})`, activeClass: 'bg-emerald-500 text-white' },
@@ -246,15 +343,13 @@ export default function MyShopPage() {
                   <button
                     key={key}
                     onClick={() => setFilter(key as any)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${filter === key ? `${activeClass} shadow-md` : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                      }`}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${filter === key ? `${activeClass} shadow-md` : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'}`}
                   >
                     {label}
                   </button>
                 ))}
               </div>
 
-              {/* view toggle */}
               <div className="flex items-center gap-0.5 bg-gray-100 p-1 rounded-xl ml-auto flex-shrink-0">
                 <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white text-BATAMART-primary shadow-sm' : 'text-gray-500'}`}>
                   <Grid className="w-4 h-4" />
@@ -265,7 +360,7 @@ export default function MyShopPage() {
               </div>
             </div>
 
-            {/* ── Products ─────────────────────────────────────────────── */}
+            {/* Products */}
             {filteredProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
                 <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 ring-1 ring-gray-100">
@@ -279,190 +374,134 @@ export default function MyShopPage() {
                   <Plus className="w-4 h-4" /> List First Product
                 </Link>
               </div>
-
-            ) : viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredProducts.map(product => (
-                  <div key={product.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden group">
-                    {/* image */}
-                    <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                      <img
-                        src={product.images[0] || '/placeholder.png'}
-                        alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                      <div className="absolute top-2.5 right-2.5">
-                        {product.quantity === 0
-                          ? <span className="px-2 py-1 bg-red-500 text-white text-[10px] font-black rounded-lg shadow-md">OUT OF STOCK</span>
-                          : <span className="px-2 py-1 bg-emerald-500 text-white text-[10px] font-black rounded-lg shadow-md">{product.quantity} LEFT</span>
-                        }
-                      </div>
-                    </div>
-
-                    <div className="p-4">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">{product.category}</p>
-                      <h3 className="font-black text-gray-900 text-base line-clamp-1 mb-1">{product.name}</h3>
-                      <p className="text-BATAMART-primary font-black text-lg mb-3">{formatPrice(product.price)}</p>
-
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-                          <p className="text-[11px] text-gray-400 font-semibold">Views</p>
-                          <p className="text-sm font-black text-gray-900 flex items-center justify-center gap-1">
-                            <Eye className="w-3 h-3" />{product.viewCount}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2.5 text-center">
-                          <p className="text-[11px] text-gray-400 font-semibold">Orders</p>
-                          <p className="text-sm font-black text-gray-900 flex items-center justify-center gap-1">
-                            <ShoppingBag className="w-3 h-3" />{product._count?.orders || 0}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => router.push(`/product/${product.id}`)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View
-                        </button>
-                        <button
-                          onClick={() => toggleActive(product.id, product.isActive)}
-                          className={`px-3 py-2 rounded-xl font-bold text-xs transition-all ${product.isActive ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                            }`}
-                        >
-                          {product.isActive ? 'Pause' : 'Live'}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id, product.name)}
-                          className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
             ) : (
-              /* List view */
-              <div className="space-y-3">
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4' : 'space-y-3'}>
                 {filteredProducts.map(product => (
                   <div key={product.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group">
-                    <div className="flex gap-0 sm:gap-5 p-0 sm:p-4">
-                      {/* image */}
-                      <div className="w-28 sm:w-36 flex-shrink-0 relative overflow-hidden rounded-none sm:rounded-xl bg-gray-100" style={{ minHeight: '120px' }}>
-                        <img
-                          src={product.images[0] || '/placeholder.png'}
-                          alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 absolute inset-0"
-                        />
-                        <div className="absolute top-2 left-2">
-                          {product.quantity === 0
-                            ? <span className="px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-black rounded-md">OUT</span>
-                            : product.quantity < 5
-                              ? <span className="px-1.5 py-0.5 bg-amber-500 text-white text-[9px] font-black rounded-md">LOW</span>
-                              : null
-                          }
+                    {viewMode === 'grid' ? (
+                      <>
+                        <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                          <img src={product.images[0] || '/placeholder.png'} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                          <div className="absolute top-2.5 right-2.5">
+                            {product.quantity === 0
+                              ? <span className="px-2 py-1 bg-red-500 text-white text-[10px] font-black rounded-lg shadow-md">OUT OF STOCK</span>
+                              : <span className="px-2 py-1 bg-emerald-500 text-white text-[10px] font-black rounded-lg shadow-md">{product.quantity} LEFT</span>
+                            }
+                          </div>
                         </div>
-                      </div>
-
-                      {/* content */}
-                      <div className="flex-1 min-w-0 p-3 sm:p-0 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{product.category}</p>
-                              <h3 className="font-black text-gray-900 text-base sm:text-lg leading-tight mt-0.5 line-clamp-1">{product.name}</h3>
+                        <div className="p-4">
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">{product.category}</p>
+                          <h3 className="font-black text-gray-900 text-base line-clamp-1 mb-1">{product.name}</h3>
+                          <p className="text-BATAMART-primary font-black text-lg mb-3">{formatPrice(product.price)}</p>
+                          <div className="grid grid-cols-2 gap-2 mb-4">
+                            <div className="bg-gray-50 rounded-xl p-2.5 text-center">
+                              <p className="text-[11px] text-gray-400 font-semibold">Views</p>
+                              <p className="text-sm font-black text-gray-900 flex items-center justify-center gap-1"><Eye className="w-3 h-3" />{product.viewCount}</p>
                             </div>
-                            <p className="text-BATAMART-primary font-black text-lg sm:text-xl whitespace-nowrap flex-shrink-0">{formatPrice(product.price)}</p>
+                            <div className="bg-gray-50 rounded-xl p-2.5 text-center">
+                              <p className="text-[11px] text-gray-400 font-semibold">Orders</p>
+                              <p className="text-sm font-black text-gray-900 flex items-center justify-center gap-1"><ShoppingBag className="w-3 h-3" />{product._count?.orders || 0}</p>
+                            </div>
                           </div>
-
-                          {/* badges */}
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {product.quantity === 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-red-50 text-red-700 rounded-full ring-1 ring-red-200">
-                                <XCircle className="w-3 h-3" /> Out of Stock
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full ring-1 ring-emerald-200">
-                                <CheckCircle className="w-3 h-3" /> {product.quantity} in stock
-                              </span>
-                            )}
-                            {!product.isActive && (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-gray-100 text-gray-600 rounded-full ring-1 ring-gray-200">Inactive</span>
-                            )}
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-blue-50 text-blue-700 rounded-full ring-1 ring-blue-200">
-                              <Eye className="w-3 h-3" /> {product.viewCount} views
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-violet-50 text-violet-700 rounded-full ring-1 ring-violet-200">
-                              <ShoppingBag className="w-3 h-3" /> {product._count?.orders || 0} orders
-                            </span>
+                          <div className="flex gap-2">
+                            <button onClick={() => router.push(`/product/${product.id}`)} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all">
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </button>
+                            <button onClick={() => toggleActive(product.id, product.isActive)} className={`px-3 py-2 rounded-xl font-bold text-xs transition-all ${product.isActive ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'}`}>
+                              {product.isActive ? 'Pause' : 'Live'}
+                            </button>
+                            <button onClick={() => handleDelete(product.id, product.name)} className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl transition-all">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
-
-                        {/* actions */}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {/* restock */}
-                          {(product.quantity === 0 || product.quantity < 5) && (
-                            restockingId === product.id ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number" min="1" value={restockAmount}
-                                  onChange={e => setRestockAmount(parseInt(e.target.value) || 1)}
-                                  className="w-20 px-3 py-1.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-BATAMART-primary text-sm font-bold bg-white"
-                                />
-                                <button onClick={() => handleRestock(product.id)} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all">
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => { setRestockingId(null); setRestockAmount(1) }} className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-bold text-sm transition-all">
-                                  <X className="w-4 h-4" />
-                                </button>
+                      </>
+                    ) : (
+                      /* List view */
+                      <div className="flex gap-0 sm:gap-5 p-0 sm:p-4">
+                        <div className="w-28 sm:w-36 flex-shrink-0 relative overflow-hidden rounded-none sm:rounded-xl bg-gray-100" style={{ minHeight: '120px' }}>
+                          <img src={product.images[0] || '/placeholder.png'} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 absolute inset-0" />
+                          <div className="absolute top-2 left-2">
+                            {product.quantity === 0
+                              ? <span className="px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-black rounded-md">OUT</span>
+                              : product.quantity < 5
+                                ? <span className="px-1.5 py-0.5 bg-amber-500 text-white text-[9px] font-black rounded-md">LOW</span>
+                                : null
+                            }
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0 p-3 sm:p-0 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{product.category}</p>
+                                <h3 className="font-black text-gray-900 text-base sm:text-lg leading-tight mt-0.5 line-clamp-1">{product.name}</h3>
                               </div>
-                            ) : (
-                              <button
-                                onClick={() => setRestockingId(product.id)}
-                                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 transition-all"
-                              >
-                                <Package className="w-3.5 h-3.5" /> Restock
-                              </button>
-                            )
-                          )}
-
-                          <button
-                            onClick={() => toggleActive(product.id, product.isActive)}
-                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs transition-all ${product.isActive
-                                ? 'bg-amber-100 hover:bg-amber-200 text-amber-800'
-                                : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
-                              }`}
-                          >
-                            {product.isActive ? '⏸ Deactivate' : '▶ Activate'}
-                          </button>
-
-                          <Link
-                            href={`/product/${product.id}`}
-                            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl font-bold text-xs transition-all"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> View Live
-                          </Link>
-
-                          <button
-                            onClick={() => handleDelete(product.id, product.name)}
-                            className="flex items-center gap-1.5 px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-bold text-xs transition-all"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Delete
-                          </button>
+                              <p className="text-BATAMART-primary font-black text-lg sm:text-xl whitespace-nowrap flex-shrink-0">{formatPrice(product.price)}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {product.quantity === 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-red-50 text-red-700 rounded-full ring-1 ring-red-200">
+                                  <XCircle className="w-3 h-3" /> Out of Stock
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full ring-1 ring-emerald-200">
+                                  <CheckCircle className="w-3 h-3" /> {product.quantity} in stock
+                                </span>
+                              )}
+                              {!product.isActive && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-gray-100 text-gray-600 rounded-full ring-1 ring-gray-200">Inactive</span>
+                              )}
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-blue-50 text-blue-700 rounded-full ring-1 ring-blue-200">
+                                <Eye className="w-3 h-3" /> {product.viewCount} views
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-violet-50 text-violet-700 rounded-full ring-1 ring-violet-200">
+                                <ShoppingBag className="w-3 h-3" /> {product._count?.orders || 0} orders
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {(product.quantity === 0 || product.quantity < 5) && (
+                              restockingId === product.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number" min="1" value={restockAmount}
+                                    onChange={e => setRestockAmount(parseInt(e.target.value) || 1)}
+                                    className="w-20 px-3 py-1.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-BATAMART-primary text-sm font-bold bg-white"
+                                  />
+                                  <button onClick={() => handleRestock(product.id)} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all">
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => { setRestockingId(null); setRestockAmount(1) }} className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-bold text-sm transition-all">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button onClick={() => setRestockingId(product.id)} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 transition-all">
+                                  <Package className="w-3.5 h-3.5" /> Restock
+                                </button>
+                              )
+                            )}
+                            <button onClick={() => toggleActive(product.id, product.isActive)} className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs transition-all ${product.isActive ? 'bg-amber-100 hover:bg-amber-200 text-amber-800' : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'}`}>
+                              {product.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <Link href={`/product/${product.id}`} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-xl font-bold text-xs transition-all">
+                              <Eye className="w-3.5 h-3.5" /> View Live
+                            </Link>
+                            <button onClick={() => handleDelete(product.id, product.name)} className="flex items-center gap-1.5 px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-bold text-xs transition-all">
+                              <Trash2 className="w-3.5 h-3.5" /> Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </>
         ) : (
-          /* ── Buyer mode ─────────────────────────────────────────────── */
+          /* Buyer mode */
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 sm:p-10 text-center">
               <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 ring-1 ring-blue-100">
@@ -479,7 +518,6 @@ export default function MyShopPage() {
                 </Link>
               </div>
             </div>
-
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8">
               <div className="flex items-center justify-between mb-5">
                 <div>
@@ -505,7 +543,6 @@ export default function MyShopPage() {
         )}
       </div>
 
-      {/* Floating add button */}
       {isSellerMode && (
         <Link
           href="/sell"
