@@ -4,8 +4,53 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
 
+// ── In-memory rate limiter ─────────────────────────────────────────────────
+// 10 attempts per IP per 15 minutes prevents brute force.
+// Swap Map for Redis/Upstash if you scale to multiple instances.
+const loginRateMap = new Map<string, { count: number; resetAt: number }>()
+const LOGIN_LIMIT      = 10
+const LOGIN_WINDOW_MS  = 15 * 60 * 1000
+
+function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: number } {
+  const now   = Date.now()
+  const entry = loginRateMap.get(ip)
+
+  if (!entry || now > entry.resetAt) {
+    loginRateMap.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+    return { allowed: true, retryAfterSecs: 0 }
+  }
+  if (entry.count >= LOGIN_LIMIT) {
+    return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
+  }
+  entry.count++
+  return { allowed: true, retryAfterSecs: 0 }
+}
+
+// Clean stale entries every minute
+setInterval(() => {
+  const now = Date.now()
+  Array.from(loginRateMap.entries()).forEach(([key, val]) => {
+    if (now > val.resetAt) loginRateMap.delete(key)
+  })
+}, 60_000)
+// ──────────────────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+
+    const { allowed, retryAfterSecs } = checkLoginRateLimit(ip)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many login attempts. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) and try again.` },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSecs) } }
+      )
+    }
+
     const body = await request.json()
     const { email, password } = body
 
@@ -33,28 +78,18 @@ export async function POST(request: NextRequest) {
       user.isSuspended = false
     }
 
-    // Block if still suspended
+    // Block if still suspended — return structured data (not just a message string)
+    // so the login page can display it properly without needing URL params
     if (user.isSuspended) {
-      const reason = user.suspensionReason || 'Violation of platform terms'
-
-      let message = ''
-      if (!user.suspendedUntil) {
-        message = `Your account has been permanently suspended.\n\nReason: ${reason}\n\nContact support@BATAMART-mart.com to appeal.`
-      } else {
-        const until = new Date(user.suspendedUntil)
-        const diffMs = until.getTime() - Date.now()
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-        const timeLeft = diffDays > 0
-          ? `${diffDays} day${diffDays !== 1 ? 's' : ''}${diffHours > 0 ? ` and ${diffHours} hour${diffHours !== 1 ? 's' : ''}` : ''}`
-          : `${diffHours} hour${diffHours !== 1 ? 's' : ''}`
-        const untilFormatted = until.toLocaleDateString('en-NG', {
-          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        })
-        message = `Your account is suspended for ${timeLeft}.\n\nReason: ${reason}\n\nSuspension lifts: ${untilFormatted}\n\nContact support@BATAMART-mart.com to appeal.`
-      }
-
-      return NextResponse.json({ error: message, suspended: true }, { status: 403 })
+      return NextResponse.json(
+        {
+          error: 'Account suspended',
+          suspended: true,
+          reason: user.suspensionReason ?? 'Violation of platform terms',
+          until: user.suspendedUntil ?? null,
+        },
+        { status: 403 }
+      )
     }
 
     const token = generateToken(user.id, user.phone)
@@ -63,12 +98,12 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
-        hostelName: user.hostelName,
+        id:          user.id,
+        name:        user.name,
+        phone:       user.phone,
+        email:       user.email,
+        role:        user.role,
+        hostelName:  user.hostelName,
       },
     })
   } catch (error) {

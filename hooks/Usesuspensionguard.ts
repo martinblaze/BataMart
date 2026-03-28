@@ -9,15 +9,15 @@ const POLL_INTERVAL_MS = 30_000 // check every 30 seconds
  * useSuspensionGuard
  *
  * Polls /api/auth/me every 30 seconds for any logged-in user.
- * If the server returns 403 with { suspended: true }, it means the admin
- * suspended this account while they were active. We immediately:
+ * If the server returns 403 with { suspended: true }, the admin has
+ * suspended this account while the user was active. We immediately:
  *   1. Clear all auth data from localStorage
  *   2. Dispatch 'auth-change' so any listening components update
- *   3. Redirect to /login with a query param so the login page can show
- *      a suspension message instead of a generic "logged out" message
+ *   3. Redirect to /login?suspended=1
  *
- * Drop this hook in a client component that wraps the whole app.
- * It does nothing if no token is present (unauthenticated users).
+ * We do NOT put reason or until in the URL — that info is fetched
+ * server-side by the login page from /api/auth/suspension-info,
+ * so it cannot be spoofed by manipulating query params.
  */
 export function useSuspensionGuard() {
   const router = useRouter()
@@ -26,14 +26,11 @@ export function useSuspensionGuard() {
   useEffect(() => {
     const check = async () => {
       const token = localStorage.getItem('token')
-
-      // No token = not logged in, nothing to guard
       if (!token) return
 
       try {
         const response = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
-          // Don't cache — we always want a fresh check
           cache: 'no-store',
         })
 
@@ -41,29 +38,25 @@ export function useSuspensionGuard() {
           const data = await response.json()
 
           if (data.suspended) {
-            // ── Force logout ──────────────────────────────────────────────
-            localStorage.removeItem('token')
+            // Clear auth — but keep token briefly so suspension-info
+            // endpoint can still identify the user (it clears on next load)
             localStorage.removeItem('userName')
             localStorage.removeItem('userRole')
+            localStorage.removeItem('userId')
+            // Remove token last
+            localStorage.removeItem('token')
 
-            // Tell any components listening (e.g. Navbar) to update immediately
             window.dispatchEvent(new Event('auth-change'))
 
-            // Build a descriptive redirect URL so login page can show context
-            const params = new URLSearchParams()
-            params.set('suspended', '1')
-            if (data.reason) params.set('reason', data.reason)
-            if (data.until) params.set('until', data.until)
-
-            router.replace(`/login?${params.toString()}`)
+            // Only pass the signal — reason/until fetched server-side
+            router.replace('/login?suspended=1')
           }
         }
       } catch {
-        // Network error — silently skip, will retry on next interval
+        // Network error — silently skip, retry on next interval
       }
     }
 
-    // Run once immediately on mount, then on interval
     check()
     intervalRef.current = setInterval(check, POLL_INTERVAL_MS)
 

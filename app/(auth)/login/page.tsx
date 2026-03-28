@@ -15,17 +15,18 @@ export default function LoginPage() {
   const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null)
 
   // ── Fetch real suspension info from the server when redirected ────────────
-  // We only use ?suspended=1 as a signal — the actual reason comes from the API,
-  // so it cannot be spoofed via URL manipulation.
+  // We only use ?suspended=1 as a signal — the actual reason/until comes
+  // from the API so it cannot be spoofed via URL params.
   useEffect(() => {
     const wasSuspended = searchParams.get('suspended') === '1'
     if (!wasSuspended) return
 
     const fetchSuspensionInfo = async () => {
       try {
+        // The token may still be in localStorage briefly during the redirect
+        const token = localStorage.getItem('token')
         const res = await fetch('/api/auth/suspension-info', {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         if (res.ok) {
           const data = await res.json()
@@ -34,8 +35,10 @@ export default function LoginPage() {
           }
         }
       } catch {
-        // If fetch fails, show a generic message — never fall back to URL params
-        setSuspensionMessage('Your account has been suspended. Please contact support.')
+        // Network error — show generic message, never fall back to URL params
+        setSuspensionMessage(
+          'Your account has been suspended. Please contact support.'
+        )
       }
     }
 
@@ -46,6 +49,7 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setSuspensionMessage(null)
 
     try {
       const response = await fetch('/api/auth/login-with-password', {
@@ -60,8 +64,16 @@ export default function LoginPage() {
         localStorage.setItem('token', data.token)
         localStorage.setItem('userName', data.user.name)
         localStorage.setItem('userRole', data.user.role || '')
+        // ── FIX: save userId so role detection works on order pages ──────
+        localStorage.setItem('userId', data.user.id)
         window.dispatchEvent(new Event('auth-change'))
         router.push('/marketplace')
+      } else if (response.status === 403 && data.suspended) {
+        // ── Suspension returned directly from login API ───────────────────
+        // This is the most common path — no URL param needed at all.
+        setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+      } else if (response.status === 429) {
+        setError('Too many login attempts. Please wait a few minutes and try again.')
       } else {
         setError(data.error || 'Login failed')
       }
@@ -90,14 +102,14 @@ export default function LoginPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
 
-          {/* ── Suspension banner — only shown when redirected from a forced logout ── */}
+          {/* Suspension banner — data always comes from server, never URL */}
           {suspensionMessage && (
             <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-start gap-3">
                 <span className="text-red-500 text-xl flex-shrink-0">🚫</span>
                 <div>
                   <p className="font-semibold text-red-800 text-sm">Account Suspended</p>
-                  <p className="text-red-700 text-sm mt-1">{suspensionMessage}</p>
+                  <p className="text-red-700 text-sm mt-1 whitespace-pre-line">{suspensionMessage}</p>
                 </div>
               </div>
             </div>
@@ -166,20 +178,19 @@ function buildSuspensionMessage(reason: string | null, until: string | null): st
   const reasonText = reason ?? 'Violation of platform terms'
 
   if (!until) {
-    return `Your account has been permanently suspended. Reason: ${reasonText}. Contact support if you believe this is an error.`
+    return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
 
   const untilDate = new Date(until)
   const now = new Date()
 
-  // Treat dates > 50 years in future as "permanent" (our server-side placeholder)
   if (untilDate.getFullYear() - now.getFullYear() > 50) {
-    return `Your account has been permanently suspended. Reason: ${reasonText}. Contact support if you believe this is an error.`
+    return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
 
   return `Your account is suspended until ${untilDate.toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
-  })}. Reason: ${reasonText}.`
+  })}.\n\nReason: ${reasonText}.`
 }
