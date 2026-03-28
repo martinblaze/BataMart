@@ -4,80 +4,29 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  LayoutDashboard,
-  Users,
-  Package,
-  AlertTriangle,
-  FileText,
-  DollarSign,
-  BarChart3,
-  LogOut,
-  Menu,
-  X,
-  MessageSquare,
+  LayoutDashboard, Users, Package, AlertTriangle,
+  FileText, DollarSign, BarChart3, LogOut, Menu, X, MessageSquare,
 } from 'lucide-react'
 
 const adminRoutes = [
-  {
-    label: 'Dashboard',
-    icon: LayoutDashboard,
-    href: '/admin',
-    color: 'text-blue-400',
-  },
-  {
-    label: 'Users',
-    icon: Users,
-    href: '/admin/users',
-    color: 'text-violet-400',
-  },
-  {
-    label: 'Products',
-    icon: Package,
-    href: '/admin/products',
-    color: 'text-green-400',
-  },
-  {
-    label: 'Disputes',
-    icon: AlertTriangle,
-    href: '/admin/disputes',
-    color: 'text-orange-400',
-  },
-  {
-    label: 'Reports',
-    icon: FileText,
-    href: '/admin/reports',
-    color: 'text-red-400',
-  },
-  {
-    label: 'Revenue',
-    icon: DollarSign,
-    href: '/admin/revenue',
-    color: 'text-emerald-400',
-  },
-  {
-    label: 'Analytics',
-    icon: BarChart3,
-    href: '/admin/analytics',
-    color: 'text-cyan-400',
-  },
-  {
-    label: 'Support',
-    icon: MessageSquare,
-    href: '/admin/support',
-    color: 'text-pink-400',
-  },
+  { label: 'Dashboard', icon: LayoutDashboard, href: '/admin', color: 'text-blue-400' },
+  { label: 'Users', icon: Users, href: '/admin/users', color: 'text-violet-400' },
+  { label: 'Products', icon: Package, href: '/admin/products', color: 'text-green-400' },
+  { label: 'Disputes', icon: AlertTriangle, href: '/admin/disputes', color: 'text-orange-400' },
+  { label: 'Reports', icon: FileText, href: '/admin/reports', color: 'text-red-400' },
+  { label: 'Revenue', icon: DollarSign, href: '/admin/revenue', color: 'text-emerald-400' },
+  { label: 'Analytics', icon: BarChart3, href: '/admin/analytics', color: 'text-cyan-400' },
+  { label: 'Support', icon: MessageSquare, href: '/admin/support', color: 'text-pink-400' },
 ]
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // FIX: Close sidebar whenever the route changes (mobile navigation)
+  // ✅ THE FIX: close sidebar whenever the route changes
+  // Next.js App Router keeps layouts mounted across navigations,
+  // so clicking a Link won't reset component state automatically.
   useEffect(() => {
     setSidebarOpen(false)
   }, [pathname])
@@ -119,7 +68,8 @@ export default function AdminLayout({
       {/* Sidebar */}
       <div
         className={`
-          fixed top-0 left-0 z-40 h-full w-64 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ease-in-out
+          fixed top-0 left-0 z-40 h-full w-64 bg-gray-800 border-r border-gray-700
+          transform transition-transform duration-300 ease-in-out
           md:translate-x-0
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
@@ -148,7 +98,6 @@ export default function AdminLayout({
                 <Link
                   key={route.href}
                   href={route.href}
-                  onClick={() => setSidebarOpen(false)}
                   className={`
                     group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all
                     ${isActive
@@ -157,9 +106,7 @@ export default function AdminLayout({
                     }
                   `}
                 >
-                  <Icon
-                    className={`mr-3 h-5 w-5 ${isActive ? route.color : 'text-gray-500 group-hover:text-gray-400'}`}
-                  />
+                  <Icon className={`mr-3 h-5 w-5 ${isActive ? route.color : 'text-gray-500 group-hover:text-gray-400'}`} />
                   {route.label}
                 </Link>
               )
