@@ -55,9 +55,33 @@ export default function ReferralsPage() {
 
   const copyLink = async () => {
     if (!stats) return
-    await navigator.clipboard.writeText(stats.referralLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      // Primary: modern Clipboard API (requires HTTPS + user gesture)
+      await navigator.clipboard.writeText(stats.referralLink)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Fallback: execCommand for older Android browsers / non-HTTPS
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = stats.referralLink
+        textarea.style.cssText = 'position:fixed;top:0;left:0;opacity:0;'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        if (ok) {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        } else {
+          // Last resort: show the link in an alert so user can copy manually
+          window.prompt('Copy your referral link:', stats.referralLink)
+        }
+      } catch {
+        window.prompt('Copy your referral link:', stats.referralLink)
+      }
+    }
   }
 
   const shareWhatsApp = () => {

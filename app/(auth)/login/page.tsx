@@ -12,15 +12,35 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null)
 
-  // ── Show suspension context if redirected from SuspensionGuard ────────────
-  const wasSuspended = searchParams.get('suspended') === '1'
-  const suspensionReason = searchParams.get('reason')
-  const suspensionUntil = searchParams.get('until')
+  // ── Fetch real suspension info from the server when redirected ────────────
+  // We only use ?suspended=1 as a signal — the actual reason comes from the API,
+  // so it cannot be spoofed via URL manipulation.
+  useEffect(() => {
+    const wasSuspended = searchParams.get('suspended') === '1'
+    if (!wasSuspended) return
 
-  const suspensionMessage = wasSuspended
-    ? buildSuspensionMessage(suspensionReason, suspensionUntil)
-    : null
+    const fetchSuspensionInfo = async () => {
+      try {
+        const res = await fetch('/api/auth/suspension-info', {
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.isSuspended) {
+            setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+          }
+        }
+      } catch {
+        // If fetch fails, show a generic message — never fall back to URL params
+        setSuspensionMessage('Your account has been suspended. Please contact support.')
+      }
+    }
+
+    fetchSuspensionInfo()
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

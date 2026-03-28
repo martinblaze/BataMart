@@ -114,12 +114,8 @@ export default function MyShopPage() {
         const data = await response.json()
         if (response.ok && data.user) {
           setUserRole(data.user.role || 'BUYER')
-          const sellerModePref = localStorage.getItem('sellerMode')
-          if (sellerModePref !== null) setIsSellerMode(sellerModePref === 'true')
-          else if (data.user.isSellerMode !== undefined) {
-            setIsSellerMode(data.user.isSellerMode)
-            localStorage.setItem('sellerMode', data.user.isSellerMode.toString())
-          }
+          const sellerModePref = data.user.isSellerMode ?? true
+          setIsSellerMode(sellerModePref)
         }
       } catch (error) { console.error('Error fetching user:', error) }
     }
@@ -204,15 +200,22 @@ export default function MyShopPage() {
 
   const toggleSellerMode = async () => {
     const newMode = !isSellerMode
-    setIsSellerMode(newMode)
-    localStorage.setItem('sellerMode', newMode.toString())
+    setIsSellerMode(newMode) // optimistic update
     if (userRole === 'SELLER' || userRole === 'ADMIN') {
       try {
-        await authFetch('/api/auth/toggle-seller-mode', {
+        const res = await authFetch('/api/auth/toggle-seller-mode', {
           method: 'POST',
           body: JSON.stringify({ isSellerMode: newMode }),
         })
-      } catch { console.error('Error updating seller mode') }
+        if (!res.ok) {
+          // Revert if the server rejected the change
+          setIsSellerMode(!newMode)
+          showToast('Failed to update mode. Please try again.', 'error')
+        }
+      } catch {
+        setIsSellerMode(!newMode)
+        showToast('Network error updating mode.', 'error')
+      }
     }
   }
 

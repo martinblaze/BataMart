@@ -27,6 +27,8 @@ import {
   MessageSquare,
   ExternalLink,
   AlertTriangle,
+  RefreshCw,
+  WifiOff,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -45,7 +47,9 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [reviewModal, setReviewModal] = useState<{
     isOpen: boolean;
@@ -68,13 +72,15 @@ export default function OrderDetailPage() {
 
     setIsPolling(true);
     const interval = setInterval(() => {
-      fetchOrder();
+      fetchOrder(true); // silent=true: don't show loading spinner on poll
     }, 10000);
 
     return () => clearInterval(interval);
   }, [order?.status]);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
     try {
       const token = localStorage.getItem('token');
 
@@ -90,20 +96,24 @@ export default function OrderDetailPage() {
       if (response.ok) {
         const data = await response.json();
         setOrder(data);
+      } else if (response.status === 401 || response.status === 403) {
+        router.push('/login');
       } else if (response.status === 404) {
         setOrder(null);
       } else {
-        console.error('Failed to fetch order');
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || `Something went wrong (${response.status}). Please try again.`);
       }
-    } catch (error) {
-      console.error('Error fetching order:', error);
+    } catch {
+      setError('Unable to load this order. Check your connection and try again.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   const updateOrderStatus = async (newStatus: string) => {
     setUpdating(true);
+    setUpdateError(null);
     try {
       const token = localStorage.getItem('token');
 
@@ -120,12 +130,11 @@ export default function OrderDetailPage() {
         const updated = await response.json();
         setOrder(updated);
       } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to update order');
+        const err = await response.json().catch(() => ({}));
+        setUpdateError(err.error || 'Failed to update order status. Please try again.');
       }
-    } catch (error) {
-      console.error('Error updating order:', error);
-      alert('Failed to update order');
+    } catch {
+      setUpdateError('Network error. Please check your connection and try again.');
     } finally {
       setUpdating(false);
     }
@@ -165,7 +174,6 @@ export default function OrderDetailPage() {
 
   const getStatusActions = () => {
     if (!order) return [];
-
     const actions = [];
     const userRole = getCurrentUserRole();
 
@@ -226,12 +234,36 @@ export default function OrderDetailPage() {
     );
   }
 
+  // ── Network / server error state ───────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-lg text-center">
+        <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-8">
+          <WifiOff className="w-14 h-14 mx-auto text-red-400 mb-4" />
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Couldn't Load Order</h1>
+          <p className="text-gray-500 mb-6 text-sm leading-relaxed">{error}</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={() => fetchOrder()} className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Try Again
+            </Button>
+            <Button variant="outline" onClick={() => router.push('/orders')}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Orders
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Order not found ────────────────────────────────────────────────────────
   if (!order) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
         <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
         <h1 className="text-2xl font-bold mb-2">Order Not Found</h1>
-        <p className="text-gray-600 mb-6">The order you're looking for doesn't exist.</p>
+        <p className="text-gray-600 mb-6">The order you're looking for doesn't exist or you don't have access to it.</p>
         <Button onClick={() => router.push('/orders')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Orders
@@ -272,6 +304,23 @@ export default function OrderDetailPage() {
         <ArrowLeft className="w-4 h-4 mr-2" />
         Back to Orders
       </Button>
+
+      {/* Inline update error banner — replaces alert() */}
+      {updateError && (
+        <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-800">Action Failed</p>
+            <p className="text-sm text-red-700 mt-0.5">{updateError}</p>
+          </div>
+          <button
+            onClick={() => setUpdateError(null)}
+            className="text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Order header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
@@ -670,7 +719,6 @@ export default function OrderDetailPage() {
 
           {/* ── Dispute card ──────────────────────────────────────────────── */}
           {order.dispute ? (
-            // Existing dispute → Track Dispute button
             <div className="bg-white rounded-lg border border-orange-200 p-6">
               <h3 className="font-semibold mb-1 flex items-center gap-2 text-orange-700">
                 <Shield className="w-5 h-5" />
@@ -694,7 +742,6 @@ export default function OrderDetailPage() {
               </Button>
             </div>
           ) : (
-            // No dispute → show "Open a Dispute" prompt to buyers on delivered orders
             userRole === 'BUYER' &&
             (order.status === 'DELIVERED' || order.status === 'COMPLETED') && (
               <div className="bg-white rounded-lg border p-6">

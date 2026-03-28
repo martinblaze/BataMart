@@ -1,16 +1,3 @@
-// hooks/useNotificationNudge.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Smart notification nudge system.
-//
-// RULES:
-//  • If push is already enabled        → never show
-//  • If browser denied permission       → never show (user must go to settings)
-//  • If user clicks "Not Now"           → snooze for 24 hours, then show again
-//  • If user manually turns off notifs  → snooze resets so we start nudging again
-//  • Contextual triggers (e.g. after payment) bypass the time-gate once per trigger
-//  • Never show more than once per page visit for non-contextual prompts
-// ─────────────────────────────────────────────────────────────────────────────
-
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'

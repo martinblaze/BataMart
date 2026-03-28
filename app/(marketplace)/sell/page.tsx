@@ -122,12 +122,23 @@ export default function SellPage() {
     } catch { return null }
   }
 
+  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+  const MAX_IMAGE_SIZE_MB = 8
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
     const remaining = 3 - images.length
     const filesToProcess = Array.from(files).slice(0, remaining)
     for (const file of filesToProcess) {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        setError(`"${file.name}" is not allowed. Only JPG, PNG, and WEBP images are accepted.`)
+        continue
+      }
+      if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+        setError(`"${file.name}" is too large. Images must be under ${MAX_IMAGE_SIZE_MB}MB.`)
+        continue
+      }
       const reader = new FileReader()
       reader.onloadend = async () => {
         const base64 = reader.result as string
@@ -367,13 +378,13 @@ export default function SellPage() {
                 )}
                 {images.length < 3 && (
                   <label className="block cursor-pointer">
-                    <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} className="hidden" />
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-BATAMART-primary transition-colors">
                       <svg className="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       <p className="text-gray-600 font-medium">Click to upload images</p>
-                      <p className="text-sm text-gray-500 mt-1">{images.length}/3 images · JPG, PNG, WEBP</p>
+                      <p className="text-sm text-gray-500 mt-1">{images.length}/3 images · JPG, PNG, WEBP · Max 8MB each</p>
                     </div>
                   </label>
                 )}
