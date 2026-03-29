@@ -61,7 +61,7 @@ const NIGERIAN_BANKS: Bank[] = [
   { code: '050', name: 'Ecobank Nigeria' },
   { code: '070', name: 'Fidelity Bank' },
   { code: '214', name: 'First City Monument Bank (FCMB)' },
-  { code: '030', name: 'Heritage Bank' },
+
   { code: '082', name: 'Keystone Bank' },
   { code: '076', name: 'Polaris Bank' },
   { code: '101', name: 'Providus Bank' },
@@ -827,4 +827,4 @@ export default function WalletPage() {
 
     </div>
   )
-}
+} 

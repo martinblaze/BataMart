@@ -232,6 +232,13 @@ export async function createOrders(
     itemsList: string
   }> = []
 
+  // Tracks products that hit zero stock during this payment — notified after tx
+  const outOfStockAlerts: Array<{
+    sellerId: string
+    productId: string
+    productName: string
+  }> = []
+
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
     const proportion = fees.subtotal > 0 ? orderSubtotal / fees.subtotal : 1
@@ -293,11 +300,28 @@ export async function createOrders(
         })
 
         // Decrement stock for each product in this order
+        // If stock reaches zero, also mark the product inactive so it
+        // disappears from the marketplace automatically.
         for (const item of sellerItems) {
-          await tx.product.update({
+          const updatedProduct = await tx.product.update({
             where: { id: item.productId },
             data: { quantity: { decrement: Number(item.quantity) } },
+            select: { id: true, name: true, quantity: true },
           })
+
+          // If stock just hit zero, deactivate the listing immediately
+          if (updatedProduct.quantity <= 0) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { isActive: false },
+            })
+            // Queue out-of-stock seller notification (fire-and-forget after tx)
+            outOfStockAlerts.push({
+              sellerId,
+              productId: updatedProduct.id,
+              productName: updatedProduct.name,
+            })
+          }
         }
 
         // Credit seller's pending (escrow) balance
@@ -372,6 +396,116 @@ export async function createOrders(
       .catch(err => console.error(`⚠️  Notification failed for ${n.orderNumber}:`, err))
   }
 
+  // Fire out-of-stock alerts — non-blocking, never delay order creation
+  if (outOfStockAlerts.length > 0) {
+    Promise.allSettled(
+      outOfStockAlerts.map(alert => notifySellerOutOfStock(alert.sellerId, alert.productId, alert.productName))
+    ).then(results => {
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.error(`⚠️  Out-of-stock notification failed for product ${outOfStockAlerts[i]?.productName}:`, r.reason)
+        }
+      })
+    })
+  }
+
   console.log('🎉 All orders created:', createdOrders.length)
   return createdOrders
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Out-of-stock seller notification
+// Fires after the transaction — notifies the seller via in-app bell + email
+// ─────────────────────────────────────────────────────────────────────────────
+async function notifySellerOutOfStock(sellerId: string, productId: string, productName: string) {
+  const [notifMod, emailMod, prismaMod] = await Promise.all([
+    import('@/lib/notification').catch(() => null),
+    import('@/lib/email/sendEmail').catch(() => null),
+    import('@/lib/prisma').catch(() => null),
+  ])
+
+  const seller = prismaMod
+    ? await prismaMod.prisma.user.findUnique({
+        where: { id: sellerId },
+        select: { email: true, name: true },
+      }).catch(() => null)
+    : null
+
+  const tasks: Promise<any>[] = []
+
+  // In-app bell notification
+  if (notifMod?.createNotification) {
+    tasks.push(
+      notifMod.createNotification({
+        userId: sellerId,
+        type: 'STOCK_ALERT',
+        title: '⚠️ Product Out of Stock',
+        message: `"${productName}" has sold out and has been automatically hidden from the marketplace. Restock it to make it visible again.`,
+        metadata: { productId, productName },
+      })
+    )
+  }
+
+  // Email notification to seller
+  if (seller?.email && emailMod?.sendEmail) {
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    tasks.push(
+      emailMod.sendEmail({
+        to: seller.email,
+        subject: `⚠️ "${productName}" is out of stock — BATAMART`,
+        html: `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+          <tr>
+            <td align="center" style="padding-bottom:24px;">
+              <span style="font-size:28px;font-weight:800;color:#111827;letter-spacing:-1px;">BATAMART</span>
+              <span style="font-size:12px;color:#6b7280;display:block;margin-top:2px;">UNIZIK Campus Marketplace</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-radius:16px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+              <p style="font-size:32px;margin:0 0 8px;">⚠️</p>
+              <h2 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;">Product Out of Stock</h2>
+              <p style="font-size:15px;color:#6b7280;margin:0 0 16px;">
+                Hi ${seller.name ?? 'Seller'}, your product <strong style="color:#111827;">"${productName}"</strong> has just sold out.
+              </p>
+              <div style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;padding:16px;margin-bottom:20px;">
+                <p style="margin:0;font-size:14px;color:#92400e;font-weight:600;">
+                  It has been automatically hidden from the marketplace to prevent buyers from ordering something you can't fulfil.
+                </p>
+              </div>
+              <p style="font-size:14px;color:#6b7280;margin:0 0 24px;">
+                To start selling again, go to your shop and restock this product. It will become visible again automatically once you add more quantity.
+              </p>
+              <a href="${APP_URL}/my-shop"
+                 style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;font-size:15px;font-weight:600;border-radius:10px;text-decoration:none;">
+                Restock Now →
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-top:24px;">
+              <p style="font-size:12px;color:#9ca3af;margin:0;">
+                BATAMART — UNIZIK Campus Marketplace · Awka, Anambra State
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+        `,
+      })
+    )
+  }
+
+  await Promise.allSettled(tasks)
 }

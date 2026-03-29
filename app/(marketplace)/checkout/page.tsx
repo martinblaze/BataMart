@@ -50,18 +50,18 @@ export default function CheckoutPage() {
     const productName = searchParams.get('product')
 
     if (urlError === 'payment_failed') {
-      setError('Payment was not successful. Please try again.')
+      setError('SAFE_TO_RETRY|Payment was not successful. Please try again.')
     } else if (urlError === 'out_of_stock' && productName) {
-      setError(`Sorry, "${decodeURIComponent(productName)}" went out of stock just before your payment was confirmed. You have not been charged — please try a different item.`)
+      setError(`NOT_CHARGED|Sorry, "${decodeURIComponent(productName)}" went out of stock just before your payment was confirmed. You have NOT been charged — please try a different item.`)
     } else if (urlError === 'verification_failed' || urlError === 'order_creation_failed') {
-      setError('Your payment went through but something went wrong on our end. Please contact support — do NOT pay again.')
+      setError('CHECK_ORDERS|Your payment may have gone through but something went wrong on our end. DO NOT pay again — check your Orders page first to see if the order was created. If it was not there within 5 minutes, contact support.')
     } else if (urlError === 'invalid_metadata' || urlError === 'user_not_found') {
-      setError('There was a problem processing your payment. Please contact support.')
+      setError('CHECK_ORDERS|There was a problem processing your payment. Check your Orders page first before trying again. If no order appears within 5 minutes, contact support.')
     } else if (urlError === 'product_not_found' || urlError === 'product_inactive') {
       const name = productName ? `"${decodeURIComponent(productName)}"` : 'one of the products'
-      setError(`${name} is no longer available. You have not been charged.`)
+      setError(`NOT_CHARGED|${name} is no longer available. You have NOT been charged.`)
     } else if (urlError === 'no_reference') {
-      setError('Payment session expired. Please try again.')
+      setError('SAFE_TO_RETRY|Payment session expired. Please try again.')
     }
 
     // ── Load cart items ────────────────────────────────────────
@@ -338,13 +338,48 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Error banner */}
-            {error && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3.5 rounded-xl">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p className="text-sm font-semibold">{error}</p>
-              </div>
-            )}
+            {/* Error banner — context-aware messaging */}
+            {error && (() => {
+              const [type, msg] = error.includes('|') ? error.split('|') : ['GENERIC', error]
+              const isCheckOrders = type === 'CHECK_ORDERS'
+              const isNotCharged  = type === 'NOT_CHARGED'
+
+              return (
+                <div className={`rounded-xl border px-4 py-4 ${
+                  isCheckOrders
+                    ? 'bg-amber-50 border-amber-300'
+                    : isNotCharged
+                    ? 'bg-blue-50 border-blue-200'
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl flex-shrink-0 mt-0.5">
+                      {isCheckOrders ? '⚠️' : isNotCharged ? 'ℹ️' : '❌'}
+                    </span>
+                    <div className="flex-1">
+                      <p className={`text-sm font-bold mb-1 ${
+                        isCheckOrders ? 'text-amber-800' : isNotCharged ? 'text-blue-800' : 'text-red-800'
+                      }`}>
+                        {isCheckOrders ? 'Before You Try Again — Check Your Orders' : isNotCharged ? 'You Were Not Charged' : 'Payment Error'}
+                      </p>
+                      <p className={`text-sm leading-relaxed ${
+                        isCheckOrders ? 'text-amber-700' : isNotCharged ? 'text-blue-700' : 'text-red-700'
+                      }`}>
+                        {msg}
+                      </p>
+                      {isCheckOrders && (
+                        <a
+                          href="/orders"
+                          className="inline-block mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg transition-colors"
+                        >
+                          Check My Orders →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
 
           {/* ── RIGHT: Summary + CTA ─────────────────────────────────── */}
