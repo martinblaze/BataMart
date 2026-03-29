@@ -25,6 +25,20 @@ export function usePushSubscription() {
     }
   }, [])
 
+  // ✅ Auto re-subscribe on page load if permission already granted
+  // This ensures mobile users stay subscribed after closing and reopening the app
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'granted' &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    ) {
+      autoResubscribeIfNeeded()
+    }
+  }, [])
+
   const checkSubscription = async () => {
     try {
       const registration = await getServiceWorkerRegistration()
@@ -33,6 +47,41 @@ export function usePushSubscription() {
       setIsSubscribed(!!subscription)
     } catch (error) {
       console.error('[Push] Check subscription error:', error)
+    }
+  }
+
+  // ✅ Silently re-subscribe if permission is granted but subscription is missing
+  // This fixes the case where mobile browser clears the subscription in the background
+  const autoResubscribeIfNeeded = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidKey) return
+
+      const registration = await getServiceWorkerRegistration()
+      if (!registration) return
+
+      const existing = await registration.pushManager.getSubscription()
+      if (existing) {
+        // Already subscribed — make sure server has this subscription saved
+        await saveSubscriptionToServer(existing, token)
+        setIsSubscribed(true)
+        return
+      }
+
+      // No subscription found — silently re-subscribe
+      console.log('[Push] No subscription found despite permission granted — re-subscribing...')
+      const newSubscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      })
+      await saveSubscriptionToServer(newSubscription, token)
+      setIsSubscribed(true)
+      console.log('[Push] ✅ Auto re-subscribed successfully')
+    } catch (error) {
+      console.error('[Push] Auto re-subscribe failed:', error)
     }
   }
 
@@ -52,6 +101,20 @@ export function usePushSubscription() {
     }
   }
 
+  const saveSubscriptionToServer = async (subscription: PushSubscription, token: string) => {
+    const response = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(subscription),
+    })
+    if (!response.ok) {
+      throw new Error(`Server rejected subscription: ${await response.text()}`)
+    }
+  }
+
   const subscribe = async (): Promise<boolean> => {
     if (!isSupported) {
       toast.error('Push notifications are not supported in this browser')
@@ -68,6 +131,8 @@ export function usePushSubscription() {
     setIsLoading(true)
 
     try {
+      // ✅ Must use service worker pushManager — NOT new Notification() directly
+      // new Notification() doesn't work on mobile/PWA; service worker does
       const result = await Notification.requestPermission()
       setPermission(result)
 
@@ -111,17 +176,10 @@ export function usePushSubscription() {
         return false
       }
 
-      const response = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(subscription),
-      })
-
-      if (!response.ok) {
-        console.error('[Push] Server failed to save subscription:', await response.text())
+      try {
+        await saveSubscriptionToServer(subscription, token)
+      } catch (err) {
+        console.error('[Push] Server failed to save subscription:', err)
         toast.error('Failed to save notification settings. Please try again.')
         return false
       }
@@ -129,7 +187,6 @@ export function usePushSubscription() {
       setIsSubscribed(true)
       toast.success("Notifications enabled! You'll get updates even when your browser is closed.")
       return true
-
     } catch (error) {
       console.error('[Push] Subscribe error:', error)
       toast.error('Something went wrong. Please try again.')
@@ -192,9 +249,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 // ── Global NotificationPrompt ─────────────────────────────────────────────────
-// Rendered as a BOTTOM SHEET — slides up from below the bottom nav.
-// Does NOT use fixed positioning that fights with IOSAppShell / z-index stacks.
-// Backdrop dims the page, sheet sits above everything at z-[9999].
 export function NotificationPrompt() {
   const { shouldShowPassive, snooze, markGranted } = useNotificationNudge()
   const { isLoading, subscribe } = usePushSubscription()
@@ -250,13 +304,13 @@ export function NotificationPrompt() {
         .np-bell { animation: npBellRing 1.6s ease 0.5s both; }
       `}</style>
 
-      {/* Backdrop — tapping it snoozes */}
+      {/* Backdrop */}
       <div
         className="np-backdrop fixed inset-0 z-[9998] bg-black/30"
         onClick={() => dismiss(true)}
       />
 
-      {/* Sheet — anchored to viewport bottom, full width, never clips content */}
+      {/* Bottom sheet */}
       <div
         className="np-sheet fixed left-0 right-0 bottom-0 z-[9999] bg-white rounded-t-3xl overflow-hidden"
         style={{ boxShadow: '0 -8px 40px rgba(0,0,0,0.18)' }}

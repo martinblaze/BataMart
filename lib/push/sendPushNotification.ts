@@ -3,9 +3,15 @@ import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email/sendEmail'
 import {
-  orderPlacedEmail, newOrderEmail, riderAssignedEmail,
-  orderOnTheWayEmail, orderDeliveredEmail, paymentReceivedEmail,
-  withdrawalProcessedEmail, disputeOpenedEmail, disputeResolvedEmail,
+  orderPlacedEmail,
+  newOrderEmail,
+  riderAssignedEmail,
+  orderOnTheWayEmail,
+  orderDeliveredEmail,
+  paymentReceivedEmail,
+  withdrawalProcessedEmail,
+  disputeOpenedEmail,
+  disputeResolvedEmail,
   newReviewEmail,
 } from '@/lib/email/emailTemplates'
 
@@ -24,15 +30,22 @@ interface PushPayload {
 }
 
 // ─── Send push to all subscriptions for a user ───────────────────────────────
+// ✅ Now EXPORTED so lib/notification.ts can call it directly for custom pushes.
 // Returns true if at least one push succeeded.
 // Stale/expired subscriptions (410/404) are auto-deleted.
-async function sendPushToUser(userId: string, payload: PushPayload): Promise<boolean> {
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<boolean> {
   try {
     const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } })
     if (subscriptions.length === 0) return false
 
+    // ✅ De-duplicate subscriptions by endpoint before sending
+    // This prevents the same device receiving the notification multiple times
+    const uniqueSubs = Array.from(
+      new Map(subscriptions.map((s) => [s.endpoint, s])).values()
+    )
+
     const results = await Promise.allSettled(
-      subscriptions.map(async (sub) => {
+      uniqueSubs.map(async (sub) => {
         const pushSub: WebPushSubscription = {
           endpoint: sub.endpoint,
           keys: { p256dh: sub.p256dh, auth: sub.auth },
@@ -56,7 +69,11 @@ async function sendPushToUser(userId: string, payload: PushPayload): Promise<boo
             console.log(`[Push] Removing stale subscription for user ${userId}`)
             await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
           } else {
-            console.error(`[Push] Failed to send to ${sub.endpoint.slice(0, 40)}:`, error.statusCode, error.body)
+            console.error(
+              `[Push] Failed to send to ${sub.endpoint.slice(0, 40)}:`,
+              error.statusCode,
+              error.body
+            )
           }
           throw error
         }
@@ -64,7 +81,6 @@ async function sendPushToUser(userId: string, payload: PushPayload): Promise<boo
     )
 
     const succeeded = results.filter((r) => r.status === 'fulfilled').length
-    const failed = results.length - succeeded
     if (succeeded > 0) {
       console.log(`[Push] ✅ ${succeeded}/${results.length} push(es) delivered to user ${userId}`)
     }
@@ -83,7 +99,6 @@ async function getUserEmail(userId: string): Promise<string | null> {
 // ─── Core notify function ─────────────────────────────────────────────────────
 // STRATEGY: Always try push first.
 // If push fails (no subscription or all pushes fail) → send email as fallback.
-// This ensures the user ALWAYS gets the notification one way or another.
 async function notify(
   userId: string,
   push: PushPayload,
@@ -93,7 +108,6 @@ async function notify(
     const pushed = await sendPushToUser(userId, push)
 
     if (!pushed) {
-      // No push subscription or all pushes failed — send email instead
       const email = await getUserEmail(userId)
       if (email) {
         const { subject, html } = await emailFn()
@@ -105,7 +119,6 @@ async function notify(
     }
   } catch (error) {
     console.error(`[Notify] ❌ Failed to notify user ${userId}:`, error)
-    // Never let notification failure crash the caller
   }
 }
 
@@ -247,7 +260,6 @@ export async function notifyNewReview(sellerId: string, productName: string) {
 }
 
 // ─── Notify all available riders of a new order ──────────────────────────────
-// Fire-and-forget: failures are isolated and logged but never crash the order flow.
 export async function notifyAvailableRiders(orderNumber: string): Promise<void> {
   try {
     const availableRiders = await prisma.user.findMany({
@@ -256,14 +268,12 @@ export async function notifyAvailableRiders(orderNumber: string): Promise<void> 
         isAvailable: true,
         isDeleted: false,
         isSuspended: false,
-        // Exclude riders already on an active delivery
         riderDeliveries: {
           none: {
             status: { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'] },
             isDisputed: false,
           },
         },
-        // Only target riders with a push subscription
         pushSubscriptions: { some: {} },
       },
       select: { id: true },
@@ -282,14 +292,18 @@ export async function notifyAvailableRiders(orderNumber: string): Promise<void> 
       requireInteraction: true,
     }
 
-    console.log(`[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`)
+    console.log(
+      `[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`
+    )
 
     const results = await Promise.allSettled(
       availableRiders.map((rider) => sendPushToUser(rider.id, payload))
     )
 
     const succeeded = results.filter((r) => r.status === 'fulfilled' && r.value === true).length
-    console.log(`[Push] Rider notifications: ${succeeded}/${results.length} delivered for order #${orderNumber}`)
+    console.log(
+      `[Push] Rider notifications: ${succeeded}/${results.length} delivered for order #${orderNumber}`
+    )
   } catch (error) {
     console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
   }

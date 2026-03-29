@@ -39,12 +39,21 @@ export default function MyProfilePage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isApp, setIsApp] = useState(false)
+  const [isIOSBrowser, setIsIOSBrowser] = useState(false)
+  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false)
 
   const { isSupported, isSubscribed, isLoading: notifLoading, permission, subscribe, unsubscribe } = usePushSubscription()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setIsApp(params.get('app') === 'true')
+
+    // Detect iOS browser tab (not standalone PWA)
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    setIsIOSBrowser(isIOS && !isStandalone)
   }, [])
 
   useEffect(() => { fetchProfileData() }, [])
@@ -161,6 +170,62 @@ export default function MyProfilePage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
+      {/* iOS Install Modal */}
+      {showIOSInstallModal && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={() => setShowIOSInstallModal(false)}
+          />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-BATAMART-primary rounded-xl flex items-center justify-center">
+                <span className="text-2xl">🛍️</span>
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 text-base">Add BataMart to Home Screen</p>
+                <p className="text-sm text-gray-500">Get the full app experience 🚀</p>
+              </div>
+            </div>
+            <div className="space-y-3 mb-5">
+              <div className="flex items-center gap-3 bg-blue-50 rounded-xl px-4 py-3">
+                <span className="text-xl">⎋</span>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Tap the Share button</p>
+                  <p className="text-xs text-gray-500">At the bottom of your Safari browser</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-green-50 rounded-xl px-4 py-3">
+                <span className="text-xl">➕</span>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Tap "Add to Home Screen"</p>
+                  <p className="text-xs text-gray-500">Scroll down in the share sheet to find it</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-yellow-50 rounded-xl px-4 py-3">
+                <span className="text-xl">✅</span>
+                <div>
+                  <p className="font-semibold text-sm text-gray-800">Tap "Add" to confirm</p>
+                  <p className="text-xs text-gray-500">BataMart will appear on your home screen</p>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowIOSInstallModal(false)}
+              className="w-full bg-BATAMART-primary text-white font-bold py-3 rounded-xl text-sm"
+            >
+              Got it!
+            </button>
+            <button
+              onClick={() => setShowIOSInstallModal(false)}
+              className="w-full text-gray-400 text-sm mt-3"
+            >
+              Maybe later
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Mobile Header — always visible */}
       <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="flex items-center justify-between px-4 py-3">
@@ -176,7 +241,7 @@ export default function MyProfilePage() {
         </div>
       </div>
 
-      {/* Mobile Slide-out Menu — always available */}
+      {/* Mobile Slide-out Menu */}
       {isMobileMenuOpen && (
         <>
           <div
@@ -444,13 +509,33 @@ export default function MyProfilePage() {
               </div>
             </div>
 
-            {/* Notifications — hidden in app mode */}
-            {!isApp && (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-gray-100">
-                  <h2 className="font-bold text-gray-900 text-sm lg:text-base">NOTIFICATIONS</h2>
-                </div>
-                <div className="p-4 lg:p-5">
+            {/* Notifications — always visible for all platforms */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-gray-100">
+                <h2 className="font-bold text-gray-900 text-sm lg:text-base">NOTIFICATIONS</h2>
+              </div>
+              <div className="p-4 lg:p-5">
+                {isIOSBrowser ? (
+                  // iOS Safari browser tab — show install CTA
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                        <span className="text-lg">📲</span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">Push Notifications</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Install app to Home Screen to enable</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowIOSInstallModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-BATAMART-primary text-white hover:bg-BATAMART-dark transition-colors"
+                    >
+                      How to
+                    </button>
+                  </div>
+                ) : (
+                  // Android, desktop, iOS PWA — normal toggle
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSubscribed ? 'bg-green-100' : 'bg-gray-100'}`}>
@@ -477,9 +562,9 @@ export default function MyProfilePage() {
                     )}
                     {permission === 'denied' && <span className="text-xs text-red-500 font-medium">Blocked</span>}
                   </div>
-                </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Referral Card */}
             <ReferralCard />

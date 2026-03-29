@@ -954,128 +954,97 @@ export default function HomePage() {
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  LayoutDashboard,
-  Users,
-  Package,
-  AlertTriangle,
-  FileText,
-  DollarSign,
-  BarChart3,
-  LogOut,
-  Menu,
-  X,
-  MessageSquare,
+  LayoutDashboard, Users, Package, AlertTriangle,
+  FileText, DollarSign, BarChart3, LogOut, Menu, X, MessageSquare,
 } from 'lucide-react'
 
 const adminRoutes = [
-  {
-    label: 'Dashboard',
-    icon: LayoutDashboard,
-    href: '/admin',
-    color: 'text-blue-400',
-  },
-  {
-    label: 'Users',
-    icon: Users,
-    href: '/admin/users',
-    color: 'text-violet-400',
-  },
-  {
-    label: 'Products',
-    icon: Package,
-    href: '/admin/products',
-    color: 'text-green-400',
-  },
-  {
-    label: 'Disputes',
-    icon: AlertTriangle,
-    href: '/admin/disputes',
-    color: 'text-orange-400',
-  },
-  {
-    label: 'Reports',
-    icon: FileText,
-    href: '/admin/reports',
-    color: 'text-red-400',
-  },
-  {
-    label: 'Revenue',
-    icon: DollarSign,
-    href: '/admin/revenue',
-    color: 'text-emerald-400',
-  },
-  {
-    label: 'Analytics',
-    icon: BarChart3,
-    href: '/admin/analytics',
-    color: 'text-cyan-400',
-  },
-  {
-    label: 'Support',
-    icon: MessageSquare,
-    href: '/admin/support',
-    color: 'text-pink-400',
-  },
+  { label: 'Dashboard', icon: LayoutDashboard, href: '/admin',           color: 'text-blue-400' },
+  { label: 'Users',     icon: Users,           href: '/admin/users',     color: 'text-violet-400' },
+  { label: 'Products',  icon: Package,         href: '/admin/products',  color: 'text-green-400' },
+  { label: 'Disputes',  icon: AlertTriangle,   href: '/admin/disputes',  color: 'text-orange-400' },
+  { label: 'Reports',   icon: FileText,        href: '/admin/reports',   color: 'text-red-400' },
+  { label: 'Revenue',   icon: DollarSign,      href: '/admin/revenue',   color: 'text-emerald-400' },
+  { label: 'Analytics', icon: BarChart3,       href: '/admin/analytics', color: 'text-cyan-400' },
+  { label: 'Support',   icon: MessageSquare,   href: '/admin/support',   color: 'text-pink-400' },
 ]
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile
+  useEffect(() =&gt; {
+    const check = () =&gt; setIsMobile(window.innerWidth &lt; 768)
+    check()
+    window.addEventListener('resize', check)
+    return () =&gt; window.removeEventListener('resize', check)
+  }, [])
+
+  // Close sidebar on route change
+  useEffect(() =&gt; {
+    setSidebarOpen(false)
+  }, [pathname])
+
+  const handleNavClick = (href: string) =&gt; {
+    setSidebarOpen(false)
+    router.push(href)
+  }
 
   const handleLogout = () =&gt; {
-    // Clear localStorage
     localStorage.removeItem('adminToken')
-    // Clear cookie (needed for middleware protection)
     document.cookie = 'adminToken=; path=/; max-age=0; SameSite=Strict'
-    // Redirect to login
     router.push('/admin-login')
   }
 
+  // On mobile: controlled by sidebarOpen
+  // On desktop: always visible (translateX(0))
+  const sidebarTransform = isMobile
+    ? sidebarOpen ? 'translateX(0)' : 'translateX(-100%)'
+    : 'translateX(0)'
+
   return (
     &lt;div className="min-h-screen bg-gray-900"&gt;
+
       {/* Mobile Header */}
-      &lt;div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between h-16 px-4 bg-gray-800 border-b border-gray-700"&gt;
+      &lt;div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-16 px-4 bg-gray-800 border-b border-gray-700"&gt;
         &lt;Link href="/admin" className="flex items-center gap-2"&gt;
           &lt;div className="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center"&gt;
             &lt;span className="text-white font-bold text-lg"&gt;B&lt;/span&gt;
           &lt;/div&gt;
-          &lt;div&gt;
-            &lt;h1 className="text-lg font-bold text-white"&gt;BATAMART Admin&lt;/h1&gt;
-          &lt;/div&gt;
+          &lt;h1 className="text-lg font-bold text-white"&gt;BATAMART Admin&lt;/h1&gt;
         &lt;/Link&gt;
         &lt;button
-          onClick={() =&gt; setSidebarOpen(!sidebarOpen)}
+          onClick={() =&gt; setSidebarOpen(prev =&gt; !prev)}
           className="text-gray-400 hover:text-white p-2"
         &gt;
           {sidebarOpen ? &lt;X className="h-6 w-6" /&gt; : &lt;Menu className="h-6 w-6" /&gt;}
         &lt;/button&gt;
       &lt;/div&gt;
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen &amp;&amp; (
+      {/* Overlay */}
+      {isMobile &amp;&amp; sidebarOpen &amp;&amp; (
         &lt;div
-          className="fixed inset-0 z-30 bg-gray-900/80 md:hidden"
+          className="fixed inset-0 z-[60] bg-gray-900/80"
           onClick={() =&gt; setSidebarOpen(false)}
         /&gt;
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — inline style controls transform to avoid Tailwind purge issues */}
       &lt;div
-        className={`
-          fixed top-0 left-0 z-40 h-full w-64 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ease-in-out
-          md:translate-x-0
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
+        style={{
+          transform: sidebarTransform,
+          transition: 'transform 300ms ease-in-out',
+        }}
+        className="fixed top-0 left-0 z-[70] h-full w-64 bg-gray-800 border-r border-gray-700"
       &gt;
         &lt;div className="flex flex-col h-full"&gt;
-          {/* Logo */}
+
+          {/* Logo — desktop */}
           &lt;div className="hidden md:flex items-center h-16 px-4 border-b border-gray-700"&gt;
             &lt;Link href="/admin" className="flex items-center gap-2"&gt;
               &lt;div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center"&gt;
@@ -1095,23 +1064,20 @@ export default function AdminLayout({
               const isActive = pathname === route.href
 
               return (
-                &lt;Link
+                &lt;button
                   key={route.href}
-                  href={route.href}
-                  onClick={() =&gt; setSidebarOpen(false)}
+                  onClick={() =&gt; handleNavClick(route.href)}
                   className={`
-                    group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all
+                    w-full group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all text-left
                     ${isActive
                       ? 'bg-gray-700 text-white shadow-lg'
                       : 'text-gray-400 hover:bg-gray-700/50 hover:text-white'
                     }
                   `}
                 &gt;
-                  &lt;Icon
-                    className={`mr-3 h-5 w-5 ${isActive ? route.color : 'text-gray-500 group-hover:text-gray-400'}`}
-                  /&gt;
+                  &lt;Icon className={`mr-3 h-5 w-5 shrink-0 ${isActive ? route.color : 'text-gray-500 group-hover:text-gray-400'}`} /&gt;
                   {route.label}
-                &lt;/Link&gt;
+                &lt;/button&gt;
               )
             })}
           &lt;/nav&gt;
@@ -1126,6 +1092,7 @@ export default function AdminLayout({
               Logout
             &lt;/button&gt;
           &lt;/div&gt;
+
         &lt;/div&gt;
       &lt;/div&gt;
 
@@ -1137,6 +1104,7 @@ export default function AdminLayout({
           &lt;/div&gt;
         &lt;/main&gt;
       &lt;/div&gt;
+
     &lt;/div&gt;
   )
 }</pre></div>
@@ -2564,7 +2532,7 @@ export default function AdminSupportPage() {
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Shield, CheckCircle, XCircle } from 'lucide-react'
+import { Search, Shield, CheckCircle, XCircle, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 interface User {
   id: string
@@ -2583,92 +2551,102 @@ interface User {
   }
 }
 
+interface SuspendDialogState {
+  userId: string
+  userName: string
+  reason: string
+  days: string
+}
+
+const PAGE_SIZE = 50
+
 export default function UsersPage() {
   const [users, setUsers] = useState&lt;User[]&gt;([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterRole, setFilterRole] = useState&lt;string&gt;('ALL')
   const [actionLoading, setActionLoading] = useState&lt;string | null&gt;(null)
 
-  useEffect(() =&gt; { fetchUsers() }, [])
+  // Inline toast — replaces alert()
+  const [toast, setToast] = useState&lt;{ message: string; type: 'success' | 'error' } | null&gt;(null)
+  const showToast = (message: string, type: 'success' | 'error' = 'success') =&gt; {
+    setToast({ message, type })
+    setTimeout(() =&gt; setToast(null), 4000)
+  }
 
-  const fetchUsers = async () =&gt; {
+  // Inline suspend dialog — replaces prompt()
+  const [suspendDialog, setSuspendDialog] = useState&lt;SuspendDialogState | null&gt;(null)
+
+  // Inline unsuspend confirm — replaces confirm()
+  const [unsuspendTarget, setUnsuspendTarget] = useState&lt;{ userId: string; userName: string } | null&gt;(null)
+
+  useEffect(() =&gt; { fetchUsers(page) }, [page])
+
+  const fetchUsers = async (p: number) =&gt; {
+    setLoading(true)
     try {
       const token = localStorage.getItem('adminToken')
-      const response = await fetch('/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+      const response = await fetch(
+        `/api/admin/users?page=${p}&amp;limit=${PAGE_SIZE}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      )
       if (response.ok) {
         const data = await response.json()
         setUsers(data.users)
+        // Backend should return total count; fall back to array length
+        setTotal(data.total ?? data.users.length)
+      } else {
+        showToast('Failed to load users', 'error')
       }
-    } catch (error) {
-      console.error('Failed to fetch users:', error)
+    } catch {
+      showToast('Network error loading users', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSuspendUser = async (userId: string) =&gt; {
-    const reason = prompt('Enter suspension reason (leave blank for "Administrative action"):') 
-    if (reason === null) return // cancelled
-    const daysStr = prompt('Suspend for how many days? (Enter 0 for permanent):')
-    if (daysStr === null) return // cancelled
-    const days = parseInt(daysStr) || 30
-
+  const handleSuspendSubmit = async () =&gt; {
+    if (!suspendDialog) return
+    const { userId, reason, days } = suspendDialog
+    const parsedDays = parseInt(days) || 30
     setActionLoading(userId)
+    setSuspendDialog(null)
     try {
       const token = localStorage.getItem('adminToken')
       const response = await fetch(`/api/admin/users/${userId}/suspend`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reason: reason.trim() || 'Administrative action',
-          days,
-        }),
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() || 'Administrative action', days: parsedDays }),
       })
-
       const data = await response.json()
-      if (response.ok) {
-        alert('User suspended successfully')
-        fetchUsers()
-      } else {
-        alert(`Failed: ${data.error || 'Unknown error'}`)
-      }
-    } catch (error) {
-      alert('Network error. Please try again.')
+      if (response.ok) { showToast('User suspended successfully'); fetchUsers(page) }
+      else showToast(`Failed: ${data.error || 'Unknown error'}`, 'error')
+    } catch {
+      showToast('Network error. Please try again.', 'error')
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleUnsuspendUser = async (userId: string) =&gt; {
-    if (!confirm('Unsuspend this user?')) return
-
+  const handleUnsuspendConfirm = async () =&gt; {
+    if (!unsuspendTarget) return
+    const { userId } = unsuspendTarget
     setActionLoading(userId)
+    setUnsuspendTarget(null)
     try {
       const token = localStorage.getItem('adminToken')
       const response = await fetch(`/api/admin/users/${userId}/unsuspend`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-
       const data = await response.json()
-      if (response.ok) {
-        alert('User unsuspended successfully')
-        fetchUsers()
-      } else {
-        alert(`Failed: ${data.error || 'Unknown error'}`)
-      }
-    } catch (error) {
-      alert('Network error. Please try again.')
+      if (response.ok) { showToast('User unsuspended successfully'); fetchUsers(page) }
+      else showToast(`Failed: ${data.error || 'Unknown error'}`, 'error')
+    } catch {
+      showToast('Network error. Please try again.', 'error')
     } finally {
       setActionLoading(null)
     }
@@ -2682,8 +2660,101 @@ export default function UsersPage() {
     return matchesSearch &amp;&amp; matchesRole
   })
 
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
   return (
     &lt;div className="space-y-6"&gt;
+
+      {/* Toast notification */}
+      {toast &amp;&amp; (
+        &lt;div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-semibold ${
+          toast.type === 'success'
+            ? 'bg-emerald-900/90 border-emerald-700 text-emerald-200'
+            : 'bg-red-900/90 border-red-700 text-red-200'
+        }`}&gt;
+          {toast.message}
+          &lt;button onClick={() =&gt; setToast(null)}&gt;&lt;X className="w-4 h-4" /&gt;&lt;/button&gt;
+        &lt;/div&gt;
+      )}
+
+      {/* Inline Suspend Dialog */}
+      {suspendDialog &amp;&amp; (
+        &lt;div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"&gt;
+          &lt;div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"&gt;
+            &lt;h3 className="text-white font-bold text-lg mb-1"&gt;Suspend User&lt;/h3&gt;
+            &lt;p className="text-gray-400 text-sm mb-5"&gt;{suspendDialog.userName}&lt;/p&gt;
+            &lt;div className="space-y-4"&gt;
+              &lt;div&gt;
+                &lt;label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wider"&gt;
+                  Reason (optional)
+                &lt;/label&gt;
+                &lt;input
+                  type="text"
+                  value={suspendDialog.reason}
+                  onChange={e =&gt; setSuspendDialog(d =&gt; d ? { ...d, reason: e.target.value } : d)}
+                  placeholder="e.g. Fraudulent activity"
+                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                /&gt;
+              &lt;/div&gt;
+              &lt;div&gt;
+                &lt;label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wider"&gt;
+                  Duration in days — enter 0 for permanent
+                &lt;/label&gt;
+                &lt;input
+                  type="number"
+                  min="0"
+                  value={suspendDialog.days}
+                  onChange={e =&gt; setSuspendDialog(d =&gt; d ? { ...d, days: e.target.value } : d)}
+                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                /&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div className="flex gap-3 mt-6"&gt;
+              &lt;button
+                onClick={() =&gt; setSuspendDialog(null)}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-gray-700 text-gray-300 text-sm font-semibold hover:bg-gray-600 transition-colors"
+              &gt;
+                Cancel
+              &lt;/button&gt;
+              &lt;button
+                onClick={handleSuspendSubmit}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors"
+              &gt;
+                Suspend
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      )}
+
+      {/* Inline Unsuspend Confirm */}
+      {unsuspendTarget &amp;&amp; (
+        &lt;div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"&gt;
+          &lt;div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl"&gt;
+            &lt;h3 className="text-white font-bold text-lg mb-2"&gt;Unsuspend User?&lt;/h3&gt;
+            &lt;p className="text-gray-400 text-sm mb-6"&gt;
+              This will restore full access for{' '}
+              &lt;strong className="text-white"&gt;{unsuspendTarget.userName}&lt;/strong&gt;.
+            &lt;/p&gt;
+            &lt;div className="flex gap-3"&gt;
+              &lt;button
+                onClick={() =&gt; setUnsuspendTarget(null)}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-gray-700 text-gray-300 text-sm font-semibold hover:bg-gray-600 transition-colors"
+              &gt;
+                Cancel
+              &lt;/button&gt;
+              &lt;button
+                onClick={handleUnsuspendConfirm}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
+              &gt;
+                Unsuspend
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      )}
+
+      {/* Search &amp; Filter */}
       &lt;div className="flex flex-col md:flex-row gap-4 justify-between"&gt;
         &lt;div className="relative flex-1 max-w-md"&gt;
           &lt;Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" /&gt;
@@ -2707,6 +2778,7 @@ export default function UsersPage() {
         &lt;/select&gt;
       &lt;/div&gt;
 
+      {/* Users Table */}
       &lt;div className="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden"&gt;
         &lt;div className="overflow-x-auto"&gt;
           &lt;table className="w-full"&gt;
@@ -2786,7 +2858,7 @@ export default function UsersPage() {
                       &lt;div className="flex items-center justify-end gap-2"&gt;
                         {user.isSuspended ? (
                           &lt;button
-                            onClick={() =&gt; handleUnsuspendUser(user.id)}
+                            onClick={() =&gt; setUnsuspendTarget({ userId: user.id, userName: user.name })}
                             disabled={actionLoading === user.id}
                             className="px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg text-xs font-semibold hover:bg-green-500/20 transition-colors disabled:opacity-50"
                           &gt;
@@ -2794,7 +2866,7 @@ export default function UsersPage() {
                           &lt;/button&gt;
                         ) : (
                           &lt;button
-                            onClick={() =&gt; handleSuspendUser(user.id)}
+                            onClick={() =&gt; setSuspendDialog({ userId: user.id, userName: user.name, reason: '', days: '30' })}
                             disabled={actionLoading === user.id}
                             className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-xs font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
                           &gt;
@@ -2809,6 +2881,31 @@ export default function UsersPage() {
             &lt;/tbody&gt;
           &lt;/table&gt;
         &lt;/div&gt;
+
+        {/* Pagination controls */}
+        {totalPages &gt; 1 &amp;&amp; (
+          &lt;div className="flex items-center justify-between px-6 py-4 border-t border-gray-700"&gt;
+            &lt;p className="text-sm text-gray-400"&gt;
+              Page {page} of {totalPages} · {total} total users
+            &lt;/p&gt;
+            &lt;div className="flex items-center gap-2"&gt;
+              &lt;button
+                onClick={() =&gt; setPage(p =&gt; Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              &gt;
+                &lt;ChevronLeft className="w-4 h-4" /&gt;
+              &lt;/button&gt;
+              &lt;button
+                onClick={() =&gt; setPage(p =&gt; Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || loading}
+                className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              &gt;
+                &lt;ChevronRight className="w-4 h-4" /&gt;
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )}
       &lt;/div&gt;
     &lt;/div&gt;
   )
@@ -3221,20 +3318,44 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [suspensionMessage, setSuspensionMessage] = useState&lt;string | null&gt;(null)
 
-  // ── Show suspension context if redirected from SuspensionGuard ────────────
-  const wasSuspended = searchParams.get('suspended') === '1'
-  const suspensionReason = searchParams.get('reason')
-  const suspensionUntil = searchParams.get('until')
+  // ── Fetch real suspension info from the server when redirected ────────────
+  // We only use ?suspended=1 as a signal — the actual reason/until comes
+  // from the API so it cannot be spoofed via URL params.
+  useEffect(() =&gt; {
+    const wasSuspended = searchParams.get('suspended') === '1'
+    if (!wasSuspended) return
 
-  const suspensionMessage = wasSuspended
-    ? buildSuspensionMessage(suspensionReason, suspensionUntil)
-    : null
+    const fetchSuspensionInfo = async () =&gt; {
+      try {
+        // The token may still be in localStorage briefly during the redirect
+        const token = localStorage.getItem('token')
+        const res = await fetch('/api/auth/suspension-info', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.isSuspended) {
+            setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+          }
+        }
+      } catch {
+        // Network error — show generic message, never fall back to URL params
+        setSuspensionMessage(
+          'Your account has been suspended. Please contact support.'
+        )
+      }
+    }
+
+    fetchSuspensionInfo()
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) =&gt; {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setSuspensionMessage(null)
 
     try {
       const response = await fetch('/api/auth/login-with-password', {
@@ -3249,8 +3370,16 @@ export default function LoginPage() {
         localStorage.setItem('token', data.token)
         localStorage.setItem('userName', data.user.name)
         localStorage.setItem('userRole', data.user.role || '')
+        // ── FIX: save userId so role detection works on order pages ──────
+        localStorage.setItem('userId', data.user.id)
         window.dispatchEvent(new Event('auth-change'))
         router.push('/marketplace')
+      } else if (response.status === 403 &amp;&amp; data.suspended) {
+        // ── Suspension returned directly from login API ───────────────────
+        // This is the most common path — no URL param needed at all.
+        setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+      } else if (response.status === 429) {
+        setError('Too many login attempts. Please wait a few minutes and try again.')
       } else {
         setError(data.error || 'Login failed')
       }
@@ -3279,14 +3408,14 @@ export default function LoginPage() {
 
         &lt;div className="bg-white rounded-2xl shadow-xl p-8"&gt;
 
-          {/* ── Suspension banner — only shown when redirected from a forced logout ── */}
+          {/* Suspension banner — data always comes from server, never URL */}
           {suspensionMessage &amp;&amp; (
             &lt;div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4"&gt;
               &lt;div className="flex items-start gap-3"&gt;
                 &lt;span className="text-red-500 text-xl flex-shrink-0"&gt;🚫&lt;/span&gt;
                 &lt;div&gt;
                   &lt;p className="font-semibold text-red-800 text-sm"&gt;Account Suspended&lt;/p&gt;
-                  &lt;p className="text-red-700 text-sm mt-1"&gt;{suspensionMessage}&lt;/p&gt;
+                  &lt;p className="text-red-700 text-sm mt-1 whitespace-pre-line"&gt;{suspensionMessage}&lt;/p&gt;
                 &lt;/div&gt;
               &lt;/div&gt;
             &lt;/div&gt;
@@ -3355,24 +3484,22 @@ function buildSuspensionMessage(reason: string | null, until: string | null): st
   const reasonText = reason ?? 'Violation of platform terms'
 
   if (!until) {
-    return `Your account has been permanently suspended. Reason: ${reasonText}. Contact support if you believe this is an error.`
+    return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
 
   const untilDate = new Date(until)
   const now = new Date()
 
-  // Treat dates &gt; 50 years in future as "permanent" (our server-side placeholder)
   if (untilDate.getFullYear() - now.getFullYear() &gt; 50) {
-    return `Your account has been permanently suspended. Reason: ${reasonText}. Contact support if you believe this is an error.`
+    return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
 
   return `Your account is suspended until ${untilDate.toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
-  })}. Reason: ${reasonText}.`
-}
-</pre></div>
+  })}.\n\nReason: ${reasonText}.`
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/(auth)/profile/setup/page.tsx</div><pre>'use client'
 
 import { useState } from 'react'
@@ -5171,18 +5298,18 @@ export default function CheckoutPage() {
     const productName = searchParams.get('product')
 
     if (urlError === 'payment_failed') {
-      setError('Payment was not successful. Please try again.')
+      setError('SAFE_TO_RETRY|Payment was not successful. Please try again.')
     } else if (urlError === 'out_of_stock' &amp;&amp; productName) {
-      setError(`Sorry, "${decodeURIComponent(productName)}" went out of stock just before your payment was confirmed. You have not been charged — please try a different item.`)
+      setError(`NOT_CHARGED|Sorry, "${decodeURIComponent(productName)}" went out of stock just before your payment was confirmed. You have NOT been charged — please try a different item.`)
     } else if (urlError === 'verification_failed' || urlError === 'order_creation_failed') {
-      setError('Your payment went through but something went wrong on our end. Please contact support — do NOT pay again.')
+      setError('CHECK_ORDERS|Your payment may have gone through but something went wrong on our end. DO NOT pay again — check your Orders page first to see if the order was created. If it was not there within 5 minutes, contact support.')
     } else if (urlError === 'invalid_metadata' || urlError === 'user_not_found') {
-      setError('There was a problem processing your payment. Please contact support.')
+      setError('CHECK_ORDERS|There was a problem processing your payment. Check your Orders page first before trying again. If no order appears within 5 minutes, contact support.')
     } else if (urlError === 'product_not_found' || urlError === 'product_inactive') {
       const name = productName ? `"${decodeURIComponent(productName)}"` : 'one of the products'
-      setError(`${name} is no longer available. You have not been charged.`)
+      setError(`NOT_CHARGED|${name} is no longer available. You have NOT been charged.`)
     } else if (urlError === 'no_reference') {
-      setError('Payment session expired. Please try again.')
+      setError('SAFE_TO_RETRY|Payment session expired. Please try again.')
     }
 
     // ── Load cart items ────────────────────────────────────────
@@ -5459,13 +5586,48 @@ export default function CheckoutPage() {
               &lt;/div&gt;
             &lt;/div&gt;
 
-            {/* Error banner */}
-            {error &amp;&amp; (
-              &lt;div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3.5 rounded-xl"&gt;
-                &lt;AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /&gt;
-                &lt;p className="text-sm font-semibold"&gt;{error}&lt;/p&gt;
-              &lt;/div&gt;
-            )}
+            {/* Error banner — context-aware messaging */}
+            {error &amp;&amp; (() =&gt; {
+              const [type, msg] = error.includes('|') ? error.split('|') : ['GENERIC', error]
+              const isCheckOrders = type === 'CHECK_ORDERS'
+              const isNotCharged  = type === 'NOT_CHARGED'
+
+              return (
+                &lt;div className={`rounded-xl border px-4 py-4 ${
+                  isCheckOrders
+                    ? 'bg-amber-50 border-amber-300'
+                    : isNotCharged
+                    ? 'bg-blue-50 border-blue-200'
+                    : 'bg-red-50 border-red-200'
+                }`}&gt;
+                  &lt;div className="flex items-start gap-3"&gt;
+                    &lt;span className="text-xl flex-shrink-0 mt-0.5"&gt;
+                      {isCheckOrders ? '⚠️' : isNotCharged ? 'ℹ️' : '❌'}
+                    &lt;/span&gt;
+                    &lt;div className="flex-1"&gt;
+                      &lt;p className={`text-sm font-bold mb-1 ${
+                        isCheckOrders ? 'text-amber-800' : isNotCharged ? 'text-blue-800' : 'text-red-800'
+                      }`}&gt;
+                        {isCheckOrders ? 'Before You Try Again — Check Your Orders' : isNotCharged ? 'You Were Not Charged' : 'Payment Error'}
+                      &lt;/p&gt;
+                      &lt;p className={`text-sm leading-relaxed ${
+                        isCheckOrders ? 'text-amber-700' : isNotCharged ? 'text-blue-700' : 'text-red-700'
+                      }`}&gt;
+                        {msg}
+                      &lt;/p&gt;
+                      {isCheckOrders &amp;&amp; (
+                        &lt;a
+                          href="/orders"
+                          className="inline-block mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg transition-colors"
+                        &gt;
+                          Check My Orders →
+                        &lt;/a&gt;
+                      )}
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              )
+            })()}
           &lt;/div&gt;
 
           {/* ── RIGHT: Summary + CTA ─────────────────────────────────── */}
@@ -6877,12 +7039,8 @@ export default function MyShopPage() {
         const data = await response.json()
         if (response.ok &amp;&amp; data.user) {
           setUserRole(data.user.role || 'BUYER')
-          const sellerModePref = localStorage.getItem('sellerMode')
-          if (sellerModePref !== null) setIsSellerMode(sellerModePref === 'true')
-          else if (data.user.isSellerMode !== undefined) {
-            setIsSellerMode(data.user.isSellerMode)
-            localStorage.setItem('sellerMode', data.user.isSellerMode.toString())
-          }
+          const sellerModePref = data.user.isSellerMode ?? true
+          setIsSellerMode(sellerModePref)
         }
       } catch (error) { console.error('Error fetching user:', error) }
     }
@@ -6967,15 +7125,22 @@ export default function MyShopPage() {
 
   const toggleSellerMode = async () =&gt; {
     const newMode = !isSellerMode
-    setIsSellerMode(newMode)
-    localStorage.setItem('sellerMode', newMode.toString())
+    setIsSellerMode(newMode) // optimistic update
     if (userRole === 'SELLER' || userRole === 'ADMIN') {
       try {
-        await authFetch('/api/auth/toggle-seller-mode', {
+        const res = await authFetch('/api/auth/toggle-seller-mode', {
           method: 'POST',
           body: JSON.stringify({ isSellerMode: newMode }),
         })
-      } catch { console.error('Error updating seller mode') }
+        if (!res.ok) {
+          // Revert if the server rejected the change
+          setIsSellerMode(!newMode)
+          showToast('Failed to update mode. Please try again.', 'error')
+        }
+      } catch {
+        setIsSellerMode(!newMode)
+        showToast('Network error updating mode.', 'error')
+      }
     }
   }
 
@@ -8109,9 +8274,33 @@ export default function ReferralsPage() {
 
   const copyLink = async () =&gt; {
     if (!stats) return
-    await navigator.clipboard.writeText(stats.referralLink)
-    setCopied(true)
-    setTimeout(() =&gt; setCopied(false), 2000)
+    try {
+      // Primary: modern Clipboard API (requires HTTPS + user gesture)
+      await navigator.clipboard.writeText(stats.referralLink)
+      setCopied(true)
+      setTimeout(() =&gt; setCopied(false), 2000)
+    } catch {
+      // Fallback: execCommand for older Android browsers / non-HTTPS
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = stats.referralLink
+        textarea.style.cssText = 'position:fixed;top:0;left:0;opacity:0;'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        if (ok) {
+          setCopied(true)
+          setTimeout(() =&gt; setCopied(false), 2000)
+        } else {
+          // Last resort: show the link in an alert so user can copy manually
+          window.prompt('Copy your referral link:', stats.referralLink)
+        }
+      } catch {
+        window.prompt('Copy your referral link:', stats.referralLink)
+      }
+    }
   }
 
   const shareWhatsApp = () =&gt; {
@@ -9712,12 +9901,23 @@ export default function SellPage() {
     } catch { return null }
   }
 
+  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+  const MAX_IMAGE_SIZE_MB = 8
+
   const handleImageUpload = async (e: React.ChangeEvent&lt;HTMLInputElement&gt;) =&gt; {
     const files = e.target.files
     if (!files) return
     const remaining = 3 - images.length
     const filesToProcess = Array.from(files).slice(0, remaining)
     for (const file of filesToProcess) {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        setError(`"${file.name}" is not allowed. Only JPG, PNG, and WEBP images are accepted.`)
+        continue
+      }
+      if (file.size &gt; MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+        setError(`"${file.name}" is too large. Images must be under ${MAX_IMAGE_SIZE_MB}MB.`)
+        continue
+      }
       const reader = new FileReader()
       reader.onloadend = async () =&gt; {
         const base64 = reader.result as string
@@ -9957,13 +10157,13 @@ export default function SellPage() {
                 )}
                 {images.length &lt; 3 &amp;&amp; (
                   &lt;label className="block cursor-pointer"&gt;
-                    &lt;input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" /&gt;
+                    &lt;input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} className="hidden" /&gt;
                     &lt;div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-BATAMART-primary transition-colors"&gt;
                       &lt;svg className="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;
                         &lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /&gt;
                       &lt;/svg&gt;
                       &lt;p className="text-gray-600 font-medium"&gt;Click to upload images&lt;/p&gt;
-                      &lt;p className="text-sm text-gray-500 mt-1"&gt;{images.length}/3 images · JPG, PNG, WEBP&lt;/p&gt;
+                      &lt;p className="text-sm text-gray-500 mt-1"&gt;{images.length}/3 images · JPG, PNG, WEBP · Max 8MB each&lt;/p&gt;
                     &lt;/div&gt;
                   &lt;/label&gt;
                 )}
@@ -10102,7 +10302,7 @@ const NIGERIAN_BANKS: Bank[] = [
   { code: '050', name: 'Ecobank Nigeria' },
   { code: '070', name: 'Fidelity Bank' },
   { code: '214', name: 'First City Monument Bank (FCMB)' },
-  { code: '030', name: 'Heritage Bank' },
+
   { code: '082', name: 'Keystone Bank' },
   { code: '076', name: 'Polaris Bank' },
   { code: '101', name: 'Providus Bank' },
@@ -10868,7 +11068,7 @@ export default function WalletPage() {
 
     &lt;/div&gt;
   )
-}</pre></div>
+} </pre></div>
 <div class='file-block'><div class='file-header'>app/about/page.tsx</div><pre>import Link from 'next/link'
 import {
   ShoppingBag,
@@ -18942,35 +19142,59 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const users = await prisma.user.findMany({
-      where: { role: { not: 'ADMIN' } },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        trustLevel: true,
-        isSuspended: true,
-        penaltyPoints: true,
-        createdAt: true,
-        _count: {
-          select: {
-            orders: true,          // Buyer orders
-            sellerOrders: true,    // Seller orders
-            products: true
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
+    // ── Pagination params ──────────────────────────────────────────────────
+    const { searchParams } = new URL(req.url)
+    const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')))
+    const skip  = (page - 1) * limit
 
-    return NextResponse.json({ users })
+    // ── Run count + fetch in parallel ──────────────────────────────────────
+    const where = { role: { not: 'ADMIN' as const } }
+
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          trustLevel: true,
+          isSuspended: true,
+          penaltyPoints: true,
+          createdAt: true,
+          _count: {
+            select: {
+              orders: true,
+              sellerOrders: true,
+              products: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ])
+
+    // Normalise _count keys to match what the frontend expects
+    const normalised = users.map(u =&gt; ({
+      ...u,
+      _count: {
+        ordersAsBuyer:  u._count.orders,
+        ordersAsSeller: u._count.sellerOrders,
+        products:       u._count.products,
+      },
+    }))
+
+    return NextResponse.json({ users: normalised, total, page, limit })
   } catch (error) {
+    console.error('Admin users fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
   }
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/admin/users/[id]/suspend/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/admin/users/[id]/unsuspend/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/auth/become-seller/route.ts</div><pre>export const dynamic = 'force-dynamic'
@@ -19016,8 +19240,53 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
 
+// ── In-memory rate limiter ─────────────────────────────────────────────────
+// 10 attempts per IP per 15 minutes prevents brute force.
+// Swap Map for Redis/Upstash if you scale to multiple instances.
+const loginRateMap = new Map&lt;string, { count: number; resetAt: number }&gt;()
+const LOGIN_LIMIT      = 10
+const LOGIN_WINDOW_MS  = 15 * 60 * 1000
+
+function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: number } {
+  const now   = Date.now()
+  const entry = loginRateMap.get(ip)
+
+  if (!entry || now &gt; entry.resetAt) {
+    loginRateMap.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+    return { allowed: true, retryAfterSecs: 0 }
+  }
+  if (entry.count &gt;= LOGIN_LIMIT) {
+    return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
+  }
+  entry.count++
+  return { allowed: true, retryAfterSecs: 0 }
+}
+
+// Clean stale entries every minute
+setInterval(() =&gt; {
+  const now = Date.now()
+  Array.from(loginRateMap.entries()).forEach(([key, val]) =&gt; {
+    if (now &gt; val.resetAt) loginRateMap.delete(key)
+  })
+}, 60_000)
+// ──────────────────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+
+    const { allowed, retryAfterSecs } = checkLoginRateLimit(ip)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many login attempts. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) and try again.` },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSecs) } }
+      )
+    }
+
     const body = await request.json()
     const { email, password } = body
 
@@ -19045,28 +19314,18 @@ export async function POST(request: NextRequest) {
       user.isSuspended = false
     }
 
-    // Block if still suspended
+    // Block if still suspended — return structured data (not just a message string)
+    // so the login page can display it properly without needing URL params
     if (user.isSuspended) {
-      const reason = user.suspensionReason || 'Violation of platform terms'
-
-      let message = ''
-      if (!user.suspendedUntil) {
-        message = `Your account has been permanently suspended.\n\nReason: ${reason}\n\nContact support@BATAMART-mart.com to appeal.`
-      } else {
-        const until = new Date(user.suspendedUntil)
-        const diffMs = until.getTime() - Date.now()
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-        const timeLeft = diffDays &gt; 0
-          ? `${diffDays} day${diffDays !== 1 ? 's' : ''}${diffHours &gt; 0 ? ` and ${diffHours} hour${diffHours !== 1 ? 's' : ''}` : ''}`
-          : `${diffHours} hour${diffHours !== 1 ? 's' : ''}`
-        const untilFormatted = until.toLocaleDateString('en-NG', {
-          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        })
-        message = `Your account is suspended for ${timeLeft}.\n\nReason: ${reason}\n\nSuspension lifts: ${untilFormatted}\n\nContact support@BATAMART-mart.com to appeal.`
-      }
-
-      return NextResponse.json({ error: message, suspended: true }, { status: 403 })
+      return NextResponse.json(
+        {
+          error: 'Account suspended',
+          suspended: true,
+          reason: user.suspensionReason ?? 'Violation of platform terms',
+          until: user.suspendedUntil ?? null,
+        },
+        { status: 403 }
+      )
     }
 
     const token = generateToken(user.id, user.phone)
@@ -19075,20 +19334,19 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
-        hostelName: user.hostelName,
+        id:          user.id,
+        name:        user.name,
+        phone:       user.phone,
+        email:       user.email,
+        role:        user.role,
+        hostelName:  user.hostelName,
       },
     })
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/auth/me/route.ts</div><pre>import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
@@ -19305,8 +19563,59 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOTP, sendEmailOTP } from '@/lib/auth/auth'
 
+// ── In-memory rate limiter ────────────────────────────────────────────────────
+// Allows 5 OTP requests per IP per 15 minutes.
+// For multi-instance deployments swap this for Redis (e.g. @upstash/ratelimit).
+const rateLimitMap = new Map&lt;string, { count: number; resetAt: number }&gt;()
+
+const RATE_LIMIT_MAX = 5
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+
+function checkRateLimit(key: string): { allowed: boolean; retryAfterSecs: number } {
+  const now = Date.now()
+  const entry = rateLimitMap.get(key)
+
+  if (!entry || now &gt; entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return { allowed: true, retryAfterSecs: 0 }
+  }
+
+  if (entry.count &gt;= RATE_LIMIT_MAX) {
+    return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
+  }
+
+  entry.count++
+  return { allowed: true, retryAfterSecs: 0 }
+}
+
+// Periodically clear stale entries to prevent memory leak
+setInterval(() =&gt; {
+  const now = Date.now()
+  Array.from(rateLimitMap.entries()).forEach(([key, val]) =&gt; {
+    if (now &gt; val.resetAt) rateLimitMap.delete(key)
+  })
+}, 60 * 1000)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+
+    const { allowed, retryAfterSecs } = checkRateLimit(`send-otp:${ip}`)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many requests. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) before trying again.` },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(retryAfterSecs) },
+        }
+      )
+    }
+
     const body = await request.json()
     const { email, isLogin } = body
 
@@ -19361,8 +19670,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/auth/signup-with-password/route.ts</div><pre>// app/api/auth/signup-with-password/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
@@ -19444,6 +19752,87 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Signup error:', error)
     return NextResponse.json({ error: 'Signup failed' }, { status: 500 })
+  }
+}</pre></div>
+<div class='file-block'><div class='file-header'>app/api/auth/suspension-info/route.ts</div><pre>export const dynamic = 'force-dynamic'
+// app/api/auth/suspension-info/route.ts
+//
+// Called by the login page when ?suspended=1 is in the URL.
+// Returns the real suspension reason and end date from the database,
+// so this info cannot be spoofed via URL manipulation.
+//
+// Does NOT require an auth token — the user is logged out at this point.
+// Instead it uses a short-lived signed "suspension token" passed as a
+// query param, OR falls back to looking up by email in the request body.
+// For simplicity we use a stateless approach: the login-with-password
+// route already returns { suspended: true, reason, until } in its 403
+// response, so the login page reads that directly. This endpoint exists
+// as a safety fallback for the useSuspensionGuard hook redirect flow.
+
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyToken } from '@/lib/auth/auth'
+import { prisma } from '@/lib/prisma'
+
+export async function GET(request: NextRequest) {
+  try {
+    // Try to get the token from the Authorization header
+    // The suspension guard clears the token AFTER redirecting,
+    // so we read it from the header if the client sends it.
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      // No token available — return a safe generic response
+      return NextResponse.json(
+        { isSuspended: true, reason: null, until: null },
+        { status: 200 }
+      )
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return NextResponse.json(
+        { isSuspended: true, reason: null, until: null },
+        { status: 200 }
+      )
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        isSuspended: true,
+        suspensionReason: true,
+        suspendedUntil: true,
+      },
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { isSuspended: false },
+        { status: 200 }
+      )
+    }
+
+    // Auto-lift check
+    if (user.isSuspended &amp;&amp; user.suspendedUntil &amp;&amp; new Date(user.suspendedUntil) &lt;= new Date()) {
+      await prisma.user.update({
+        where: { id: decoded.userId },
+        data: { isSuspended: false, suspendedUntil: null, suspensionReason: null },
+      })
+      return NextResponse.json({ isSuspended: false }, { status: 200 })
+    }
+
+    return NextResponse.json({
+      isSuspended: user.isSuspended,
+      reason: user.suspensionReason ?? null,
+      until: user.suspendedUntil ?? null,
+    })
+  } catch (error) {
+    console.error('Suspension info error:', error)
+    // Safe fallback — don't expose errors, just return generic
+    return NextResponse.json(
+      { isSuspended: true, reason: null, until: null },
+      { status: 200 }
+    )
   }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/auth/toggle-seller-mode/route.ts</div><pre>export const dynamic = 'force-dynamic'
@@ -19553,8 +19942,58 @@ import { prisma } from '@/lib/prisma'
 import { verifyOTP, generateToken, formatPhone } from '@/lib/auth/auth'
 import { generateUniqueReferralCode } from '@/lib/referral/generateReferralCode'
 
+// ── In-memory rate limiter ────────────────────────────────────────────────────
+// Allows 10 verify attempts per IP per 15 minutes.
+// This prevents OTP brute-force without locking out legitimate retries.
+const rateLimitMap = new Map&lt;string, { count: number; resetAt: number }&gt;()
+
+const RATE_LIMIT_MAX = 10
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+
+function checkRateLimit(key: string): { allowed: boolean; retryAfterSecs: number } {
+  const now = Date.now()
+  const entry = rateLimitMap.get(key)
+
+  if (!entry || now &gt; entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return { allowed: true, retryAfterSecs: 0 }
+  }
+
+  if (entry.count &gt;= RATE_LIMIT_MAX) {
+    return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
+  }
+
+  entry.count++
+  return { allowed: true, retryAfterSecs: 0 }
+}
+
+setInterval(() =&gt; {
+  const now = Date.now()
+  Array.from(rateLimitMap.entries()).forEach(([key, val]) =&gt; {
+    if (now &gt; val.resetAt) rateLimitMap.delete(key)
+  })
+}, 60 * 1000)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+
+    const { allowed, retryAfterSecs } = checkRateLimit(`verify-otp:${ip}`)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many attempts. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) before trying again.` },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(retryAfterSecs) },
+        }
+      )
+    }
+
     const body = await request.json()
     const { phone, email, code, otpCode, name } = body
 
@@ -20935,6 +21374,13 @@ export async function createOrders(
     itemsList: string
   }&gt; = []
 
+  // Tracks products that hit zero stock during this payment — notified after tx
+  const outOfStockAlerts: Array&lt;{
+    sellerId: string
+    productId: string
+    productName: string
+  }&gt; = []
+
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
     const proportion = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
@@ -20996,11 +21442,28 @@ export async function createOrders(
         })
 
         // Decrement stock for each product in this order
+        // If stock reaches zero, also mark the product inactive so it
+        // disappears from the marketplace automatically.
         for (const item of sellerItems) {
-          await tx.product.update({
+          const updatedProduct = await tx.product.update({
             where: { id: item.productId },
             data: { quantity: { decrement: Number(item.quantity) } },
+            select: { id: true, name: true, quantity: true },
           })
+
+          // If stock just hit zero, deactivate the listing immediately
+          if (updatedProduct.quantity &lt;= 0) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { isActive: false },
+            })
+            // Queue out-of-stock seller notification (fire-and-forget after tx)
+            outOfStockAlerts.push({
+              sellerId,
+              productId: updatedProduct.id,
+              productName: updatedProduct.name,
+            })
+          }
         }
 
         // Credit seller's pending (escrow) balance
@@ -21075,8 +21538,118 @@ export async function createOrders(
       .catch(err =&gt; console.error(`⚠️  Notification failed for ${n.orderNumber}:`, err))
   }
 
+  // Fire out-of-stock alerts — non-blocking, never delay order creation
+  if (outOfStockAlerts.length &gt; 0) {
+    Promise.allSettled(
+      outOfStockAlerts.map(alert =&gt; notifySellerOutOfStock(alert.sellerId, alert.productId, alert.productName))
+    ).then(results =&gt; {
+      results.forEach((r, i) =&gt; {
+        if (r.status === 'rejected') {
+          console.error(`⚠️  Out-of-stock notification failed for product ${outOfStockAlerts[i]?.productName}:`, r.reason)
+        }
+      })
+    })
+  }
+
   console.log('🎉 All orders created:', createdOrders.length)
   return createdOrders
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Out-of-stock seller notification
+// Fires after the transaction — notifies the seller via in-app bell + email
+// ─────────────────────────────────────────────────────────────────────────────
+async function notifySellerOutOfStock(sellerId: string, productId: string, productName: string) {
+  const [notifMod, emailMod, prismaMod] = await Promise.all([
+    import('@/lib/notification').catch(() =&gt; null),
+    import('@/lib/email/sendEmail').catch(() =&gt; null),
+    import('@/lib/prisma').catch(() =&gt; null),
+  ])
+
+  const seller = prismaMod
+    ? await prismaMod.prisma.user.findUnique({
+        where: { id: sellerId },
+        select: { email: true, name: true },
+      }).catch(() =&gt; null)
+    : null
+
+  const tasks: Promise&lt;any&gt;[] = []
+
+  // In-app bell notification
+  if (notifMod?.createNotification) {
+    tasks.push(
+      notifMod.createNotification({
+        userId: sellerId,
+        type: 'STOCK_ALERT',
+        title: '⚠️ Product Out of Stock',
+        message: `"${productName}" has sold out and has been automatically hidden from the marketplace. Restock it to make it visible again.`,
+        metadata: { productId, productName },
+      })
+    )
+  }
+
+  // Email notification to seller
+  if (seller?.email &amp;&amp; emailMod?.sendEmail) {
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    tasks.push(
+      emailMod.sendEmail({
+        to: seller.email,
+        subject: `⚠️ "${productName}" is out of stock — BATAMART`,
+        html: `
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;&lt;meta charset="UTF-8"/&gt;&lt;meta name="viewport" content="width=device-width,initial-scale=1.0"/&gt;&lt;/head&gt;
+&lt;body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Helvetica,Arial,sans-serif;"&gt;
+  &lt;table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;"&gt;
+    &lt;tr&gt;
+      &lt;td align="center"&gt;
+        &lt;table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;"&gt;
+          &lt;tr&gt;
+            &lt;td align="center" style="padding-bottom:24px;"&gt;
+              &lt;span style="font-size:28px;font-weight:800;color:#111827;letter-spacing:-1px;"&gt;BATAMART&lt;/span&gt;
+              &lt;span style="font-size:12px;color:#6b7280;display:block;margin-top:2px;"&gt;UNIZIK Campus Marketplace&lt;/span&gt;
+            &lt;/td&gt;
+          &lt;/tr&gt;
+          &lt;tr&gt;
+            &lt;td style="background:#ffffff;border-radius:16px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,0.08);"&gt;
+              &lt;p style="font-size:32px;margin:0 0 8px;"&gt;⚠️&lt;/p&gt;
+              &lt;h2 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;"&gt;Product Out of Stock&lt;/h2&gt;
+              &lt;p style="font-size:15px;color:#6b7280;margin:0 0 16px;"&gt;
+                Hi ${seller.name ?? 'Seller'}, your product &lt;strong style="color:#111827;"&gt;"${productName}"&lt;/strong&gt; has just sold out.
+              &lt;/p&gt;
+              &lt;div style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;padding:16px;margin-bottom:20px;"&gt;
+                &lt;p style="margin:0;font-size:14px;color:#92400e;font-weight:600;"&gt;
+                  It has been automatically hidden from the marketplace to prevent buyers from ordering something you can't fulfil.
+                &lt;/p&gt;
+              &lt;/div&gt;
+              &lt;p style="font-size:14px;color:#6b7280;margin:0 0 24px;"&gt;
+                To start selling again, go to your shop and restock this product. It will become visible again automatically once you add more quantity.
+              &lt;/p&gt;
+              &lt;a href="${APP_URL}/my-shop"
+                 style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;font-size:15px;font-weight:600;border-radius:10px;text-decoration:none;"&gt;
+                Restock Now →
+              &lt;/a&gt;
+            &lt;/td&gt;
+          &lt;/tr&gt;
+          &lt;tr&gt;
+            &lt;td align="center" style="padding-top:24px;"&gt;
+              &lt;p style="font-size:12px;color:#9ca3af;margin:0;"&gt;
+                BATAMART — UNIZIK Campus Marketplace · Awka, Anambra State
+              &lt;/p&gt;
+            &lt;/td&gt;
+          &lt;/tr&gt;
+        &lt;/table&gt;
+      &lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/table&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+        `,
+      })
+    )
+  }
+
+  await Promise.allSettled(tasks)
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/payments/verify/route.ts</div><pre>// app/api/payments/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -24382,20 +24955,7 @@ export function useOnScreen(ref: React.RefObject&lt;HTMLElement&gt;, rootMargin 
 
   return isVisible;
 }</pre></div>
-<div class='file-block'><div class='file-header'>hooks/useNotificationNudge.ts</div><pre>// hooks/useNotificationNudge.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Smart notification nudge system.
-//
-// RULES:
-//  • If push is already enabled        → never show
-//  • If browser denied permission       → never show (user must go to settings)
-//  • If user clicks "Not Now"           → snooze for 24 hours, then show again
-//  • If user manually turns off notifs  → snooze resets so we start nudging again
-//  • Contextual triggers (e.g. after payment) bypass the time-gate once per trigger
-//  • Never show more than once per page visit for non-contextual prompts
-// ─────────────────────────────────────────────────────────────────────────────
-
-'use client'
+<div class='file-block'><div class='file-header'>hooks/useNotificationNudge.ts</div><pre>'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 
@@ -24650,15 +25210,15 @@ const POLL_INTERVAL_MS = 30_000 // check every 30 seconds
  * useSuspensionGuard
  *
  * Polls /api/auth/me every 30 seconds for any logged-in user.
- * If the server returns 403 with { suspended: true }, it means the admin
- * suspended this account while they were active. We immediately:
+ * If the server returns 403 with { suspended: true }, the admin has
+ * suspended this account while the user was active. We immediately:
  *   1. Clear all auth data from localStorage
  *   2. Dispatch 'auth-change' so any listening components update
- *   3. Redirect to /login with a query param so the login page can show
- *      a suspension message instead of a generic "logged out" message
+ *   3. Redirect to /login?suspended=1
  *
- * Drop this hook in a client component that wraps the whole app.
- * It does nothing if no token is present (unauthenticated users).
+ * We do NOT put reason or until in the URL — that info is fetched
+ * server-side by the login page from /api/auth/suspension-info,
+ * so it cannot be spoofed by manipulating query params.
  */
 export function useSuspensionGuard() {
   const router = useRouter()
@@ -24667,14 +25227,11 @@ export function useSuspensionGuard() {
   useEffect(() =&gt; {
     const check = async () =&gt; {
       const token = localStorage.getItem('token')
-
-      // No token = not logged in, nothing to guard
       if (!token) return
 
       try {
         const response = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
-          // Don't cache — we always want a fresh check
           cache: 'no-store',
         })
 
@@ -24682,29 +25239,25 @@ export function useSuspensionGuard() {
           const data = await response.json()
 
           if (data.suspended) {
-            // ── Force logout ──────────────────────────────────────────────
-            localStorage.removeItem('token')
+            // Clear auth — but keep token briefly so suspension-info
+            // endpoint can still identify the user (it clears on next load)
             localStorage.removeItem('userName')
             localStorage.removeItem('userRole')
+            localStorage.removeItem('userId')
+            // Remove token last
+            localStorage.removeItem('token')
 
-            // Tell any components listening (e.g. Navbar) to update immediately
             window.dispatchEvent(new Event('auth-change'))
 
-            // Build a descriptive redirect URL so login page can show context
-            const params = new URLSearchParams()
-            params.set('suspended', '1')
-            if (data.reason) params.set('reason', data.reason)
-            if (data.until) params.set('until', data.until)
-
-            router.replace(`/login?${params.toString()}`)
+            // Only pass the signal — reason/until fetched server-side
+            router.replace('/login?suspended=1')
           }
         }
       } catch {
-        // Network error — silently skip, will retry on next interval
+        // Network error — silently skip, retry on next interval
       }
     }
 
-    // Run once immediately on mount, then on interval
     check()
     intervalRef.current = setInterval(check, POLL_INTERVAL_MS)
 

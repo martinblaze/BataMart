@@ -1,3 +1,4 @@
+// hooks/use-push-notifications.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,7 +10,11 @@ export function usePushNotifications() {
   const toast = useToast();
 
   useEffect(() => {
-    if ('Notification' in window) {
+    if (
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    ) {
       setIsSupported(true);
       setPermission(Notification.permission);
     }
@@ -40,7 +45,10 @@ export function usePushNotifications() {
     }
   };
 
-  const sendNotification = (title: string, options?: NotificationOptions) => {
+  // ✅ Fixed: uses service worker showNotification instead of new Notification()
+  // new Notification() is blocked on mobile browsers and PWAs.
+  // Service worker notifications work on ALL platforms including Android/iOS PWA.
+  const sendNotification = async (title: string, options?: NotificationOptions) => {
     if (!isSupported) {
       console.warn('Notifications not supported');
       return;
@@ -52,15 +60,27 @@ export function usePushNotifications() {
     }
 
     try {
+      // Try service worker first (works on mobile + desktop)
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification(title, {
+          icon: '/icon-192x192.png',
+          badge: '/badge-72x72.png',
+          ...options,
+        } as NotificationOptions & { vibrate?: number[] });
+
+        if ('vibrate' in navigator) {
+          navigator.vibrate([200, 100, 200]);
+        }
+        return;
+      }
+
+      // Fallback to new Notification() for desktop browsers without SW
       const notification = new Notification(title, {
         icon: '/icon-192x192.png',
         badge: '/badge-72x72.png',
         ...options,
       } as NotificationOptions & { vibrate?: number[] });
-
-      if ('vibrate' in navigator) {
-        navigator.vibrate([200, 100, 200]);
-      }
 
       notification.onclick = () => {
         window.focus();
@@ -99,7 +119,6 @@ export function NotificationPrompt() {
       setDismissed(true);
       return;
     }
-    // Slight delay so it doesn't pop in immediately on page load
     const t = setTimeout(() => setVisible(true), 2000);
     return () => clearTimeout(t);
   }, []);
@@ -155,7 +174,6 @@ export function NotificationPrompt() {
         className={`fixed right-4 z-[9990] w-[calc(100vw-2rem)] max-w-[320px] ${
           visible ? 'notif-prompt-enter' : 'notif-prompt-exit'
         }`}
-        // sits above bottom nav (64px) + a little gap
         style={{ bottom: 'calc(72px + max(env(safe-area-inset-bottom), 16px) + 12px)' }}
       >
         <div
@@ -166,16 +184,10 @@ export function NotificationPrompt() {
             border: '1px solid rgba(59,158,245,0.15)',
           }}
         >
-          {/* Gradient top bar */}
-          <div
-            className="h-1"
-            style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }}
-          />
+          <div className="h-1" style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }} />
 
           <div className="p-4">
-            {/* Header row */}
             <div className="flex items-start gap-3 mb-3">
-              {/* Bell icon */}
               <div
                 className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bell-ring"
                 style={{
@@ -197,7 +209,6 @@ export function NotificationPrompt() {
                 </p>
               </div>
 
-              {/* Close */}
               <button
                 onClick={handleDismiss}
                 className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors -mt-0.5 -mr-0.5"
@@ -208,7 +219,6 @@ export function NotificationPrompt() {
               </button>
             </div>
 
-            {/* Benefit pills */}
             <div className="flex flex-wrap gap-1.5 mb-3">
               {['Order updates', 'Delivery alerts', 'New messages'].map((label) => (
                 <span
@@ -221,7 +231,6 @@ export function NotificationPrompt() {
               ))}
             </div>
 
-            {/* Action buttons */}
             <div className="flex gap-2">
               <button
                 onClick={handleEnable}
@@ -251,7 +260,7 @@ export function NotificationPrompt() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Notification event helpers — unchanged
+// Notification event helpers
 // ─────────────────────────────────────────────────────────────────────────────
 export function useNotificationEvents() {
   const { sendNotification, permission } = usePushNotifications();

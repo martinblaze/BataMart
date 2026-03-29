@@ -1,6 +1,19 @@
-// lib/notifications.ts
+// lib/notification.ts
 import { prisma } from '@/lib/prisma'
 import { NotificationType } from '@prisma/client'
+import {
+  notifyNewOrder as pushNewOrder,
+  notifyOrderPlaced as pushOrderPlaced,
+  notifyRiderAssigned as pushRiderAssigned,
+  notifyOrderOnTheWay as pushOrderOnTheWay,
+  notifyOrderDelivered as pushOrderDelivered,
+  notifyPaymentReceived as pushPaymentReceived,
+  notifyDisputeOpened as pushDisputeOpened,
+  notifyDisputeResolved as pushDisputeResolved,
+  notifyNewReview as pushNewReview,
+  notifyWithdrawalProcessed as pushWithdrawalProcessed,
+  sendPushToUser,
+} from '@/lib/push/sendPushNotification'
 
 interface CreateNotificationParams {
   userId: string
@@ -16,7 +29,7 @@ interface CreateNotificationParams {
 }
 
 /**
- * Create a notification for a user
+ * Create a DB notification for a user (updates the bell)
  */
 export async function createNotification(params: CreateNotificationParams) {
   try {
@@ -31,10 +44,9 @@ export async function createNotification(params: CreateNotificationParams) {
         disputeId: params.disputeId,
         reportId: params.reportId,
         reviewId: params.reviewId,
-        metadata: params.metadata || null
-      }
+        metadata: params.metadata || null,
+      },
     })
-
     return notification
   } catch (error) {
     console.error('Create notification error:', error)
@@ -43,7 +55,7 @@ export async function createNotification(params: CreateNotificationParams) {
 }
 
 /**
- * Create notifications for multiple users
+ * Create DB notifications for multiple users
  */
 export async function createBulkNotifications(
   userIds: string[],
@@ -51,7 +63,7 @@ export async function createBulkNotifications(
 ) {
   try {
     const notifications = await prisma.notification.createMany({
-      data: userIds.map(userId => ({
+      data: userIds.map((userId) => ({
         userId,
         type: params.type,
         title: params.title,
@@ -61,10 +73,9 @@ export async function createBulkNotifications(
         disputeId: params.disputeId,
         reportId: params.reportId,
         reviewId: params.reviewId,
-        metadata: params.metadata || null
-      }))
+        metadata: params.metadata || null,
+      })),
     })
-
     return notifications
   } catch (error) {
     console.error('Create bulk notifications error:', error)
@@ -76,95 +87,164 @@ export async function createBulkNotifications(
 // ORDER NOTIFICATIONS
 // ==========================================
 
-export async function notifyOrderPlaced(orderId: string, buyerId: string, sellerId: string, orderNumber: string, productName: string) {
-  // Notify seller
+export async function notifyOrderPlaced(
+  orderId: string,
+  buyerId: string,
+  sellerId: string,
+  orderNumber: string,
+  productName: string
+) {
+  // ✅ DB notification → updates bell for buyer
+  await createNotification({
+    userId: buyerId,
+    type: 'ORDER_PLACED',
+    title: '🛒 Order Placed!',
+    message: `Your order (#${orderNumber}) for ${productName} was placed successfully.`,
+    orderId,
+    metadata: { orderNumber, productName },
+  })
+
+  // ✅ DB notification → updates bell for seller
   await createNotification({
     userId: sellerId,
     type: 'ORDER_PLACED',
     title: '🛒 New Order Received!',
     message: `You have a new order (#${orderNumber}) for ${productName}`,
     orderId,
-    metadata: { orderNumber, productName }
+    metadata: { orderNumber, productName },
   })
+
+  // ✅ PUSH → buyer gets push that their order was placed
+  await pushOrderPlaced(buyerId, orderNumber)
+
+  // ✅ PUSH → seller gets push about new order (this was missing before!)
+  await pushNewOrder(sellerId, orderNumber)
 }
 
-export async function notifyRiderAssigned(orderId: string, buyerId: string, sellerId: string, riderId: string, riderName: string, orderNumber: string) {
-  // Notify buyer
+export async function notifyRiderAssigned(
+  orderId: string,
+  buyerId: string,
+  sellerId: string,
+  riderId: string,
+  riderName: string,
+  orderNumber: string
+) {
+  // ✅ DB notifications
   await createNotification({
     userId: buyerId,
     type: 'RIDER_ASSIGNED',
     title: '🚴 Rider Assigned!',
     message: `${riderName} has been assigned to deliver your order (#${orderNumber})`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
   })
 
-  // Notify seller
   await createNotification({
     userId: sellerId,
     type: 'RIDER_ASSIGNED',
     title: '🚴 Rider Assigned',
     message: `${riderName} will deliver order #${orderNumber}`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
   })
+
+  // ✅ PUSH notifications
+  await pushRiderAssigned(buyerId, orderNumber)
 }
 
-export async function notifyOrderPickedUp(orderId: string, buyerId: string, orderNumber: string, riderName: string) {
+export async function notifyOrderPickedUp(
+  orderId: string,
+  buyerId: string,
+  orderNumber: string,
+  riderName: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: buyerId,
     type: 'ORDER_PICKED_UP',
     title: '📦 Order Picked Up!',
     message: `${riderName} has picked up your order (#${orderNumber})`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(buyerId, {
+    title: '📦 Order Picked Up!',
+    message: `${riderName} has picked up your order (#${orderNumber})`,
+    url: `/orders`,
+    tag: `order-picked-up-${orderId}`,
   })
 }
 
-export async function notifyOrderOnTheWay(orderId: string, buyerId: string, orderNumber: string, riderName: string) {
+export async function notifyOrderOnTheWay(
+  orderId: string,
+  buyerId: string,
+  orderNumber: string,
+  riderName: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: buyerId,
     type: 'ORDER_ON_THE_WAY',
     title: '🛵 Order On The Way!',
     message: `${riderName} is on the way with your order (#${orderNumber})`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
   })
+
+  // ✅ PUSH notification
+  await pushOrderOnTheWay(buyerId, orderNumber)
 }
 
-export async function notifyOrderDelivered(orderId: string, buyerId: string, orderNumber: string) {
+export async function notifyOrderDelivered(
+  orderId: string,
+  buyerId: string,
+  orderNumber: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: buyerId,
     type: 'ORDER_DELIVERED',
     title: '✅ Order Delivered!',
     message: `Your order (#${orderNumber}) has been delivered. Please confirm receipt.`,
     orderId,
-    metadata: { orderNumber }
+    metadata: { orderNumber },
   })
+
+  // ✅ PUSH notification
+  await pushOrderDelivered(buyerId, orderNumber)
 }
 
-export async function notifyOrderCompleted(orderId: string, buyerId: string, sellerId: string, riderId: string | null, orderNumber: string, amount: number) {
-  // Notify buyer
+export async function notifyOrderCompleted(
+  orderId: string,
+  buyerId: string,
+  sellerId: string,
+  riderId: string | null,
+  orderNumber: string,
+  amount: number
+) {
+  const amountFormatted = `₦${amount.toFixed(2)}`
+
+  // ✅ DB notifications
   await createNotification({
     userId: buyerId,
     type: 'ORDER_COMPLETED',
     title: '🎉 Order Completed!',
     message: `Order #${orderNumber} is complete. Don't forget to leave a review!`,
     orderId,
-    metadata: { orderNumber, amount }
+    metadata: { orderNumber, amount },
   })
 
-  // Notify seller
   await createNotification({
     userId: sellerId,
     type: 'PAYMENT_RECEIVED',
     title: '💰 Payment Received!',
-    message: `You've received ₦${amount.toFixed(2)} for order #${orderNumber}`,
+    message: `You've received ${amountFormatted} for order #${orderNumber}`,
     orderId,
-    metadata: { orderNumber, amount }
+    metadata: { orderNumber, amount },
   })
 
-  // Notify rider if exists
   if (riderId) {
     await createNotification({
       userId: riderId,
@@ -172,8 +252,14 @@ export async function notifyOrderCompleted(orderId: string, buyerId: string, sel
       title: '💰 Delivery Payment!',
       message: `You've received payment for delivering order #${orderNumber}`,
       orderId,
-      metadata: { orderNumber }
+      metadata: { orderNumber },
     })
+  }
+
+  // ✅ PUSH notifications
+  await pushPaymentReceived(sellerId, amountFormatted)
+  if (riderId) {
+    await pushPaymentReceived(riderId, 'your delivery fee')
   }
 }
 
@@ -181,36 +267,74 @@ export async function notifyOrderCompleted(orderId: string, buyerId: string, sel
 // REVIEW NOTIFICATIONS
 // ==========================================
 
-export async function notifyProductReviewed(sellerId: string, productId: string, productName: string, rating: number, buyerName: string) {
+export async function notifyProductReviewed(
+  sellerId: string,
+  productId: string,
+  productName: string,
+  rating: number,
+  buyerName: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: sellerId,
     type: 'PRODUCT_REVIEWED',
     title: '⭐ New Product Review!',
     message: `${buyerName} left a ${rating}-star review for ${productName}`,
     productId,
-    metadata: { productName, rating, buyerName }
+    metadata: { productName, rating, buyerName },
   })
+
+  // ✅ PUSH notification
+  await pushNewReview(sellerId, productName)
 }
 
-export async function notifySellerReviewed(sellerId: string, rating: number, buyerName: string, orderId: string) {
+export async function notifySellerReviewed(
+  sellerId: string,
+  rating: number,
+  buyerName: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: sellerId,
     type: 'SELLER_REVIEWED',
     title: '⭐ New Seller Review!',
     message: `${buyerName} gave you a ${rating}-star rating`,
     orderId,
-    metadata: { rating, buyerName }
+    metadata: { rating, buyerName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(sellerId, {
+    title: '⭐ New Seller Review!',
+    message: `${buyerName} gave you a ${rating}-star rating`,
+    url: `/my-shop`,
+    tag: `seller-review-${orderId}`,
   })
 }
 
-export async function notifyRiderReviewed(riderId: string, rating: number, buyerName: string, orderId: string) {
+export async function notifyRiderReviewed(
+  riderId: string,
+  rating: number,
+  buyerName: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: riderId,
     type: 'RIDER_REVIEWED',
     title: '⭐ New Delivery Review!',
     message: `${buyerName} gave you a ${rating}-star rating`,
     orderId,
-    metadata: { rating, buyerName }
+    metadata: { rating, buyerName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(riderId, {
+    title: '⭐ New Delivery Review!',
+    message: `${buyerName} gave you a ${rating}-star rating`,
+    url: `/rider-dashboard`,
+    tag: `rider-review-${orderId}`,
   })
 }
 
@@ -218,7 +342,14 @@ export async function notifyRiderReviewed(riderId: string, rating: number, buyer
 // DISPUTE NOTIFICATIONS
 // ==========================================
 
-export async function notifyDisputeOpened(disputeId: string, sellerId: string, buyerName: string, orderNumber: string, orderId: string) {
+export async function notifyDisputeOpened(
+  disputeId: string,
+  sellerId: string,
+  buyerName: string,
+  orderNumber: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: sellerId,
     type: 'DISPUTE_OPENED',
@@ -226,11 +357,20 @@ export async function notifyDisputeOpened(disputeId: string, sellerId: string, b
     message: `${buyerName} opened a dispute for order #${orderNumber}`,
     orderId,
     disputeId,
-    metadata: { orderNumber, buyerName }
+    metadata: { orderNumber, buyerName },
   })
+
+  // ✅ PUSH notification
+  await pushDisputeOpened(sellerId, orderNumber)
 }
 
-export async function notifyDisputeMessage(disputeId: string, recipientId: string, senderName: string, orderId: string) {
+export async function notifyDisputeMessage(
+  disputeId: string,
+  recipientId: string,
+  senderName: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: recipientId,
     type: 'DISPUTE_MESSAGE',
@@ -238,12 +378,28 @@ export async function notifyDisputeMessage(disputeId: string, recipientId: strin
     message: `${senderName} sent a message in your dispute`,
     orderId,
     disputeId,
-    metadata: { senderName }
+    metadata: { senderName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(recipientId, {
+    title: '💬 New Dispute Message',
+    message: `${senderName} sent a message in your dispute`,
+    url: `/disputes`,
+    tag: `dispute-msg-${disputeId}`,
+    requireInteraction: true,
   })
 }
 
-export async function notifyDisputeResolved(disputeId: string, buyerId: string, sellerId: string, resolution: string, orderNumber: string, orderId: string) {
-  // Notify buyer
+export async function notifyDisputeResolved(
+  disputeId: string,
+  buyerId: string,
+  sellerId: string,
+  resolution: string,
+  orderNumber: string,
+  orderId: string
+) {
+  // ✅ DB notifications
   await createNotification({
     userId: buyerId,
     type: 'DISPUTE_RESOLVED',
@@ -251,10 +407,9 @@ export async function notifyDisputeResolved(disputeId: string, buyerId: string, 
     message: `Your dispute for order #${orderNumber} has been resolved: ${resolution}`,
     orderId,
     disputeId,
-    metadata: { orderNumber, resolution }
+    metadata: { orderNumber, resolution },
   })
 
-  // Notify seller
   await createNotification({
     userId: sellerId,
     type: 'DISPUTE_RESOLVED',
@@ -262,37 +417,49 @@ export async function notifyDisputeResolved(disputeId: string, buyerId: string, 
     message: `Dispute for order #${orderNumber} has been resolved: ${resolution}`,
     orderId,
     disputeId,
-    metadata: { orderNumber, resolution }
+    metadata: { orderNumber, resolution },
   })
+
+  // ✅ PUSH notifications
+  await pushDisputeResolved(buyerId, orderNumber)
+  await pushDisputeResolved(sellerId, orderNumber)
 }
 
 // ==========================================
 // REPORT NOTIFICATIONS
 // ==========================================
 
-export async function notifyReportSubmitted(reportId: string, reportedUserId: string, reporterName: string, reportType: string) {
+export async function notifyReportSubmitted(
+  reportId: string,
+  reportedUserId: string,
+  reporterName: string,
+  reportType: string
+) {
   await createNotification({
     userId: reportedUserId,
     type: 'REPORT_SUBMITTED',
     title: '⚠️ Report Filed',
     message: `A report has been filed against you. Our team is reviewing it.`,
     reportId,
-    metadata: { reportType }
+    metadata: { reportType },
   })
 }
 
-export async function notifyReportResolved(reportId: string, reporterId: string, reportedUserId: string | null, resolution: string) {
-  // Notify reporter
+export async function notifyReportResolved(
+  reportId: string,
+  reporterId: string,
+  reportedUserId: string | null,
+  resolution: string
+) {
   await createNotification({
     userId: reporterId,
     type: 'REPORT_RESOLVED',
     title: '✅ Report Resolved',
     message: `Your report has been reviewed: ${resolution}`,
     reportId,
-    metadata: { resolution }
+    metadata: { resolution },
   })
 
-  // Notify reported user if applicable
   if (reportedUserId) {
     await createNotification({
       userId: reportedUserId,
@@ -300,7 +467,7 @@ export async function notifyReportResolved(reportId: string, reporterId: string,
       title: '✅ Report Resolved',
       message: `The report against you has been resolved: ${resolution}`,
       reportId,
-      metadata: { resolution }
+      metadata: { resolution },
     })
   }
 }
@@ -309,31 +476,49 @@ export async function notifyReportResolved(reportId: string, reporterId: string,
 // PENALTY NOTIFICATIONS
 // ==========================================
 
-export async function notifyPenaltyIssued(userId: string, penaltyAction: string, reason: string, points: number) {
+export async function notifyPenaltyIssued(
+  userId: string,
+  penaltyAction: string,
+  reason: string,
+  points: number
+) {
   await createNotification({
     userId,
     type: 'PENALTY_ISSUED',
     title: '⚠️ Penalty Issued',
     message: `You received a penalty: ${penaltyAction}. ${points} penalty points added. Reason: ${reason}`,
-    metadata: { penaltyAction, reason, points }
+    metadata: { penaltyAction, reason, points },
   })
 }
 
 // ==========================================
-// REPLACED FUNCTION - NOW SUPPORTS PERMANENT SUSPENSION
+// ACCOUNT NOTIFICATIONS
 // ==========================================
 
-export async function notifyAccountSuspended(userId: string, until: Date | null, reason: string) {
+export async function notifyAccountSuspended(
+  userId: string,
+  until: Date | null,
+  reason: string
+) {
   const message = until
     ? `Your account has been suspended until ${until.toLocaleDateString()}. Reason: ${reason}`
-    : `Your account has been permanently suspended. Reason: ${reason}. Contact support@BATAMART-mart.com to appeal.`
+    : `Your account has been permanently suspended. Reason: ${reason}. Contact support to appeal.`
 
   await createNotification({
     userId,
     type: 'ACCOUNT_SUSPENDED',
     title: '🚫 Account Suspended',
     message,
-    metadata: { until: until?.toISOString() ?? 'permanent', reason }
+    metadata: { until: until?.toISOString() ?? 'permanent', reason },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(userId, {
+    title: '🚫 Account Suspended',
+    message,
+    url: '/',
+    tag: 'account-suspended',
+    requireInteraction: true,
   })
 }
 
@@ -343,7 +528,15 @@ export async function notifyAccountUnsuspended(userId: string) {
     type: 'ACCOUNT_UNSUSPENDED',
     title: '✅ Account Restored',
     message: `Your account suspension has been lifted. Welcome back!`,
-    metadata: {}
+    metadata: {},
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(userId, {
+    title: '✅ Account Restored',
+    message: `Your account suspension has been lifted. Welcome back!`,
+    url: '/',
+    tag: 'account-unsuspended',
   })
 }
 
@@ -351,12 +544,22 @@ export async function notifyAccountUnsuspended(userId: string) {
 // WALLET NOTIFICATIONS
 // ==========================================
 
-export async function notifyWithdrawalProcessed(userId: string, amount: number, reference: string) {
+export async function notifyWithdrawalProcessed(
+  userId: string,
+  amount: number,
+  reference: string
+) {
+  const amountFormatted = `₦${amount.toFixed(2)}`
+
+  // ✅ DB notification
   await createNotification({
     userId,
     type: 'WITHDRAWAL_PROCESSED',
     title: '💸 Withdrawal Processed',
-    message: `Your withdrawal of ₦${amount.toFixed(2)} has been processed successfully`,
-    metadata: { amount, reference }
+    message: `Your withdrawal of ${amountFormatted} has been processed successfully`,
+    metadata: { amount, reference },
   })
+
+  // ✅ PUSH notification
+  await pushWithdrawalProcessed(userId, amountFormatted)
 }
