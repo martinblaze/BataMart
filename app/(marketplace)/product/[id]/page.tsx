@@ -11,7 +11,6 @@ import {
   Share2,
   ChevronLeft,
   ChevronRight,
-  User,
   Package,
   CheckCircle,
   Check,
@@ -47,6 +46,10 @@ export default function ProductPage() {
   const [showAddedToCart, setShowAddedToCart] = useState(false);
   const [showLinkCopied, setShowLinkCopied] = useState(false);
 
+  // Related products state
+  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+
   const addItem = useCartStore((state) => state.addItem);
 
   useEffect(() => { if (params.id) fetchProduct() }, [params.id]);
@@ -54,7 +57,8 @@ export default function ProductPage() {
   useEffect(() => {
     if (product?.sellerId) fetchSellerReviews();
     if (product?.id) fetchProductReviews();
-  }, [product?.sellerId, product?.id]);
+    if (product?.category && product?.id) fetchRelatedProducts();
+  }, [product?.sellerId, product?.id, product?.category]);
 
   const fetchProduct = async () => {
     try {
@@ -90,6 +94,26 @@ export default function ProductPage() {
     } catch (error) { console.error('Error fetching product reviews:', error) }
     finally { setReviewsLoading(false) }
   };
+
+  // Fetch related products — same category, exclude current product
+  const fetchRelatedProducts = async () => {
+    setRelatedLoading(true)
+    try {
+      const response = await fetch(
+        `/api/products?category=${encodeURIComponent(product.category)}&limit=12&exclude=${product.id}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        // Filter out current product just in case API doesn't support exclude param
+        const filtered = (data.products || []).filter((p: any) => p.id !== product.id)
+        setRelatedProducts(filtered)
+      }
+    } catch (error) {
+      console.error('Error fetching related products:', error)
+    } finally {
+      setRelatedLoading(false)
+    }
+  }
 
   const addToCart = () => {
     if (!product) return;
@@ -287,8 +311,8 @@ export default function ProductPage() {
                     key={index}
                     onClick={() => setCurrentImageIndex(index)}
                     className={`flex-shrink-0 w-16 sm:w-20 h-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all duration-200 ${currentImageIndex === index
-                      ? 'border-BATAMART-primary shadow-md shadow-BATAMART-primary/20'
-                      : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
+                        ? 'border-BATAMART-primary shadow-md shadow-BATAMART-primary/20'
+                        : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
                       }`}
                   >
                     <img src={img} alt={`${product.name} ${index + 1}`} className="w-full h-full object-cover" />
@@ -354,12 +378,11 @@ export default function ProductPage() {
               <p className="text-xs text-gray-400 mt-1 font-medium">Price per unit · Campus delivery available</p>
             </div>
 
-            {/* ── Description / Tags ── */}
+            {/* Description / Tags */}
             {product.description && (
               <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 shadow-sm">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Product Details</p>
                 {isTagDescription ? (
-                  // New tag-based description
                   <div className="flex flex-wrap gap-2">
                     {descriptionTags.map((tag: string) => (
                       <span
@@ -371,7 +394,6 @@ export default function ProductPage() {
                     ))}
                   </div>
                 ) : (
-                  // Fallback for old plain-text descriptions
                   <p className="text-gray-600 text-sm sm:text-base leading-relaxed">{product.description}</p>
                 )}
               </div>
@@ -428,7 +450,7 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {/* ── Seller card ── */}
+            {/* Seller card */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-5 flex items-center gap-4">
                 <div className="relative flex-shrink-0">
@@ -619,6 +641,100 @@ export default function ProductPage() {
             </div>
           </div>
         )}
+
+        {/* ── YOU MAY ALSO LIKE (Related Products) ── */}
+        {(relatedLoading || relatedProducts.length > 0) && (
+          <div className="mt-10 sm:mt-16">
+
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900">You May Also Like</h2>
+                <p className="text-sm text-gray-400 mt-0.5">More from {product.category}</p>
+              </div>
+              <Link
+                href={`/marketplace?category=${encodeURIComponent(product.category)}`}
+                className="flex items-center gap-1.5 text-sm font-bold text-BATAMART-primary hover:text-BATAMART-dark transition-colors flex-shrink-0"
+              >
+                See all <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {/* Horizontal scroll row — exactly like Jumia/Temu */}
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:-mx-6 sm:px-6">
+
+              {relatedLoading
+                ? /* Loading skeletons */
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex-shrink-0 w-40 sm:w-48">
+                      <div className="aspect-square bg-gray-200 rounded-2xl animate-pulse mb-3" />
+                      <div className="h-4 bg-gray-200 rounded-lg animate-pulse mb-2" />
+                      <div className="h-4 bg-gray-200 rounded-lg animate-pulse w-2/3" />
+                    </div>
+                  ))
+                : relatedProducts.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={`/product/${item.id}`}
+                      className="flex-shrink-0 w-40 sm:w-48 group"
+                    >
+                      {/* Image */}
+                      <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm mb-3 group-hover:shadow-md group-hover:border-BATAMART-primary/30 transition-all duration-200">
+                        <img
+                          src={item.images?.[0] || '/placeholder.png'}
+                          alt={item.name}
+                          className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                        />
+
+                        {/* Out of stock overlay */}
+                        {item.quantity === 0 && (
+                          <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded-2xl">
+                            <span className="text-xs font-black text-red-500 bg-red-50 px-2 py-1 rounded-lg ring-1 ring-red-200">
+                              Out of stock
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Low stock badge */}
+                        {item.quantity > 0 && item.quantity <= 5 && (
+                          <div className="absolute top-2 left-2">
+                            <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md">
+                              {item.quantity} left
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900 line-clamp-2 leading-snug mb-1 group-hover:text-BATAMART-primary transition-colors">
+                          {item.name}
+                        </p>
+
+                        {/* Rating if exists */}
+                        {item.avgRating > 0 && (
+                          <div className="flex items-center gap-1 mb-1">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <span className="text-[11px] font-bold text-gray-600">{item.avgRating.toFixed(1)}</span>
+                          </div>
+                        )}
+
+                        <p className="text-sm font-black text-BATAMART-primary">
+                          {formatPrice(item.price)}
+                        </p>
+
+                        {/* Seller name */}
+                        <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                          {item.seller?.name || 'Seller'}
+                        </p>
+                      </div>
+                    </Link>
+                  ))
+              }
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
