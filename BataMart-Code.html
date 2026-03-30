@@ -11747,12 +11747,21 @@ export default function MyProfilePage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isApp, setIsApp] = useState(false)
+  const [isIOSBrowser, setIsIOSBrowser] = useState(false)
+  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false)
 
   const { isSupported, isSubscribed, isLoading: notifLoading, permission, subscribe, unsubscribe } = usePushSubscription()
 
   useEffect(() =&gt; {
     const params = new URLSearchParams(window.location.search)
     setIsApp(params.get('app') === 'true')
+
+    // Detect iOS browser tab (not standalone PWA)
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    setIsIOSBrowser(isIOS &amp;&amp; !isStandalone)
   }, [])
 
   useEffect(() =&gt; { fetchProfileData() }, [])
@@ -11869,6 +11878,62 @@ export default function MyProfilePage() {
   return (
     &lt;div className="min-h-screen bg-gray-50"&gt;
 
+      {/* iOS Install Modal */}
+      {showIOSInstallModal &amp;&amp; (
+        &lt;&gt;
+          &lt;div
+            className="fixed inset-0 bg-black/50 z-50"
+            onClick={() =&gt; setShowIOSInstallModal(false)}
+          /&gt;
+          &lt;div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl p-6 shadow-2xl"&gt;
+            &lt;div className="flex items-center gap-3 mb-4"&gt;
+              &lt;div className="w-12 h-12 bg-BATAMART-primary rounded-xl flex items-center justify-center"&gt;
+                &lt;span className="text-2xl"&gt;🛍️&lt;/span&gt;
+              &lt;/div&gt;
+              &lt;div&gt;
+                &lt;p className="font-bold text-gray-900 text-base"&gt;Add BataMart to Home Screen&lt;/p&gt;
+                &lt;p className="text-sm text-gray-500"&gt;Get the full app experience 🚀&lt;/p&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div className="space-y-3 mb-5"&gt;
+              &lt;div className="flex items-center gap-3 bg-blue-50 rounded-xl px-4 py-3"&gt;
+                &lt;span className="text-xl"&gt;⎋&lt;/span&gt;
+                &lt;div&gt;
+                  &lt;p className="font-semibold text-sm text-gray-800"&gt;Tap the Share button&lt;/p&gt;
+                  &lt;p className="text-xs text-gray-500"&gt;At the bottom of your Safari browser&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div className="flex items-center gap-3 bg-green-50 rounded-xl px-4 py-3"&gt;
+                &lt;span className="text-xl"&gt;➕&lt;/span&gt;
+                &lt;div&gt;
+                  &lt;p className="font-semibold text-sm text-gray-800"&gt;Tap "Add to Home Screen"&lt;/p&gt;
+                  &lt;p className="text-xs text-gray-500"&gt;Scroll down in the share sheet to find it&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div className="flex items-center gap-3 bg-yellow-50 rounded-xl px-4 py-3"&gt;
+                &lt;span className="text-xl"&gt;✅&lt;/span&gt;
+                &lt;div&gt;
+                  &lt;p className="font-semibold text-sm text-gray-800"&gt;Tap "Add" to confirm&lt;/p&gt;
+                  &lt;p className="text-xs text-gray-500"&gt;BataMart will appear on your home screen&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;button
+              onClick={() =&gt; setShowIOSInstallModal(false)}
+              className="w-full bg-BATAMART-primary text-white font-bold py-3 rounded-xl text-sm"
+            &gt;
+              Got it!
+            &lt;/button&gt;
+            &lt;button
+              onClick={() =&gt; setShowIOSInstallModal(false)}
+              className="w-full text-gray-400 text-sm mt-3"
+            &gt;
+              Maybe later
+            &lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/&gt;
+      )}
+
       {/* Mobile Header — always visible */}
       &lt;div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-30"&gt;
         &lt;div className="flex items-center justify-between px-4 py-3"&gt;
@@ -11884,7 +11949,7 @@ export default function MyProfilePage() {
         &lt;/div&gt;
       &lt;/div&gt;
 
-      {/* Mobile Slide-out Menu — always available */}
+      {/* Mobile Slide-out Menu */}
       {isMobileMenuOpen &amp;&amp; (
         &lt;&gt;
           &lt;div
@@ -12152,13 +12217,33 @@ export default function MyProfilePage() {
               &lt;/div&gt;
             &lt;/div&gt;
 
-            {/* Notifications — hidden in app mode */}
-            {!isApp &amp;&amp; (
-              &lt;div className="bg-white rounded-xl border border-gray-200 overflow-hidden"&gt;
-                &lt;div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-gray-100"&gt;
-                  &lt;h2 className="font-bold text-gray-900 text-sm lg:text-base"&gt;NOTIFICATIONS&lt;/h2&gt;
-                &lt;/div&gt;
-                &lt;div className="p-4 lg:p-5"&gt;
+            {/* Notifications — always visible for all platforms */}
+            &lt;div className="bg-white rounded-xl border border-gray-200 overflow-hidden"&gt;
+              &lt;div className="px-4 lg:px-5 py-3 lg:py-4 border-b border-gray-100"&gt;
+                &lt;h2 className="font-bold text-gray-900 text-sm lg:text-base"&gt;NOTIFICATIONS&lt;/h2&gt;
+              &lt;/div&gt;
+              &lt;div className="p-4 lg:p-5"&gt;
+                {isIOSBrowser ? (
+                  // iOS Safari browser tab — show install CTA
+                  &lt;div className="flex items-center justify-between"&gt;
+                    &lt;div className="flex items-center gap-3"&gt;
+                      &lt;div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"&gt;
+                        &lt;span className="text-lg"&gt;📲&lt;/span&gt;
+                      &lt;/div&gt;
+                      &lt;div&gt;
+                        &lt;p className="font-medium text-gray-900 text-sm"&gt;Push Notifications&lt;/p&gt;
+                        &lt;p className="text-xs text-gray-500 mt-0.5"&gt;Install app to Home Screen to enable&lt;/p&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+                    &lt;button
+                      onClick={() =&gt; setShowIOSInstallModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-BATAMART-primary text-white hover:bg-BATAMART-dark transition-colors"
+                    &gt;
+                      How to
+                    &lt;/button&gt;
+                  &lt;/div&gt;
+                ) : (
+                  // Android, desktop, iOS PWA — normal toggle
                   &lt;div className="flex items-center justify-between"&gt;
                     &lt;div className="flex items-center gap-3"&gt;
                       &lt;div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSubscribed ? 'bg-green-100' : 'bg-gray-100'}`}&gt;
@@ -12185,9 +12270,9 @@ export default function MyProfilePage() {
                     )}
                     {permission === 'denied' &amp;&amp; &lt;span className="text-xs text-red-500 font-medium"&gt;Blocked&lt;/span&gt;}
                   &lt;/div&gt;
-                &lt;/div&gt;
+                )}
               &lt;/div&gt;
-            )}
+            &lt;/div&gt;
 
             {/* Referral Card */}
             &lt;ReferralCard /&gt;
@@ -16950,7 +17035,8 @@ export function ToastContainer() {
     &lt;/div&gt;
   );
 }</pre></div>
-<div class='file-block'><div class='file-header'>hooks/use-push-notifications.tsx</div><pre>'use client';
+<div class='file-block'><div class='file-header'>hooks/use-push-notifications.tsx</div><pre>// hooks/use-push-notifications.tsx
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
@@ -16961,7 +17047,11 @@ export function usePushNotifications() {
   const toast = useToast();
 
   useEffect(() =&gt; {
-    if ('Notification' in window) {
+    if (
+      'Notification' in window &amp;&amp;
+      'serviceWorker' in navigator &amp;&amp;
+      'PushManager' in window
+    ) {
       setIsSupported(true);
       setPermission(Notification.permission);
     }
@@ -16992,7 +17082,10 @@ export function usePushNotifications() {
     }
   };
 
-  const sendNotification = (title: string, options?: NotificationOptions) =&gt; {
+  // ✅ Fixed: uses service worker showNotification instead of new Notification()
+  // new Notification() is blocked on mobile browsers and PWAs.
+  // Service worker notifications work on ALL platforms including Android/iOS PWA.
+  const sendNotification = async (title: string, options?: NotificationOptions) =&gt; {
     if (!isSupported) {
       console.warn('Notifications not supported');
       return;
@@ -17004,15 +17097,27 @@ export function usePushNotifications() {
     }
 
     try {
+      // Try service worker first (works on mobile + desktop)
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification(title, {
+          icon: '/icon-192x192.png',
+          badge: '/badge-72x72.png',
+          ...options,
+        } as NotificationOptions &amp; { vibrate?: number[] });
+
+        if ('vibrate' in navigator) {
+          navigator.vibrate([200, 100, 200]);
+        }
+        return;
+      }
+
+      // Fallback to new Notification() for desktop browsers without SW
       const notification = new Notification(title, {
         icon: '/icon-192x192.png',
         badge: '/badge-72x72.png',
         ...options,
       } as NotificationOptions &amp; { vibrate?: number[] });
-
-      if ('vibrate' in navigator) {
-        navigator.vibrate([200, 100, 200]);
-      }
 
       notification.onclick = () =&gt; {
         window.focus();
@@ -17051,7 +17156,6 @@ export function NotificationPrompt() {
       setDismissed(true);
       return;
     }
-    // Slight delay so it doesn't pop in immediately on page load
     const t = setTimeout(() =&gt; setVisible(true), 2000);
     return () =&gt; clearTimeout(t);
   }, []);
@@ -17107,7 +17211,6 @@ export function NotificationPrompt() {
         className={`fixed right-4 z-[9990] w-[calc(100vw-2rem)] max-w-[320px] ${
           visible ? 'notif-prompt-enter' : 'notif-prompt-exit'
         }`}
-        // sits above bottom nav (64px) + a little gap
         style={{ bottom: 'calc(72px + max(env(safe-area-inset-bottom), 16px) + 12px)' }}
       &gt;
         &lt;div
@@ -17118,16 +17221,10 @@ export function NotificationPrompt() {
             border: '1px solid rgba(59,158,245,0.15)',
           }}
         &gt;
-          {/* Gradient top bar */}
-          &lt;div
-            className="h-1"
-            style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }}
-          /&gt;
+          &lt;div className="h-1" style={{ background: 'linear-gradient(90deg, #1a3f8f, #3b9ef5)' }} /&gt;
 
           &lt;div className="p-4"&gt;
-            {/* Header row */}
             &lt;div className="flex items-start gap-3 mb-3"&gt;
-              {/* Bell icon */}
               &lt;div
                 className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bell-ring"
                 style={{
@@ -17149,7 +17246,6 @@ export function NotificationPrompt() {
                 &lt;/p&gt;
               &lt;/div&gt;
 
-              {/* Close */}
               &lt;button
                 onClick={handleDismiss}
                 className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors -mt-0.5 -mr-0.5"
@@ -17160,7 +17256,6 @@ export function NotificationPrompt() {
               &lt;/button&gt;
             &lt;/div&gt;
 
-            {/* Benefit pills */}
             &lt;div className="flex flex-wrap gap-1.5 mb-3"&gt;
               {['Order updates', 'Delivery alerts', 'New messages'].map((label) =&gt; (
                 &lt;span
@@ -17173,7 +17268,6 @@ export function NotificationPrompt() {
               ))}
             &lt;/div&gt;
 
-            {/* Action buttons */}
             &lt;div className="flex gap-2"&gt;
               &lt;button
                 onClick={handleEnable}
@@ -17203,7 +17297,7 @@ export function NotificationPrompt() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Notification event helpers — unchanged
+// Notification event helpers
 // ─────────────────────────────────────────────────────────────────────────────
 export function useNotificationEvents() {
   const { sendNotification, permission } = usePushNotifications();
@@ -17291,6 +17385,20 @@ export function usePushSubscription() {
     }
   }, [])
 
+  // ✅ Auto re-subscribe on page load if permission already granted
+  // This ensures mobile users stay subscribed after closing and reopening the app
+  useEffect(() =&gt; {
+    if (
+      typeof window !== 'undefined' &amp;&amp;
+      'Notification' in window &amp;&amp;
+      Notification.permission === 'granted' &amp;&amp;
+      'serviceWorker' in navigator &amp;&amp;
+      'PushManager' in window
+    ) {
+      autoResubscribeIfNeeded()
+    }
+  }, [])
+
   const checkSubscription = async () =&gt; {
     try {
       const registration = await getServiceWorkerRegistration()
@@ -17299,6 +17407,41 @@ export function usePushSubscription() {
       setIsSubscribed(!!subscription)
     } catch (error) {
       console.error('[Push] Check subscription error:', error)
+    }
+  }
+
+  // ✅ Silently re-subscribe if permission is granted but subscription is missing
+  // This fixes the case where mobile browser clears the subscription in the background
+  const autoResubscribeIfNeeded = async () =&gt; {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidKey) return
+
+      const registration = await getServiceWorkerRegistration()
+      if (!registration) return
+
+      const existing = await registration.pushManager.getSubscription()
+      if (existing) {
+        // Already subscribed — make sure server has this subscription saved
+        await saveSubscriptionToServer(existing, token)
+        setIsSubscribed(true)
+        return
+      }
+
+      // No subscription found — silently re-subscribe
+      console.log('[Push] No subscription found despite permission granted — re-subscribing...')
+      const newSubscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      })
+      await saveSubscriptionToServer(newSubscription, token)
+      setIsSubscribed(true)
+      console.log('[Push] ✅ Auto re-subscribed successfully')
+    } catch (error) {
+      console.error('[Push] Auto re-subscribe failed:', error)
     }
   }
 
@@ -17318,6 +17461,20 @@ export function usePushSubscription() {
     }
   }
 
+  const saveSubscriptionToServer = async (subscription: PushSubscription, token: string) =&gt; {
+    const response = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(subscription),
+    })
+    if (!response.ok) {
+      throw new Error(`Server rejected subscription: ${await response.text()}`)
+    }
+  }
+
   const subscribe = async (): Promise&lt;boolean&gt; =&gt; {
     if (!isSupported) {
       toast.error('Push notifications are not supported in this browser')
@@ -17334,6 +17491,8 @@ export function usePushSubscription() {
     setIsLoading(true)
 
     try {
+      // ✅ Must use service worker pushManager — NOT new Notification() directly
+      // new Notification() doesn't work on mobile/PWA; service worker does
       const result = await Notification.requestPermission()
       setPermission(result)
 
@@ -17377,17 +17536,10 @@ export function usePushSubscription() {
         return false
       }
 
-      const response = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(subscription),
-      })
-
-      if (!response.ok) {
-        console.error('[Push] Server failed to save subscription:', await response.text())
+      try {
+        await saveSubscriptionToServer(subscription, token)
+      } catch (err) {
+        console.error('[Push] Server failed to save subscription:', err)
         toast.error('Failed to save notification settings. Please try again.')
         return false
       }
@@ -17395,7 +17547,6 @@ export function usePushSubscription() {
       setIsSubscribed(true)
       toast.success("Notifications enabled! You'll get updates even when your browser is closed.")
       return true
-
     } catch (error) {
       console.error('[Push] Subscribe error:', error)
       toast.error('Something went wrong. Please try again.')
@@ -17458,9 +17609,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array&lt;ArrayBuffer&
 }
 
 // ── Global NotificationPrompt ─────────────────────────────────────────────────
-// Rendered as a BOTTOM SHEET — slides up from below the bottom nav.
-// Does NOT use fixed positioning that fights with IOSAppShell / z-index stacks.
-// Backdrop dims the page, sheet sits above everything at z-[9999].
 export function NotificationPrompt() {
   const { shouldShowPassive, snooze, markGranted } = useNotificationNudge()
   const { isLoading, subscribe } = usePushSubscription()
@@ -17516,13 +17664,13 @@ export function NotificationPrompt() {
         .np-bell { animation: npBellRing 1.6s ease 0.5s both; }
       `}&lt;/style&gt;
 
-      {/* Backdrop — tapping it snoozes */}
+      {/* Backdrop */}
       &lt;div
         className="np-backdrop fixed inset-0 z-[9998] bg-black/30"
         onClick={() =&gt; dismiss(true)}
       /&gt;
 
-      {/* Sheet — anchored to viewport bottom, full width, never clips content */}
+      {/* Bottom sheet */}
       &lt;div
         className="np-sheet fixed left-0 right-0 bottom-0 z-[9999] bg-white rounded-t-3xl overflow-hidden"
         style={{ boxShadow: '0 -8px 40px rgba(0,0,0,0.18)' }}
@@ -23974,6 +24122,15 @@ export async function GET() {
     }, { status: 500 })
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/api/test-push/route.ts</div><pre>import { NextResponse } from 'next/server'
+
+export async function GET() {
+  return NextResponse.json({
+    vapidEmail: process.env.VAPID_EMAIL,
+    vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    hasPrivateKey: !!process.env.VAPID_PRIVATE_KEY,
+  })
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/upload/route.ts</div><pre>// app/api/upload/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
@@ -24988,6 +25145,7 @@ export function useNotificationNudge() {
   const [permission, setPermission]     = useState&lt;NotificationPermission&gt;('default')
   const [isSupported, setIsSupported]   = useState(false)
   const [nudgeState, setNudgeState]     = useState&lt;NudgeState&gt;({ snoozeUntil: 0, grantedAt: 0 })
+  const [isLoggedIn, setIsLoggedIn]     = useState(false) // ✅ login gate
 
   // ── Initialise on mount ────────────────────────────────────────────────────
   useEffect(() =&gt; {
@@ -24998,6 +25156,11 @@ export function useNotificationNudge() {
       !('PushManager' in window)
     ) return
 
+    // ✅ Only proceed if user is logged in
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    setIsLoggedIn(true)
     setIsSupported(true)
     setPermission(Notification.permission)
     setNudgeState(loadState())
@@ -25026,7 +25189,6 @@ export function useNotificationNudge() {
     if (!isSupported) return
     if (permission === 'granted' &amp;&amp; !isSubscribed) {
       // Was subscribed, now isn't — clear any "dismissed forever" state
-      const s = loadState()
       const updated = { snoozeUntil: 0, grantedAt: 0 }
       saveState(updated)
       setNudgeState(updated)
@@ -25053,7 +25215,9 @@ export function useNotificationNudge() {
   }, [])
 
   // ── Should we show a passive (background) nudge? ──────────────────────────
+  // ✅ Added isLoggedIn check — never show to logged-out users
   const shouldShowPassive = (
+    isLoggedIn &amp;&amp;
     isSupported &amp;&amp;
     !isSubscribed &amp;&amp;
     permission !== 'denied' &amp;&amp;
@@ -25065,6 +25229,7 @@ export function useNotificationNudge() {
   //    Same rules but we ignore the snooze — a fresh order is high motivation.
   //    The caller is responsible for only triggering this once per visit.
   const shouldShowContextual = (
+    isLoggedIn &amp;&amp;
     isSupported &amp;&amp;
     !isSubscribed &amp;&amp;
     permission !== 'denied' &amp;&amp;
@@ -25456,9 +25621,22 @@ export const useCartStore = create&lt;CartState&gt;()(
     }
   )
 );</pre></div>
-<div class='file-block'><div class='file-header'>lib/notification.ts</div><pre>// lib/notifications.ts
+<div class='file-block'><div class='file-header'>lib/notification.ts</div><pre>// lib/notification.ts
 import { prisma } from '@/lib/prisma'
 import { NotificationType } from '@prisma/client'
+import {
+  notifyNewOrder as pushNewOrder,
+  notifyOrderPlaced as pushOrderPlaced,
+  notifyRiderAssigned as pushRiderAssigned,
+  notifyOrderOnTheWay as pushOrderOnTheWay,
+  notifyOrderDelivered as pushOrderDelivered,
+  notifyPaymentReceived as pushPaymentReceived,
+  notifyDisputeOpened as pushDisputeOpened,
+  notifyDisputeResolved as pushDisputeResolved,
+  notifyNewReview as pushNewReview,
+  notifyWithdrawalProcessed as pushWithdrawalProcessed,
+  sendPushToUser,
+} from '@/lib/push/sendPushNotification'
 
 interface CreateNotificationParams {
   userId: string
@@ -25474,7 +25652,7 @@ interface CreateNotificationParams {
 }
 
 /**
- * Create a notification for a user
+ * Create a DB notification for a user (updates the bell)
  */
 export async function createNotification(params: CreateNotificationParams) {
   try {
@@ -25489,10 +25667,9 @@ export async function createNotification(params: CreateNotificationParams) {
         disputeId: params.disputeId,
         reportId: params.reportId,
         reviewId: params.reviewId,
-        metadata: params.metadata || null
-      }
+        metadata: params.metadata || null,
+      },
     })
-
     return notification
   } catch (error) {
     console.error('Create notification error:', error)
@@ -25501,7 +25678,7 @@ export async function createNotification(params: CreateNotificationParams) {
 }
 
 /**
- * Create notifications for multiple users
+ * Create DB notifications for multiple users
  */
 export async function createBulkNotifications(
   userIds: string[],
@@ -25509,7 +25686,7 @@ export async function createBulkNotifications(
 ) {
   try {
     const notifications = await prisma.notification.createMany({
-      data: userIds.map(userId =&gt; ({
+      data: userIds.map((userId) =&gt; ({
         userId,
         type: params.type,
         title: params.title,
@@ -25519,10 +25696,9 @@ export async function createBulkNotifications(
         disputeId: params.disputeId,
         reportId: params.reportId,
         reviewId: params.reviewId,
-        metadata: params.metadata || null
-      }))
+        metadata: params.metadata || null,
+      })),
     })
-
     return notifications
   } catch (error) {
     console.error('Create bulk notifications error:', error)
@@ -25534,95 +25710,164 @@ export async function createBulkNotifications(
 // ORDER NOTIFICATIONS
 // ==========================================
 
-export async function notifyOrderPlaced(orderId: string, buyerId: string, sellerId: string, orderNumber: string, productName: string) {
-  // Notify seller
+export async function notifyOrderPlaced(
+  orderId: string,
+  buyerId: string,
+  sellerId: string,
+  orderNumber: string,
+  productName: string
+) {
+  // ✅ DB notification → updates bell for buyer
+  await createNotification({
+    userId: buyerId,
+    type: 'ORDER_PLACED',
+    title: '🛒 Order Placed!',
+    message: `Your order (#${orderNumber}) for ${productName} was placed successfully.`,
+    orderId,
+    metadata: { orderNumber, productName },
+  })
+
+  // ✅ DB notification → updates bell for seller
   await createNotification({
     userId: sellerId,
     type: 'ORDER_PLACED',
     title: '🛒 New Order Received!',
     message: `You have a new order (#${orderNumber}) for ${productName}`,
     orderId,
-    metadata: { orderNumber, productName }
+    metadata: { orderNumber, productName },
   })
+
+  // ✅ PUSH → buyer gets push that their order was placed
+  await pushOrderPlaced(buyerId, orderNumber)
+
+  // ✅ PUSH → seller gets push about new order (this was missing before!)
+  await pushNewOrder(sellerId, orderNumber)
 }
 
-export async function notifyRiderAssigned(orderId: string, buyerId: string, sellerId: string, riderId: string, riderName: string, orderNumber: string) {
-  // Notify buyer
+export async function notifyRiderAssigned(
+  orderId: string,
+  buyerId: string,
+  sellerId: string,
+  riderId: string,
+  riderName: string,
+  orderNumber: string
+) {
+  // ✅ DB notifications
   await createNotification({
     userId: buyerId,
     type: 'RIDER_ASSIGNED',
     title: '🚴 Rider Assigned!',
     message: `${riderName} has been assigned to deliver your order (#${orderNumber})`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
   })
 
-  // Notify seller
   await createNotification({
     userId: sellerId,
     type: 'RIDER_ASSIGNED',
     title: '🚴 Rider Assigned',
     message: `${riderName} will deliver order #${orderNumber}`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
   })
+
+  // ✅ PUSH notifications
+  await pushRiderAssigned(buyerId, orderNumber)
 }
 
-export async function notifyOrderPickedUp(orderId: string, buyerId: string, orderNumber: string, riderName: string) {
+export async function notifyOrderPickedUp(
+  orderId: string,
+  buyerId: string,
+  orderNumber: string,
+  riderName: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: buyerId,
     type: 'ORDER_PICKED_UP',
     title: '📦 Order Picked Up!',
     message: `${riderName} has picked up your order (#${orderNumber})`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(buyerId, {
+    title: '📦 Order Picked Up!',
+    message: `${riderName} has picked up your order (#${orderNumber})`,
+    url: `/orders`,
+    tag: `order-picked-up-${orderId}`,
   })
 }
 
-export async function notifyOrderOnTheWay(orderId: string, buyerId: string, orderNumber: string, riderName: string) {
+export async function notifyOrderOnTheWay(
+  orderId: string,
+  buyerId: string,
+  orderNumber: string,
+  riderName: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: buyerId,
     type: 'ORDER_ON_THE_WAY',
     title: '🛵 Order On The Way!',
     message: `${riderName} is on the way with your order (#${orderNumber})`,
     orderId,
-    metadata: { orderNumber, riderName }
+    metadata: { orderNumber, riderName },
   })
+
+  // ✅ PUSH notification
+  await pushOrderOnTheWay(buyerId, orderNumber)
 }
 
-export async function notifyOrderDelivered(orderId: string, buyerId: string, orderNumber: string) {
+export async function notifyOrderDelivered(
+  orderId: string,
+  buyerId: string,
+  orderNumber: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: buyerId,
     type: 'ORDER_DELIVERED',
     title: '✅ Order Delivered!',
     message: `Your order (#${orderNumber}) has been delivered. Please confirm receipt.`,
     orderId,
-    metadata: { orderNumber }
+    metadata: { orderNumber },
   })
+
+  // ✅ PUSH notification
+  await pushOrderDelivered(buyerId, orderNumber)
 }
 
-export async function notifyOrderCompleted(orderId: string, buyerId: string, sellerId: string, riderId: string | null, orderNumber: string, amount: number) {
-  // Notify buyer
+export async function notifyOrderCompleted(
+  orderId: string,
+  buyerId: string,
+  sellerId: string,
+  riderId: string | null,
+  orderNumber: string,
+  amount: number
+) {
+  const amountFormatted = `₦${amount.toFixed(2)}`
+
+  // ✅ DB notifications
   await createNotification({
     userId: buyerId,
     type: 'ORDER_COMPLETED',
     title: '🎉 Order Completed!',
     message: `Order #${orderNumber} is complete. Don't forget to leave a review!`,
     orderId,
-    metadata: { orderNumber, amount }
+    metadata: { orderNumber, amount },
   })
 
-  // Notify seller
   await createNotification({
     userId: sellerId,
     type: 'PAYMENT_RECEIVED',
     title: '💰 Payment Received!',
-    message: `You've received ₦${amount.toFixed(2)} for order #${orderNumber}`,
+    message: `You've received ${amountFormatted} for order #${orderNumber}`,
     orderId,
-    metadata: { orderNumber, amount }
+    metadata: { orderNumber, amount },
   })
 
-  // Notify rider if exists
   if (riderId) {
     await createNotification({
       userId: riderId,
@@ -25630,8 +25875,14 @@ export async function notifyOrderCompleted(orderId: string, buyerId: string, sel
       title: '💰 Delivery Payment!',
       message: `You've received payment for delivering order #${orderNumber}`,
       orderId,
-      metadata: { orderNumber }
+      metadata: { orderNumber },
     })
+  }
+
+  // ✅ PUSH notifications
+  await pushPaymentReceived(sellerId, amountFormatted)
+  if (riderId) {
+    await pushPaymentReceived(riderId, 'your delivery fee')
   }
 }
 
@@ -25639,36 +25890,74 @@ export async function notifyOrderCompleted(orderId: string, buyerId: string, sel
 // REVIEW NOTIFICATIONS
 // ==========================================
 
-export async function notifyProductReviewed(sellerId: string, productId: string, productName: string, rating: number, buyerName: string) {
+export async function notifyProductReviewed(
+  sellerId: string,
+  productId: string,
+  productName: string,
+  rating: number,
+  buyerName: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: sellerId,
     type: 'PRODUCT_REVIEWED',
     title: '⭐ New Product Review!',
     message: `${buyerName} left a ${rating}-star review for ${productName}`,
     productId,
-    metadata: { productName, rating, buyerName }
+    metadata: { productName, rating, buyerName },
   })
+
+  // ✅ PUSH notification
+  await pushNewReview(sellerId, productName)
 }
 
-export async function notifySellerReviewed(sellerId: string, rating: number, buyerName: string, orderId: string) {
+export async function notifySellerReviewed(
+  sellerId: string,
+  rating: number,
+  buyerName: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: sellerId,
     type: 'SELLER_REVIEWED',
     title: '⭐ New Seller Review!',
     message: `${buyerName} gave you a ${rating}-star rating`,
     orderId,
-    metadata: { rating, buyerName }
+    metadata: { rating, buyerName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(sellerId, {
+    title: '⭐ New Seller Review!',
+    message: `${buyerName} gave you a ${rating}-star rating`,
+    url: `/my-shop`,
+    tag: `seller-review-${orderId}`,
   })
 }
 
-export async function notifyRiderReviewed(riderId: string, rating: number, buyerName: string, orderId: string) {
+export async function notifyRiderReviewed(
+  riderId: string,
+  rating: number,
+  buyerName: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: riderId,
     type: 'RIDER_REVIEWED',
     title: '⭐ New Delivery Review!',
     message: `${buyerName} gave you a ${rating}-star rating`,
     orderId,
-    metadata: { rating, buyerName }
+    metadata: { rating, buyerName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(riderId, {
+    title: '⭐ New Delivery Review!',
+    message: `${buyerName} gave you a ${rating}-star rating`,
+    url: `/rider-dashboard`,
+    tag: `rider-review-${orderId}`,
   })
 }
 
@@ -25676,7 +25965,14 @@ export async function notifyRiderReviewed(riderId: string, rating: number, buyer
 // DISPUTE NOTIFICATIONS
 // ==========================================
 
-export async function notifyDisputeOpened(disputeId: string, sellerId: string, buyerName: string, orderNumber: string, orderId: string) {
+export async function notifyDisputeOpened(
+  disputeId: string,
+  sellerId: string,
+  buyerName: string,
+  orderNumber: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: sellerId,
     type: 'DISPUTE_OPENED',
@@ -25684,11 +25980,20 @@ export async function notifyDisputeOpened(disputeId: string, sellerId: string, b
     message: `${buyerName} opened a dispute for order #${orderNumber}`,
     orderId,
     disputeId,
-    metadata: { orderNumber, buyerName }
+    metadata: { orderNumber, buyerName },
   })
+
+  // ✅ PUSH notification
+  await pushDisputeOpened(sellerId, orderNumber)
 }
 
-export async function notifyDisputeMessage(disputeId: string, recipientId: string, senderName: string, orderId: string) {
+export async function notifyDisputeMessage(
+  disputeId: string,
+  recipientId: string,
+  senderName: string,
+  orderId: string
+) {
+  // ✅ DB notification
   await createNotification({
     userId: recipientId,
     type: 'DISPUTE_MESSAGE',
@@ -25696,12 +26001,28 @@ export async function notifyDisputeMessage(disputeId: string, recipientId: strin
     message: `${senderName} sent a message in your dispute`,
     orderId,
     disputeId,
-    metadata: { senderName }
+    metadata: { senderName },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(recipientId, {
+    title: '💬 New Dispute Message',
+    message: `${senderName} sent a message in your dispute`,
+    url: `/disputes`,
+    tag: `dispute-msg-${disputeId}`,
+    requireInteraction: true,
   })
 }
 
-export async function notifyDisputeResolved(disputeId: string, buyerId: string, sellerId: string, resolution: string, orderNumber: string, orderId: string) {
-  // Notify buyer
+export async function notifyDisputeResolved(
+  disputeId: string,
+  buyerId: string,
+  sellerId: string,
+  resolution: string,
+  orderNumber: string,
+  orderId: string
+) {
+  // ✅ DB notifications
   await createNotification({
     userId: buyerId,
     type: 'DISPUTE_RESOLVED',
@@ -25709,10 +26030,9 @@ export async function notifyDisputeResolved(disputeId: string, buyerId: string, 
     message: `Your dispute for order #${orderNumber} has been resolved: ${resolution}`,
     orderId,
     disputeId,
-    metadata: { orderNumber, resolution }
+    metadata: { orderNumber, resolution },
   })
 
-  // Notify seller
   await createNotification({
     userId: sellerId,
     type: 'DISPUTE_RESOLVED',
@@ -25720,37 +26040,49 @@ export async function notifyDisputeResolved(disputeId: string, buyerId: string, 
     message: `Dispute for order #${orderNumber} has been resolved: ${resolution}`,
     orderId,
     disputeId,
-    metadata: { orderNumber, resolution }
+    metadata: { orderNumber, resolution },
   })
+
+  // ✅ PUSH notifications
+  await pushDisputeResolved(buyerId, orderNumber)
+  await pushDisputeResolved(sellerId, orderNumber)
 }
 
 // ==========================================
 // REPORT NOTIFICATIONS
 // ==========================================
 
-export async function notifyReportSubmitted(reportId: string, reportedUserId: string, reporterName: string, reportType: string) {
+export async function notifyReportSubmitted(
+  reportId: string,
+  reportedUserId: string,
+  reporterName: string,
+  reportType: string
+) {
   await createNotification({
     userId: reportedUserId,
     type: 'REPORT_SUBMITTED',
     title: '⚠️ Report Filed',
     message: `A report has been filed against you. Our team is reviewing it.`,
     reportId,
-    metadata: { reportType }
+    metadata: { reportType },
   })
 }
 
-export async function notifyReportResolved(reportId: string, reporterId: string, reportedUserId: string | null, resolution: string) {
-  // Notify reporter
+export async function notifyReportResolved(
+  reportId: string,
+  reporterId: string,
+  reportedUserId: string | null,
+  resolution: string
+) {
   await createNotification({
     userId: reporterId,
     type: 'REPORT_RESOLVED',
     title: '✅ Report Resolved',
     message: `Your report has been reviewed: ${resolution}`,
     reportId,
-    metadata: { resolution }
+    metadata: { resolution },
   })
 
-  // Notify reported user if applicable
   if (reportedUserId) {
     await createNotification({
       userId: reportedUserId,
@@ -25758,7 +26090,7 @@ export async function notifyReportResolved(reportId: string, reporterId: string,
       title: '✅ Report Resolved',
       message: `The report against you has been resolved: ${resolution}`,
       reportId,
-      metadata: { resolution }
+      metadata: { resolution },
     })
   }
 }
@@ -25767,31 +26099,49 @@ export async function notifyReportResolved(reportId: string, reporterId: string,
 // PENALTY NOTIFICATIONS
 // ==========================================
 
-export async function notifyPenaltyIssued(userId: string, penaltyAction: string, reason: string, points: number) {
+export async function notifyPenaltyIssued(
+  userId: string,
+  penaltyAction: string,
+  reason: string,
+  points: number
+) {
   await createNotification({
     userId,
     type: 'PENALTY_ISSUED',
     title: '⚠️ Penalty Issued',
     message: `You received a penalty: ${penaltyAction}. ${points} penalty points added. Reason: ${reason}`,
-    metadata: { penaltyAction, reason, points }
+    metadata: { penaltyAction, reason, points },
   })
 }
 
 // ==========================================
-// REPLACED FUNCTION - NOW SUPPORTS PERMANENT SUSPENSION
+// ACCOUNT NOTIFICATIONS
 // ==========================================
 
-export async function notifyAccountSuspended(userId: string, until: Date | null, reason: string) {
+export async function notifyAccountSuspended(
+  userId: string,
+  until: Date | null,
+  reason: string
+) {
   const message = until
     ? `Your account has been suspended until ${until.toLocaleDateString()}. Reason: ${reason}`
-    : `Your account has been permanently suspended. Reason: ${reason}. Contact support@BATAMART-mart.com to appeal.`
+    : `Your account has been permanently suspended. Reason: ${reason}. Contact support to appeal.`
 
   await createNotification({
     userId,
     type: 'ACCOUNT_SUSPENDED',
     title: '🚫 Account Suspended',
     message,
-    metadata: { until: until?.toISOString() ?? 'permanent', reason }
+    metadata: { until: until?.toISOString() ?? 'permanent', reason },
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(userId, {
+    title: '🚫 Account Suspended',
+    message,
+    url: '/',
+    tag: 'account-suspended',
+    requireInteraction: true,
   })
 }
 
@@ -25801,7 +26151,15 @@ export async function notifyAccountUnsuspended(userId: string) {
     type: 'ACCOUNT_UNSUSPENDED',
     title: '✅ Account Restored',
     message: `Your account suspension has been lifted. Welcome back!`,
-    metadata: {}
+    metadata: {},
+  })
+
+  // ✅ PUSH notification
+  await sendPushToUser(userId, {
+    title: '✅ Account Restored',
+    message: `Your account suspension has been lifted. Welcome back!`,
+    url: '/',
+    tag: 'account-unsuspended',
   })
 }
 
@@ -25809,14 +26167,24 @@ export async function notifyAccountUnsuspended(userId: string) {
 // WALLET NOTIFICATIONS
 // ==========================================
 
-export async function notifyWithdrawalProcessed(userId: string, amount: number, reference: string) {
+export async function notifyWithdrawalProcessed(
+  userId: string,
+  amount: number,
+  reference: string
+) {
+  const amountFormatted = `₦${amount.toFixed(2)}`
+
+  // ✅ DB notification
   await createNotification({
     userId,
     type: 'WITHDRAWAL_PROCESSED',
     title: '💸 Withdrawal Processed',
-    message: `Your withdrawal of ₦${amount.toFixed(2)} has been processed successfully`,
-    metadata: { amount, reference }
+    message: `Your withdrawal of ${amountFormatted} has been processed successfully`,
+    metadata: { amount, reference },
   })
+
+  // ✅ PUSH notification
+  await pushWithdrawalProcessed(userId, amountFormatted)
 }</pre></div>
 <div class='file-block'><div class='file-header'>lib/prisma.ts</div><pre>import { PrismaClient } from '@prisma/client'
 
@@ -26504,9 +26872,15 @@ import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email/sendEmail'
 import {
-  orderPlacedEmail, newOrderEmail, riderAssignedEmail,
-  orderOnTheWayEmail, orderDeliveredEmail, paymentReceivedEmail,
-  withdrawalProcessedEmail, disputeOpenedEmail, disputeResolvedEmail,
+  orderPlacedEmail,
+  newOrderEmail,
+  riderAssignedEmail,
+  orderOnTheWayEmail,
+  orderDeliveredEmail,
+  paymentReceivedEmail,
+  withdrawalProcessedEmail,
+  disputeOpenedEmail,
+  disputeResolvedEmail,
   newReviewEmail,
 } from '@/lib/email/emailTemplates'
 
@@ -26525,15 +26899,22 @@ interface PushPayload {
 }
 
 // ─── Send push to all subscriptions for a user ───────────────────────────────
+// ✅ Now EXPORTED so lib/notification.ts can call it directly for custom pushes.
 // Returns true if at least one push succeeded.
 // Stale/expired subscriptions (410/404) are auto-deleted.
-async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;boolean&gt; {
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;boolean&gt; {
   try {
     const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } })
     if (subscriptions.length === 0) return false
 
+    // ✅ De-duplicate subscriptions by endpoint before sending
+    // This prevents the same device receiving the notification multiple times
+    const uniqueSubs = Array.from(
+      new Map(subscriptions.map((s) =&gt; [s.endpoint, s])).values()
+    )
+
     const results = await Promise.allSettled(
-      subscriptions.map(async (sub) =&gt; {
+      uniqueSubs.map(async (sub) =&gt; {
         const pushSub: WebPushSubscription = {
           endpoint: sub.endpoint,
           keys: { p256dh: sub.p256dh, auth: sub.auth },
@@ -26557,7 +26938,11 @@ async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;
             console.log(`[Push] Removing stale subscription for user ${userId}`)
             await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() =&gt; {})
           } else {
-            console.error(`[Push] Failed to send to ${sub.endpoint.slice(0, 40)}:`, error.statusCode, error.body)
+            console.error(
+              `[Push] Failed to send to ${sub.endpoint.slice(0, 40)}:`,
+              error.statusCode,
+              error.body
+            )
           }
           throw error
         }
@@ -26565,7 +26950,6 @@ async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;
     )
 
     const succeeded = results.filter((r) =&gt; r.status === 'fulfilled').length
-    const failed = results.length - succeeded
     if (succeeded &gt; 0) {
       console.log(`[Push] ✅ ${succeeded}/${results.length} push(es) delivered to user ${userId}`)
     }
@@ -26584,7 +26968,6 @@ async function getUserEmail(userId: string): Promise&lt;string | null&gt; {
 // ─── Core notify function ─────────────────────────────────────────────────────
 // STRATEGY: Always try push first.
 // If push fails (no subscription or all pushes fail) → send email as fallback.
-// This ensures the user ALWAYS gets the notification one way or another.
 async function notify(
   userId: string,
   push: PushPayload,
@@ -26594,7 +26977,6 @@ async function notify(
     const pushed = await sendPushToUser(userId, push)
 
     if (!pushed) {
-      // No push subscription or all pushes failed — send email instead
       const email = await getUserEmail(userId)
       if (email) {
         const { subject, html } = await emailFn()
@@ -26606,7 +26988,6 @@ async function notify(
     }
   } catch (error) {
     console.error(`[Notify] ❌ Failed to notify user ${userId}:`, error)
-    // Never let notification failure crash the caller
   }
 }
 
@@ -26748,7 +27129,6 @@ export async function notifyNewReview(sellerId: string, productName: string) {
 }
 
 // ─── Notify all available riders of a new order ──────────────────────────────
-// Fire-and-forget: failures are isolated and logged but never crash the order flow.
 export async function notifyAvailableRiders(orderNumber: string): Promise&lt;void&gt; {
   try {
     const availableRiders = await prisma.user.findMany({
@@ -26757,14 +27137,12 @@ export async function notifyAvailableRiders(orderNumber: string): Promise&lt;voi
         isAvailable: true,
         isDeleted: false,
         isSuspended: false,
-        // Exclude riders already on an active delivery
         riderDeliveries: {
           none: {
             status: { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'] },
             isDisputed: false,
           },
         },
-        // Only target riders with a push subscription
         pushSubscriptions: { some: {} },
       },
       select: { id: true },
@@ -26783,14 +27161,18 @@ export async function notifyAvailableRiders(orderNumber: string): Promise&lt;voi
       requireInteraction: true,
     }
 
-    console.log(`[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`)
+    console.log(
+      `[Push] Notifying ${availableRiders.length} available rider(s) of order #${orderNumber}`
+    )
 
     const results = await Promise.allSettled(
       availableRiders.map((rider) =&gt; sendPushToUser(rider.id, payload))
     )
 
     const succeeded = results.filter((r) =&gt; r.status === 'fulfilled' &amp;&amp; r.value === true).length
-    console.log(`[Push] Rider notifications: ${succeeded}/${results.length} delivered for order #${orderNumber}`)
+    console.log(
+      `[Push] Rider notifications: ${succeeded}/${results.length} delivered for order #${orderNumber}`
+    )
   } catch (error) {
     console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
   }

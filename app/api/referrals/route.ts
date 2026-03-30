@@ -12,9 +12,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ✅ Fetch referralCode separately since getUserFromRequest doesn't select it
+    // Fetch referralCode separately since getUserFromRequest doesn't select it
     const fullUser = await prisma.user.findUnique({
-      where: { id: authUser.id },
+      where:  { id: authUser.id },
       select: { id: true, referralCode: true },
     })
 
@@ -50,9 +50,14 @@ export async function GET(request: NextRequest) {
     const totalReferrals      = referrals.length
     const totalReferralOrders = referrals.reduce((sum, u) => sum + u.orders.length, 0)
 
+    // Use NEXT_PUBLIC_APP_URL so the link works on any domain (custom domain,
+    // preview deployments, etc.) — never hardcode bata-mart.vercel.app here.
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const referralLink = `${APP_URL}/signup?ref=${fullUser.referralCode}`
+
     return NextResponse.json({
-      referralCode: fullUser.referralCode, // ✅ correctly fetched
-      referralLink: `https://bata-mart.vercel.app/signup?ref=${fullUser.referralCode}`,
+      referralCode:        fullUser.referralCode,
+      referralLink,
       totalReferrals,
       totalEarnings,
       totalReferralOrders,

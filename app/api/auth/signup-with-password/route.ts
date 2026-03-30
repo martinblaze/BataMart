@@ -4,21 +4,51 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, hashPassword } from '@/lib/auth/auth'
 import { generateUniqueReferralCode } from '@/lib/referral/generateReferralCode'
+import { verifyOtpSessionToken } from '@/app/api/auth/verify-otp/route'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, password, otpCode, role, phone, referralCode } = body
+    const { email, name, password, otpSessionToken, role, phone, referralCode } = body
 
-    if (!email || !otpCode || !password || !name || !phone) {
+    // ── Field presence check ───────────────────────────────────────────────
+    if (!email || !otpSessionToken || !password || !name || !phone) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Check if user already exists by email or phone
+    // ── Input length guards ────────────────────────────────────────────────
+    if (String(name).trim().length < 2 || String(name).trim().length > 80) {
+      return NextResponse.json({ error: 'Name must be between 2 and 80 characters' }, { status: 400 })
+    }
+    if (String(password).length < 6 || String(password).length > 128) {
+      return NextResponse.json({ error: 'Password must be between 6 and 128 characters' }, { status: 400 })
+    }
+
+    // ── OTP session token verification ────────────────────────────────────
+    // The /verify-otp route issued this token after the user's OTP was confirmed.
+    // It contains the exact identifier (email) that was verified. We check that
+    // the email in the token matches the email the user is trying to sign up with,
+    // so it's impossible to verify OTP for email A then create an account for email B.
+    const verifiedIdentifier = verifyOtpSessionToken(otpSessionToken)
+
+    if (!verifiedIdentifier) {
+      return NextResponse.json(
+        { error: 'OTP session expired or invalid. Please verify your email again.' },
+        { status: 400 }
+      )
+    }
+
+    // Normalise both to lowercase for comparison
+    if (verifiedIdentifier.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'Email does not match the verified address. Please restart the signup flow.' },
+        { status: 400 }
+      )
+    }
+
+    // ── Duplicate account check ────────────────────────────────────────────
     const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email }, { phone }],
-      },
+      where: { OR: [{ email }, { phone }] },
     })
 
     if (existingUser) {
@@ -29,7 +59,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ── Resolve referral code ────────────────────────────────
+    // ── Resolve referral code ──────────────────────────────────────────────
     let referredById: string | undefined = undefined
 
     if (referralCode && typeof referralCode === 'string') {
@@ -37,25 +67,22 @@ export async function POST(request: NextRequest) {
         where: { referralCode: referralCode.trim().toUpperCase() },
         select: { id: true },
       })
-
       if (referrer) {
         referredById = referrer.id
-        // Self-referral prevention is implicit (new user has no id yet),
-        // but we add an explicit guard for safety.
       }
-      // If code not found we silently ignore — don't block signup
+      // If code not found, silently ignore — don't block signup
     }
 
-    const hashedPassword = await hashPassword(password)
+    const hashedPassword  = await hashPassword(password)
     const newReferralCode = await generateUniqueReferralCode()
 
     const user = await prisma.user.create({
       data: {
         email,
-        name,
+        name:         name.trim(),
         phone,
-        password: hashedPassword,
-        role: role || 'BUYER',
+        password:     hashedPassword,
+        role:         role || 'BUYER',
         referralCode: newReferralCode,
         ...(referredById ? { referredById } : {}),
       },
@@ -67,12 +94,12 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
-        hostelName: user.hostelName,
+        id:           user.id,
+        name:         user.name,
+        phone:        user.phone,
+        email:        user.email,
+        role:         user.role,
+        hostelName:   user.hostelName,
         referralCode: user.referralCode,
       },
     })

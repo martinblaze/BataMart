@@ -1,5 +1,6 @@
+// prisma/schema.prisma
 // ============================================================
-// COMPLETE PRISMA SCHEMA WITH REFERRAL SYSTEM
+// COMPLETE PRISMA SCHEMA — BATAMART
 // ============================================================
 
 generator client {
@@ -7,8 +8,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -126,6 +127,9 @@ enum NotificationType {
   WITHDRAWAL_PROCESSED
   PAYMENT_RECEIVED
   REFERRAL_REWARD
+
+  // Added: used by the out-of-stock seller alert in payments/initialize
+  STOCK_ALERT
 }
 
 enum SupportTicketStatus {
@@ -169,80 +173,80 @@ enum PaymentMethod {
 }
 
 model User {
-  id                 String      @id @default(cuid())
-  phone              String      @unique
-  email              String?     @unique
-  password           String
-  matricNumber       String?     @unique
-  name               String
-  profilePhoto       String?
-  role               UserRole    @default(BUYER)
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  email        String?  @unique
+  password     String
+  matricNumber String?  @unique
+  name         String
+  profilePhoto String?
+  role         UserRole @default(BUYER)
 
-  isSellerMode       Boolean     @default(true)
+  isSellerMode Boolean @default(true)
 
-  hostelName         String?
-  roomNumber         String?
-  landmark           String?
+  hostelName String?
+  roomNumber String?
+  landmark   String?
 
-  bio                String?
+  bio String?
 
   // Trust level and ratings
-  trustLevel         TrustLevel  @default(BRONZE)
-  avgRating          Float       @default(0)
-  totalReviews       Int         @default(0)
-  completedOrders    Int         @default(0)
+  trustLevel      TrustLevel @default(BRONZE)
+  avgRating       Float      @default(0)
+  totalReviews    Int        @default(0)
+  completedOrders Int        @default(0)
 
   // Penalty & suspension
-  penaltyPoints      Int         @default(0)
-  isSuspended        Boolean     @default(false)
-  suspendedUntil     DateTime?
-  suspensionReason   String?
+  penaltyPoints    Int       @default(0)
+  isSuspended      Boolean   @default(false)
+  suspendedUntil   DateTime?
+  suspensionReason String?
 
   // Withdrawal PIN
-  withdrawalPin            String?
-  withdrawalPinAttempts    Int       @default(0)
-  withdrawalPinLockedUntil DateTime?
+  withdrawalPin             String?
+  withdrawalPinAttempts     Int       @default(0)
+  withdrawalPinLockedUntil  DateTime?
 
   // Dispute & Safety fields
-  warningCount       Int         @default(0)
-  lastWarningAt      DateTime?
+  warningCount  Int       @default(0)
+  lastWarningAt DateTime?
 
   // Wallet
-  pendingBalance     Float       @default(0)
-  availableBalance   Float       @default(0)
+  pendingBalance   Float @default(0)
+  availableBalance Float @default(0)
 
   // Soft delete
-  isDeleted          Boolean     @default(false)
-  deletedAt          DateTime?
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
-  // Referral System Fields
-  referralCode              String         @unique
-  referredById              String?
-  referredBy                User?          @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals                 User[]         @relation("UserReferrals")
-  referralRewardsEarned     ReferralReward[] @relation("ReferrerRewards")
-  referralRewardsGenerated  ReferralReward[] @relation("ReferredUserRewards")
+  // Referral System
+  referralCode             String          @unique
+  referredById             String?
+  referredBy               User?           @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals                User[]          @relation("UserReferrals")
+  referralRewardsEarned    ReferralReward[] @relation("ReferrerRewards")
+  referralRewardsGenerated ReferralReward[] @relation("ReferredUserRewards")
 
   // Relations
-  products           Product[]
-  orders             Order[]     @relation("BuyerOrders")
-  sellerOrders       Order[]     @relation("SellerOrders")
-  riderDeliveries    Order[]     @relation("RiderDeliveries")
+  products        Product[]
+  orders          Order[]  @relation("BuyerOrders")
+  sellerOrders    Order[]  @relation("SellerOrders")
+  riderDeliveries Order[]  @relation("RiderDeliveries")
 
-  reviewsGiven       Review[]    @relation("UserReviewsGiven")
-  reviewsReceived    Review[]    @relation("UserReviewsReceived")
+  reviewsGiven    Review[] @relation("UserReviewsGiven")
+  reviewsReceived Review[] @relation("UserReviewsReceived")
 
   productReviewsGiven ProductReview[] @relation("ProductReviewsGiven")
 
-  reportsSubmitted   Report[]    @relation("ReportsSubmitted")
-  reportsReceived    Report[]    @relation("ReportsReceived")
-  disputesAsBuyer    Dispute[]   @relation("BuyerDisputes")
-  disputesAsSeller   Dispute[]   @relation("SellerDisputes")
-  penaltiesReceived  Penalty[]   @relation("UserPenalties")
+  reportsSubmitted  Report[]  @relation("ReportsSubmitted")
+  reportsReceived   Report[]  @relation("ReportsReceived")
+  disputesAsBuyer   Dispute[] @relation("BuyerDisputes")
+  disputesAsSeller  Dispute[] @relation("SellerDisputes")
+  penaltiesReceived Penalty[] @relation("UserPenalties")
 
-  resolvedDisputes   Dispute[]   @relation("ResolvedBy")
-  resolvedReports    Report[]    @relation("ResolvedBy")
-  issuedPenalties    Penalty[]   @relation("IssuedBy")
+  resolvedDisputes Dispute[] @relation("ResolvedBy")
+  resolvedReports  Report[]  @relation("ResolvedBy")
+  issuedPenalties  Penalty[] @relation("IssuedBy")
 
   notifications      Notification[]
   pushSubscriptions  PushSubscription[]
@@ -252,12 +256,12 @@ model User {
   cart               Cart?
   auditLogs          AuditLog[]
 
-  isRiderVerified    Boolean     @default(false)
-  riderIdDocument    String?
-  isAvailable        Boolean     @default(true)
+  isRiderVerified Boolean @default(false)
+  riderIdDocument String?
+  isAvailable     Boolean @default(true)
 
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([role])
   @@index([trustLevel])
@@ -268,37 +272,37 @@ model User {
 }
 
 model Product {
-  id                String      @id @default(cuid())
-  name              String
-  description       String
-  price             Float
-  images            String[]
-  category          String
-  quantity          Int         @default(1)
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  images      String[]
+  category    String
+  quantity    Int      @default(1)
 
-  hostelName        String
-  roomNumber        String
-  landmark          String
+  hostelName String
+  roomNumber String
+  landmark   String
 
-  sellerId          String
-  seller            User        @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerId String
+  seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
-  isActive          Boolean     @default(true)
-  viewCount         Int         @default(0)
+  isActive     Boolean @default(true)
+  viewCount    Int     @default(0)
 
-  avgRating         Float       @default(0)
-  totalReviews      Int         @default(0)
+  avgRating    Float @default(0)
+  totalReviews Int   @default(0)
 
-  isDeleted         Boolean     @default(false)
-  deletedAt         DateTime?
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
-  orders            Order[]
-  reviews           ProductReview[]
-  reports           Report[]
-  cartItems         CartItem[]
+  orders    Order[]
+  reviews   ProductReview[]
+  reports   Report[]
+  cartItems CartItem[]
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sellerId])
   @@index([category])
@@ -308,20 +312,20 @@ model Product {
 }
 
 model Order {
-  id                 String      @id @default(cuid())
-  orderNumber        String      @unique
+  id          String @id @default(cuid())
+  orderNumber String @unique
 
-  buyerId            String
-  buyer              User        @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyerId String
+  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id])
 
-  sellerId           String
-  seller             User        @relation("SellerOrders", fields: [sellerId], references: [id])
+  sellerId String
+  seller   User   @relation("SellerOrders", fields: [sellerId], references: [id])
 
-  productId          String
-  product            Product     @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  riderId            String?
-  rider              User?       @relation("RiderDeliveries", fields: [riderId], references: [id])
+  riderId String?
+  rider   User?   @relation("RiderDeliveries", fields: [riderId], references: [id])
 
   productPrice       Float
   deliveryFee        Float
@@ -329,36 +333,34 @@ model Order {
   platformCommission Float       @default(0)
   quantity           Int         @default(1)
 
-  deliveryHostel     String
-  deliveryRoom       String
-  deliveryLandmark   String
-  deliveryPhone      String
+  deliveryHostel   String
+  deliveryRoom     String
+  deliveryLandmark String
+  deliveryPhone    String
 
-  status             OrderStatus @default(PENDING)
+  status    OrderStatus @default(PENDING)
+  orderNote String?
 
-  orderNote          String?
+  orderedAt       DateTime  @default(now())
+  riderAssignedAt DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  completedAt     DateTime?
 
-  orderedAt          DateTime    @default(now())
-  riderAssignedAt    DateTime?
-  pickedUpAt         DateTime?
-  deliveredAt        DateTime?
-  completedAt        DateTime?
+  payment Payment?
 
-  payment            Payment?
+  isPaid     Boolean @default(false)
+  isDisputed Boolean @default(false)
+  disputeReason String?
 
-  isPaid             Boolean     @default(false)
+  reviews        Review[]
+  productReviews ProductReview[]
+  reports        Report[]
+  dispute        Dispute?
+  referralReward ReferralReward?
 
-  isDisputed         Boolean     @default(false)
-  disputeReason      String?
-
-  reviews            Review[]
-  productReviews     ProductReview[]
-  reports            Report[]
-  dispute            Dispute?
-  referralReward     ReferralReward?
-
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([buyerId])
   @@index([sellerId])
@@ -371,23 +373,23 @@ model Order {
 }
 
 model Review {
-  id                String      @id @default(cuid())
-  rating            Int
-  comment           String?
+  id      String @id @default(cuid())
+  rating  Int
+  comment String?
 
-  orderId           String
-  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  reviewerId        String
-  reviewer          User        @relation("UserReviewsGiven", fields: [reviewerId], references: [id])
+  reviewerId String
+  reviewer   User   @relation("UserReviewsGiven", fields: [reviewerId], references: [id])
 
-  revieweeId        String
-  reviewee          User        @relation("UserReviewsReceived", fields: [revieweeId], references: [id])
+  revieweeId String
+  reviewee   User   @relation("UserReviewsReceived", fields: [revieweeId], references: [id])
 
-  type              ReviewType  @default(SELLER)
+  type ReviewType @default(SELLER)
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([revieweeId])
@@ -396,21 +398,21 @@ model Review {
 }
 
 model ProductReview {
-  id                String      @id @default(cuid())
-  rating            Int
-  comment           String
+  id      String @id @default(cuid())
+  rating  Int
+  comment String
 
-  orderId           String
-  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  productId         String
-  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  reviewerId        String
-  reviewer          User        @relation("ProductReviewsGiven", fields: [reviewerId], references: [id])
+  reviewerId String
+  reviewer   User   @relation("ProductReviewsGiven", fields: [reviewerId], references: [id])
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([productId])
@@ -419,12 +421,12 @@ model ProductReview {
 }
 
 model OTP {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   phone     String?
   email     String?
   code      String
   expiresAt DateTime
-  isUsed    Boolean  @default(false)
+  isUsed    Boolean   @default(false)
 
   createdAt DateTime @default(now())
 
@@ -433,16 +435,19 @@ model OTP {
 }
 
 model Payment {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  orderId   String   @unique
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  amount    Float
-  method    PaymentMethod
-  status    PaymentStatus @default(PENDING)
+  amount Float
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
 
-  transactionId   String?
+  // transactionId stores the Paystack reference.
+  // The unique index ensures one Paystack reference → one Payment record,
+  // which is how we prevent duplicate order creation if the callback fires twice.
+  transactionId   String?  @unique
   gatewayResponse Json?
 
   paidAt       DateTime?
@@ -455,18 +460,19 @@ model Payment {
 
   @@index([orderId])
   @@index([status])
+  @@index([transactionId])
   @@index([createdAt])
 }
 
 model Transaction {
-  id     String          @id @default(cuid())
+  id     String @id @default(cuid())
   userId String
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type          TransactionType
-  amount        Float
-  description   String
-  reference     String?
+  type        TransactionType
+  amount      Float
+  description String
+  reference   String?
 
   balanceBefore Float
   balanceAfter  Float
@@ -479,9 +485,9 @@ model Transaction {
 }
 
 model WithdrawalRequest {
-  id      String           @id @default(cuid())
-  userId  String
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   amount      Float
   bankDetails Json
@@ -499,9 +505,9 @@ model WithdrawalRequest {
 }
 
 model Report {
-  id   String     @id @default(cuid())
-  type ReportType
-  reason      ReportReason
+  id     String     @id @default(cuid())
+  type   ReportType
+  reason ReportReason
   description String
   evidence    String[]
 
@@ -537,13 +543,13 @@ model Report {
 }
 
 model Dispute {
-  id      String @id @default(cuid())
+  id String @id @default(cuid())
 
   orderId String @unique
   order   Order  @relation(fields: [orderId], references: [id])
 
-  buyerId  String
-  buyer    User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
+  buyerId String
+  buyer   User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
 
   sellerId String
   seller   User   @relation("SellerDisputes", fields: [sellerId], references: [id])
@@ -726,19 +732,19 @@ model AuditLog {
 }
 
 model ReferralReward {
-  id             String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  referrerId     String
-  referrer       User     @relation("ReferrerRewards", fields: [referrerId], references: [id])
+  referrerId String
+  referrer   User   @relation("ReferrerRewards", fields: [referrerId], references: [id])
 
   referredUserId String
-  referredUser   User     @relation("ReferredUserRewards", fields: [referredUserId], references: [id])
+  referredUser   User   @relation("ReferredUserRewards", fields: [referredUserId], references: [id])
 
-  orderId        String   @unique
-  order          Order    @relation(fields: [orderId], references: [id])
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
 
-  amount         Float
-  createdAt      DateTime @default(now())
+  amount    Float
+  createdAt DateTime @default(now())
 
   @@index([referrerId])
   @@index([referredUserId])
