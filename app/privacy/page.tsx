@@ -259,7 +259,7 @@ export default function PrivacyPage() {
               👶 Children's Privacy
             </h2>
             <p className="text-gray-700 leading-relaxed">
-              BATAMART is intended for UNIZIK students aged 18 and above. We do not knowingly collect
+              BATAMART is intended for University students aged 18 and above. We do not knowingly collect
               information from individuals under 18. If we discover we have collected data from someone
               under 18, we will delete it promptly.
             </p>

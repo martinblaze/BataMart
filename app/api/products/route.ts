@@ -10,13 +10,11 @@ const MAX_PAGE_SIZE     = 100
 
 export async function GET(request: NextRequest) {
   try {
-    // ── Auth required — can't browse without being logged in ───────────────
     const user = await getUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ── University scope — only show products from same university ─────────
     if (!user.universityId) {
       return NextResponse.json(
         { error: 'No university associated with your account. Please contact support.' },
@@ -42,7 +40,6 @@ export async function GET(request: NextRequest) {
       isActive:     true,
       quantity:     { gt: 0 },
       isDeleted:    false,
-      // ── CORE SCOPE: only this user's university ──────────────────────────
       universityId: user.universityId,
     }
 
@@ -77,11 +74,11 @@ export async function GET(request: NextRequest) {
         include: {
           seller: {
             select: {
-              id:             true,
-              name:           true,
-              avgRating:      true,
-              trustLevel:     true,
-              completedOrders:true,
+              id:              true,
+              name:            true,
+              avgRating:       true,
+              trustLevel:      true,
+              completedOrders: true,
             },
           },
         },
@@ -122,7 +119,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, price, category, quantity, images, hostelName } = body
+    const {
+      name,
+      description,
+      price,
+      category,
+      quantity,
+      images,
+      hostelName,
+      roomNumber,
+      landmark,
+    } = body
 
     if (!name || !price || !category || !quantity) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -138,16 +145,19 @@ export async function POST(request: NextRequest) {
 
     const product = await prisma.product.create({
       data: {
-        name:         String(name).trim().substring(0, 200),
-        description:  description ? String(description).trim().substring(0, 2000) : null,
-        price:        Number(price),
-        category:     String(category),
-        quantity:     Number(quantity),
-        images:       Array.isArray(images) ? images : [],
-        sellerId:     user.id,
-        hostelName:   hostelName || null,
-        // ── inherit university from seller ─────────────────────────────────
-        universityId: user.universityId,
+        name:        String(name).trim().substring(0, 200),
+        description: description ? String(description).trim().substring(0, 2000) : '',
+        price:       Number(price),
+        category:    String(category),
+        quantity:    Number(quantity),
+        images:      Array.isArray(images) ? images : [],
+        seller:      { connect: { id: user.id } },
+        // ── location: prefer body values, fall back to seller's profile ────
+        hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
+        roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
+        landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
+        // ── scope to seller's university via relation connect ─────────────
+        university:  { connect: { id: user.universityId } },
       },
     })
 

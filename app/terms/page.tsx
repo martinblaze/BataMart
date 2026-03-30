@@ -13,7 +13,7 @@ export default function TermsPage() {
     {
       icon: ShieldCheck,
       title: "Eligibility",
-      content: "BATAMART is exclusively for verified students of Nnamdi Azikiwe University (UNIZIK). You must be at least 18 years old to use this platform. You are responsible for providing accurate student verification information."
+      content: "BATAMART is exclusively for verified students of University. You must be at least 18 years old to use this platform. You are responsible for providing accurate student verification information."
     }
   ]
 
@@ -124,7 +124,7 @@ export default function TermsPage() {
             </h2>
             <p className="text-gray-700 leading-relaxed">
               These Terms of Service ("Terms") govern your use of BATAMART, the student-to-student
-              marketplace platform for Nnamdi Azikiwe University (UNIZIK) students. By creating
+              marketplace platform for University students. By creating
               an account or using our services, you enter into a legally binding agreement with us.
             </p>
           </div>
