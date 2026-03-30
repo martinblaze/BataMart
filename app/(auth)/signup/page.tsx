@@ -6,62 +6,58 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { MapPin, ChevronRight } from 'lucide-react'
 
 interface University {
-  id:    string
-  name:  string
+  id:        string
+  name:      string
   shortName: string
-  slug:  string
-  location: string
+  slug:      string
+  location:  string
 }
 
 function SignupForm() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
 
-  // ── Step 0 = university select, then steps 1–4 as before ──────────────────
-  const [step, setStep]           = useState(0)
-  const [universities, setUniversities] = useState<University[]>([])
+  const [step, setStep]                         = useState(0)
+  const [universities, setUniversities]         = useState<University[]>([])
   const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null)
-  const [uniLoading, setUniLoading] = useState(true)
+  const [uniLoading, setUniLoading]             = useState(true)
 
-  const [email, setEmail]         = useState('')
-  const [name, setName]           = useState('')
-  const [phone, setPhone]         = useState('')
-  const [otp, setOtp]             = useState(['', '', '', '', '', ''])
-  const [otpSessionToken, setOtpSessionToken] = useState('')
-  const [password, setPassword]   = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [wantToSell, setWantToSell] = useState(false)
-  const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
-  const [referralCode, setReferralCode] = useState('')
+  const [email, setEmail]                       = useState('')
+  const [name, setName]                         = useState('')
+  const [phone, setPhone]                       = useState('')
+  const [otp, setOtp]                           = useState(['', '', '', '', '', ''])
+  const [otpSessionToken, setOtpSessionToken]   = useState('')
+  const [password, setPassword]                 = useState('')
+  const [confirmPassword, setConfirmPassword]   = useState('')
+  const [wantToSell, setWantToSell]             = useState(false)
+  const [agreedToTerms, setAgreedToTerms]       = useState(false)
+  const [loading, setLoading]                   = useState(false)
+  const [error, setError]                       = useState('')
+  const [referralCode, setReferralCode]         = useState('')
 
   useEffect(() => {
     const ref = searchParams.get('ref')
     if (ref) setReferralCode(ref.trim().toUpperCase())
   }, [searchParams])
 
-  // ── Fetch universities on mount ────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/universities')
       .then(r => r.json())
-      .then(data => {
-        setUniversities(data.universities ?? [])
-      })
+      .then(data => setUniversities(data.universities ?? []))
       .catch(() => {})
       .finally(() => setUniLoading(false))
   }, [])
 
   const validatePassword = (pwd: string) => {
-    if (pwd.length < 8) return 'Password must be at least 8 characters'
-    if (!/\d/.test(pwd)) return 'Password must contain at least one number'
+    if (pwd.length < 8)      return 'Password must be at least 8 characters'
+    if (!/\d/.test(pwd))     return 'Password must contain at least one number'
     return ''
   }
 
   const validatePhone = (ph: string) => {
     const digits = ph.replace(/\D/g, '')
-    if (digits.length < 10) return 'Enter a valid phone number'
-    if (digits.length > 15) return 'Enter a valid phone number'
+    if (digits.length < 10)  return 'Enter a valid phone number'
+    if (digits.length > 15)  return 'Enter a valid phone number'
     return ''
   }
 
@@ -174,15 +170,15 @@ function SignupForm() {
     }
   }
 
+  const bgStyle = { background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }
+
   // ════════════════════════════════════════════════════════
   // STEP 0 — University selector
   // ════════════════════════════════════════════════════════
   if (step === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}>
+      <div className="h-screen w-full flex flex-col items-center justify-center px-4 overflow-hidden" style={bgStyle}>
         <div className="w-full max-w-md">
-          {/* Logo */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-white tracking-tight">BATAMART</h1>
             <p className="text-blue-300 text-sm mt-1">Campus Marketplace</p>
@@ -208,7 +204,7 @@ function SignupForm() {
                 </svg>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                 {universities.map(uni => (
                   <button
                     key={uni.id}
@@ -271,8 +267,7 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 1) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}>
+      <div className="h-screen w-full flex flex-col items-center justify-center px-4 overflow-hidden" style={bgStyle}>
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-white tracking-tight">BATAMART</h1>
@@ -289,9 +284,7 @@ function SignupForm() {
             <p className="text-sm text-gray-500 mb-6">Join the {selectedUniversity?.shortName} marketplace</p>
 
             {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600">
-                {error}
-              </div>
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>
             )}
 
             <form onSubmit={handleSendOTP} className="space-y-4">
@@ -371,15 +364,16 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 2) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}>
+      <div className="h-screen w-full flex flex-col items-center justify-center px-4 overflow-hidden" style={bgStyle}>
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-white">BATAMART</h1>
           </div>
           <div className="bg-white rounded-3xl p-8 shadow-2xl">
             <h2 className="text-xl font-black text-gray-900 mb-1">Verify your email</h2>
-            <p className="text-sm text-gray-500 mb-6">Enter the 6-digit code sent to <strong>{email}</strong></p>
+            <p className="text-sm text-gray-500 mb-6">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
 
             {error && (
               <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>
@@ -423,9 +417,8 @@ function SignupForm() {
   // STEP 3 — Password + terms
   // ════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-      style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}>
-      <div className="w-full max-w-md">
+    <div className="h-screen w-full flex flex-col items-center justify-center px-4 overflow-hidden" style={bgStyle}>
+      <div className="w-full max-w-md overflow-y-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-white">BATAMART</h1>
           <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30">
@@ -506,7 +499,7 @@ function SignupForm() {
 export default function SignupPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center"
+      <div className="h-screen w-full flex items-center justify-center"
         style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}>
         <div className="text-white text-xl font-bold">Loading…</div>
       </div>
