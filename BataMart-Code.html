@@ -19825,21 +19825,51 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, hashPassword } from '@/lib/auth/auth'
 import { generateUniqueReferralCode } from '@/lib/referral/generateReferralCode'
+import { verifyOtpSessionToken } from '@/app/api/auth/verify-otp/route'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, password, otpCode, role, phone, referralCode } = body
+    const { email, name, password, otpSessionToken, role, phone, referralCode } = body
 
-    if (!email || !otpCode || !password || !name || !phone) {
+    // ── Field presence check ───────────────────────────────────────────────
+    if (!email || !otpSessionToken || !password || !name || !phone) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Check if user already exists by email or phone
+    // ── Input length guards ────────────────────────────────────────────────
+    if (String(name).trim().length &lt; 2 || String(name).trim().length &gt; 80) {
+      return NextResponse.json({ error: 'Name must be between 2 and 80 characters' }, { status: 400 })
+    }
+    if (String(password).length &lt; 6 || String(password).length &gt; 128) {
+      return NextResponse.json({ error: 'Password must be between 6 and 128 characters' }, { status: 400 })
+    }
+
+    // ── OTP session token verification ────────────────────────────────────
+    // The /verify-otp route issued this token after the user's OTP was confirmed.
+    // It contains the exact identifier (email) that was verified. We check that
+    // the email in the token matches the email the user is trying to sign up with,
+    // so it's impossible to verify OTP for email A then create an account for email B.
+    const verifiedIdentifier = verifyOtpSessionToken(otpSessionToken)
+
+    if (!verifiedIdentifier) {
+      return NextResponse.json(
+        { error: 'OTP session expired or invalid. Please verify your email again.' },
+        { status: 400 }
+      )
+    }
+
+    // Normalise both to lowercase for comparison
+    if (verifiedIdentifier.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'Email does not match the verified address. Please restart the signup flow.' },
+        { status: 400 }
+      )
+    }
+
+    // ── Duplicate account check ────────────────────────────────────────────
     const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email }, { phone }],
-      },
+      where: { OR: [{ email }, { phone }] },
     })
 
     if (existingUser) {
@@ -19850,7 +19880,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ── Resolve referral code ────────────────────────────────
+    // ── Resolve referral code ──────────────────────────────────────────────
     let referredById: string | undefined = undefined
 
     if (referralCode &amp;&amp; typeof referralCode === 'string') {
@@ -19858,25 +19888,22 @@ export async function POST(request: NextRequest) {
         where: { referralCode: referralCode.trim().toUpperCase() },
         select: { id: true },
       })
-
       if (referrer) {
         referredById = referrer.id
-        // Self-referral prevention is implicit (new user has no id yet),
-        // but we add an explicit guard for safety.
       }
-      // If code not found we silently ignore — don't block signup
+      // If code not found, silently ignore — don't block signup
     }
 
-    const hashedPassword = await hashPassword(password)
+    const hashedPassword  = await hashPassword(password)
     const newReferralCode = await generateUniqueReferralCode()
 
     const user = await prisma.user.create({
       data: {
         email,
-        name,
+        name:         name.trim(),
         phone,
-        password: hashedPassword,
-        role: role || 'BUYER',
+        password:     hashedPassword,
+        role:         role || 'BUYER',
         referralCode: newReferralCode,
         ...(referredById ? { referredById } : {}),
       },
@@ -19888,12 +19915,12 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
-        hostelName: user.hostelName,
+        id:           user.id,
+        name:         user.name,
+        phone:        user.phone,
+        email:        user.email,
+        role:         user.role,
+        hostelName:   user.hostelName,
         referralCode: user.referralCode,
       },
     })
@@ -20083,34 +20110,35 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/verify-otp/route.ts</div><pre>export const dynamic = 'force-dynamic'
-// app/api/auth/verify-otp/route.ts
+<div class='file-block'><div class='file-header'>app/api/auth/verify-otp/route.ts</div><pre>// app/api/auth/verify-otp/route.ts
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyOTP, generateToken, formatPhone } from '@/lib/auth/auth'
 import { generateUniqueReferralCode } from '@/lib/referral/generateReferralCode'
+import jwt from 'jsonwebtoken'
 
 // ── In-memory rate limiter ────────────────────────────────────────────────────
 // Allows 10 verify attempts per IP per 15 minutes.
-// This prevents OTP brute-force without locking out legitimate retries.
+// NOTE: This is good for single-instance dev. In production on Vercel
+// (multiple serverless instances) swap the Map for Upstash Redis so the
+// counter survives across cold starts.
 const rateLimitMap = new Map&lt;string, { count: number; resetAt: number }&gt;()
 
-const RATE_LIMIT_MAX = 10
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+const RATE_LIMIT_MAX       = 10
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 
 function checkRateLimit(key: string): { allowed: boolean; retryAfterSecs: number } {
-  const now = Date.now()
+  const now   = Date.now()
   const entry = rateLimitMap.get(key)
 
   if (!entry || now &gt; entry.resetAt) {
     rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
     return { allowed: true, retryAfterSecs: 0 }
   }
-
   if (entry.count &gt;= RATE_LIMIT_MAX) {
     return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
   }
-
   entry.count++
   return { allowed: true, retryAfterSecs: 0 }
 }
@@ -20120,7 +20148,29 @@ setInterval(() =&gt; {
   Array.from(rateLimitMap.entries()).forEach(([key, val]) =&gt; {
     if (now &gt; val.resetAt) rateLimitMap.delete(key)
   })
-}, 60 * 1000)
+}, 60_000)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── OTP session token ─────────────────────────────────────────────────────────
+// After a successful OTP verification we return a short-lived signed token that
+// proves "this email/phone passed OTP". The signup-with-password route verifies
+// this token before creating the account — so you can't sign up with an email
+// you never verified.
+const OTP_SESSION_SECRET  = process.env.JWT_SECRET! // reuse the same secret
+const OTP_SESSION_EXPIRES = '15m' // must complete signup within 15 minutes
+
+function issueOtpSessionToken(identifier: string): string {
+  return jwt.sign({ verified: identifier }, OTP_SESSION_SECRET, { expiresIn: OTP_SESSION_EXPIRES })
+}
+
+export function verifyOtpSessionToken(token: string): string | null {
+  try {
+    const payload = jwt.verify(token, OTP_SESSION_SECRET) as { verified: string }
+    return payload.verified ?? null
+  } catch {
+    return null
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -20135,10 +20185,7 @@ export async function POST(request: NextRequest) {
     if (!allowed) {
       return NextResponse.json(
         { error: `Too many attempts. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) before trying again.` },
-        {
-          status: 429,
-          headers: { 'Retry-After': String(retryAfterSecs) },
-        }
+        { status: 429, headers: { 'Retry-After': String(retryAfterSecs) } }
       )
     }
 
@@ -20154,40 +20201,38 @@ export async function POST(request: NextRequest) {
     const identifier = phone ? formatPhone(phone) : email
 
     if (!identifier) {
-      return NextResponse.json(
-        { error: 'Phone or email is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Phone or email is required' }, { status: 400 })
     }
 
     const isValid = await verifyOTP(identifier, otpValue)
 
     if (!isValid) {
-      return NextResponse.json(
-        { error: 'Invalid or expired OTP' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 400 })
     }
 
-    // ✅ Signup flow (no name) — just confirm OTP is valid, user created later in signup-with-password
+    // ── Signup flow (no name passed) ──────────────────────────────────────
+    // Issue a short-lived OTP session token that proves this identifier was
+    // verified. The /signup-with-password route will require this token and
+    // check that the identifier in it matches the email being signed up with.
+    // This prevents someone verifying OTP for email A then signing up with email B.
     if (!name) {
-      return NextResponse.json({ success: true })
+      const otpSessionToken = issueOtpSessionToken(identifier)
+      return NextResponse.json({ success: true, otpSessionToken })
     }
 
-    // Login / other flows that pass a name — find or create user
+    // ── Login / other flows that pass a name ──────────────────────────────
     let user = await prisma.user.findFirst({
       where: phone ? { phone: formatPhone(phone) } : { email },
     })
 
     if (!user) {
       const referralCode = await generateUniqueReferralCode()
-
       user = await prisma.user.create({
         data: {
-          phone: phone ? formatPhone(phone) : undefined,
-          email: email || undefined,
+          phone:        phone ? formatPhone(phone) : undefined,
+          email:        email || undefined,
           name,
-          password: '',
+          password:     '',
           referralCode,
         },
       })
@@ -20199,19 +20244,16 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
+        id:         user.id,
+        name:       user.name,
+        phone:      user.phone,
+        email:      user.email,
         hostelName: user.hostelName,
       },
     })
   } catch (error) {
     console.error('Verify OTP error:', error)
-    return NextResponse.json(
-      { error: 'Verification failed. Please try again.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Verification failed. Please try again.' }, { status: 500 })
   }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/disputes/route.ts</div><pre>export const dynamic = 'force-dynamic'
@@ -20557,7 +20599,7 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/orders/route.ts</div><pre>// app/api/orders/route.ts - WITH NOTIFICATIONS
+<div class='file-block'><div class='file-header'>app/api/orders/route.ts</div><pre>// app/api/orders/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -20565,7 +20607,7 @@ import { notifyOrderPlaced } from '@/lib/notification'
 
 export const dynamic = 'force-dynamic'
 
-// GET user's orders
+// GET — fetch the current user's orders
 export async function GET(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)
@@ -20578,46 +20620,46 @@ export async function GET(request: NextRequest) {
       include: {
         product: {
           select: {
-            id: true,
-            name: true,
+            id:     true,
+            name:   true,
             images: true,
-            price: true,
-          }
+            price:  true,
+          },
         },
         seller: {
           select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            profilePhoto: true,
-            avgRating: true,
-            trustLevel: true,
+            id:            true,
+            name:          true,
+            email:         true,
+            phone:         true,
+            profilePhoto:  true,
+            avgRating:     true,
+            trustLevel:    true,
           },
         },
         rider: {
           select: {
-            id: true,
-            name: true,
+            id:    true,
+            name:  true,
             phone: true,
           },
         },
         productReviews: {
           select: {
-            id: true,
-            rating: true,
-            comment: true,
+            id:        true,
+            rating:    true,
+            comment:   true,
             createdAt: true,
-          }
+          },
         },
         reviews: {
           select: {
-            id: true,
-            type: true,
-            rating: true,
-            comment: true,
+            id:        true,
+            type:      true,
+            rating:    true,
+            comment:   true,
             createdAt: true,
-          }
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -20636,7 +20678,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST create order
+// POST — create a single-product order
 export async function POST(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)
@@ -20647,58 +20689,82 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { productId, quantity } = body
 
-    // Get product
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    })
-
-    if (!product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
-    }
-
-    // Check stock
-    if (product.quantity &lt; quantity) {
-      return NextResponse.json({ error: 'Insufficient stock' }, { status: 400 })
-    }
-
-    // Can't buy own product
-    if (product.sellerId === user.id) {
-      return NextResponse.json({ error: 'Cannot buy your own product' }, { status: 400 })
+    if (!productId || !quantity || typeof quantity !== 'number' || quantity &lt; 1) {
+      return NextResponse.json({ error: 'productId and a positive quantity are required' }, { status: 400 })
     }
 
     const deliveryFee = 800
-    const totalAmount = product.price * quantity + deliveryFee
 
-    // Generate order number
-    const orderNumber = `BATAMART-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    // ── Atomic transaction: check stock AND create order in one DB round-trip ─
+    // Without this, two simultaneous requests for the last item in stock both
+    // pass the stock check and both create an order — overselling the product.
+    // Using $transaction with a select-for-update pattern via Prisma's atomic
+    // decrement and a conditional where clause prevents this race condition.
+    let order: Awaited&lt;ReturnType&lt;typeof prisma.order.create&gt;&gt;
 
-    // Create order
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        buyerId: user.id,
-        sellerId: product.sellerId,
-        productId: product.id,
-        totalAmount,
-        deliveryFee,
-        platformCommission: product.price * 0.1,
-        quantity,
-        productPrice: product.price,
-        deliveryHostel: user.hostelName || '',
-        deliveryRoom: user.roomNumber || '',
-        deliveryLandmark: user.landmark || '',
-        deliveryPhone: user.phone || '',
-      },
-    })
+    try {
+      order = await prisma.$transaction(async (tx) =&gt; {
+        // Decrement stock atomically — only if enough stock exists.
+        // If quantity would go negative the update returns 0 rows (Prisma throws).
+        const updatedProduct = await tx.product.update({
+          where: {
+            id:       productId,
+            isActive: true,
+            quantity: { gte: quantity }, // guard: only proceed if stock is sufficient
+          },
+          data: { quantity: { decrement: quantity } },
+        })
 
-    // ✅ NOTIFICATION: Notify seller of new order
-    await notifyOrderPlaced(
-      order.id,
-      user.id,
-      product.sellerId,
-      orderNumber,
-      product.name
-    )
+        // Can't buy own product
+        if (updatedProduct.sellerId === user.id) {
+          throw new Error('SELF_PURCHASE')
+        }
+
+        const totalAmount = updatedProduct.price * quantity + deliveryFee
+        const orderNumber = `BATAMART-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+
+        const newOrder = await tx.order.create({
+          data: {
+            orderNumber,
+            buyerId:            user.id,
+            sellerId:           updatedProduct.sellerId,
+            productId:          updatedProduct.id,
+            totalAmount,
+            deliveryFee,
+            platformCommission: updatedProduct.price * 0.05,
+            quantity,
+            productPrice:       updatedProduct.price,
+            deliveryHostel:     user.hostelName   ?? '',
+            deliveryRoom:       user.roomNumber   ?? '',
+            deliveryLandmark:   user.landmark     ?? '',
+            deliveryPhone:      user.phone        ?? '',
+          },
+        })
+
+        // If stock just hit zero, deactivate the listing automatically
+        if (updatedProduct.quantity - quantity &lt;= 0) {
+          await tx.product.update({
+            where: { id: productId },
+            data:  { isActive: false },
+          })
+        }
+
+        return newOrder
+      }, { timeout: 15000, maxWait: 20000 })
+    } catch (txError: any) {
+      if (txError?.message === 'SELF_PURCHASE') {
+        return NextResponse.json({ error: 'Cannot buy your own product' }, { status: 400 })
+      }
+      // Prisma P2025 = record not found — means stock was insufficient or product inactive
+      if (txError?.code === 'P2025') {
+        return NextResponse.json({ error: 'Product is unavailable or out of stock' }, { status: 400 })
+      }
+      throw txError
+    }
+
+    // Fire notification non-blocking — never delay the response
+    notifyOrderPlaced(order.id, user.id, order.sellerId, order.orderNumber, '')
+      .catch(err =&gt; console.error('Order notification failed:', err))
 
     return NextResponse.json({ success: true, order })
   } catch (error) {
@@ -21298,19 +21364,19 @@ export const dynamic = 'force-dynamic'
 
 // ============================================================
 // STANDARDIZED FEE STRUCTURE
-// Keep in sync with the verify route — both import calculateFees
-// from here so fees are always computed identically.
+// calculateFees is imported by the verify route — both sides
+// must always compute fees identically from the same function.
 // ============================================================
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
-  const PLATFORM_RATE = 0.05
-  const RIDER_SHARE = 560
+  const PLATFORM_RATE        = 0.05
+  const RIDER_SHARE          = 560
   const PLATFORM_DELIVERY_CUT = 240
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
-  const sellerShare = subtotal - platformFeeFromProducts
-  const riderShare = RIDER_SHARE
-  const platformTotal = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
-  const totalAmount = subtotal + deliveryFee
+  const sellerShare             = subtotal - platformFeeFromProducts
+  const riderShare              = RIDER_SHARE
+  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
+  const totalAmount             = subtotal + deliveryFee
 
   return {
     subtotal,
@@ -21334,14 +21400,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { productId, cartItems, deliveryFee = 800 } = body
 
-    // ── Build items list ──────────────────────────────────────
     type CartItem = {
-      productId: string
-      name: string
-      price: number
-      quantity: number
-      category: string
-      sellerId: string
+      productId:  string
+      name:       string
+      price:      number
+      quantity:   number
+      category:   string
+      sellerId:   string
       sellerName: string
       orderNote?: string
     }
@@ -21349,9 +21414,10 @@ export async function POST(request: NextRequest) {
     let items: CartItem[] = []
 
     if (cartItems &amp;&amp; Array.isArray(cartItems) &amp;&amp; cartItems.length &gt; 0) {
+      // Server always re-fetches price from DB — client-supplied price is IGNORED
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
-          where: { id: item.productId },
+          where:   { id: item.productId },
           include: { seller: true },
         })
         if (!product) {
@@ -21360,20 +21426,24 @@ export async function POST(request: NextRequest) {
         if (!product.isActive || product.quantity &lt; item.quantity) {
           return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 })
         }
+        // Input length guard on order notes
+        if (item.orderNote &amp;&amp; String(item.orderNote).length &gt; 300) {
+          return NextResponse.json({ error: 'Order note must be under 300 characters' }, { status: 400 })
+        }
         items.push({
-          productId: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: item.quantity,
-          category: product.category,
-          sellerId: product.sellerId,
+          productId:  product.id,
+          name:       product.name,
+          price:      product.price, // ← always from DB, never from client
+          quantity:   item.quantity,
+          category:   product.category,
+          sellerId:   product.sellerId,
           sellerName: product.seller.name,
-          orderNote: item.orderNote,
+          orderNote:  item.orderNote,
         })
       }
     } else if (productId) {
       const product = await prisma.product.findUnique({
-        where: { id: productId },
+        where:   { id: productId },
         include: { seller: true },
       })
       if (!product) {
@@ -21383,14 +21453,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Product unavailable' }, { status: 400 })
       }
       items = [{
-        productId: product.id,
-        name: product.name,
-        price: product.price,
-        quantity: 1,
-        category: product.category,
-        sellerId: product.sellerId,
+        productId:  product.id,
+        name:       product.name,
+        price:      product.price,
+        quantity:   1,
+        category:   product.category,
+        sellerId:   product.sellerId,
         sellerName: product.seller.name,
-        orderNote: body.orderNote,
+        orderNote:  body.orderNote,
       }]
     } else {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
@@ -21402,18 +21472,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You cannot buy your own product' }, { status: 400 })
     }
 
-    // ── Calculate totals ──────────────────────────────────────
+    // Calculate totals
     const subtotal = items.reduce((sum, item) =&gt; sum + item.price * item.quantity, 0)
-    const fees = calculateFees(subtotal, deliveryFee)
+    const fees     = calculateFees(subtotal, deliveryFee)
 
-    console.log('=== PAYMENT INIT ===', {
-      items: items.map(i =&gt; `${i.name} x${i.quantity} = ₦${i.price * i.quantity}${i.orderNote ? ` (Note: ${i.orderNote})` : ''}`),
-      ...fees,
-    })
-
-    // ── PRODUCTION: Initialize Paystack ───────────────────────
-    // DEV MODE is intentionally disabled. Even in local development you should
-    // test with Paystack test keys so the full verify flow runs correctly.
+    // APP_URL required
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL
     if (!APP_URL) {
       console.error('❌ NEXT_PUBLIC_APP_URL is not set!')
@@ -21423,10 +21486,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
-    // Strip trailing slash from APP_URL just in case
+    const reference   = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
     const callbackUrl = `${APP_URL.replace(/\/$/, '')}/api/payments/verify`
-    console.log('💳 Initializing Paystack — callback:', callbackUrl)
+
+    console.log('💳 Initializing Paystack — reference:', reference, '| callback:', callbackUrl)
 
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -21435,13 +21498,13 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: user.email || `${user.id}@batamart.app`,
-        amount: fees.totalAmount * 100, // kobo
+        email:        user.email || `${user.id}@batamart.app`,
+        amount:       fees.totalAmount * 100, // kobo
         reference,
         callback_url: callbackUrl,
         metadata: {
-          userId: user.id,
-          cartItems: items,
+          userId:      user.id,
+          cartItems:   items,
           deliveryFee,
           fees,
         },
@@ -21460,14 +21523,12 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Paystack initialized — reference:', reference)
 
-    // ⚠️  IMPORTANT: We return the authorization_url to the frontend here and
-    // do NOT create the order yet. The order is only created in /verify after
-    // Paystack confirms the payment. The frontend is responsible for keeping
-    // the cart/session alive until the user is redirected to Paystack.
     return NextResponse.json({
-      success: true,
+      success:           true,
       authorization_url: paystackData.data.authorization_url,
-      reference: paystackData.data.reference,
+      reference:         paystackData.data.reference,
+      deliveryFee:       fees.deliveryFee,
+      totalAmount:       fees.totalAmount,
     })
   } catch (error) {
     console.error('Payment init error:', error)
@@ -21478,30 +21539,30 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-// createOrders — called ONLY from the verify route after
-// Paystack has confirmed the payment is successful.
-// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// createOrders — called ONLY from the verify route after Paystack confirms
+// the payment. Never call this directly from any other route.
+// ══════════════════════════════════════════════════════════════════════════════
 export async function createOrders(
   items: {
-    productId: string
-    name: string
-    price: number
-    quantity: number
-    category: string
-    sellerId: string
+    productId:  string
+    name:       string
+    price:      number
+    quantity:   number
+    category:   string
+    sellerId:   string
     sellerName: string
     orderNote?: string
   }[],
   user: {
-    id: string
+    id:          string
     hostelName?: string | null
     roomNumber?: string | null
-    phone?: string | null
-    landmark?: string | null
+    phone?:      string | null
+    landmark?:   string | null
   },
-  fees: ReturnType&lt;typeof calculateFees&gt;,
-  paymentReference?: string
+  fees:             ReturnType&lt;typeof calculateFees&gt;,
+  paymentReference: string
 ) {
   console.log('📝 createOrders called — reference:', paymentReference)
 
@@ -21515,42 +21576,42 @@ export async function createOrders(
   const createdOrders: Awaited&lt;ReturnType&lt;typeof prisma.order.create&gt;&gt;[] = []
 
   const notificationQueue: Array&lt;{
-    orderId: string
-    buyerId: string
-    sellerId: string
+    orderId:     string
+    buyerId:     string
+    sellerId:    string
     orderNumber: string
-    itemsList: string
+    itemsList:   string
   }&gt; = []
 
-  // Tracks products that hit zero stock during this payment — notified after tx
   const outOfStockAlerts: Array&lt;{
-    sellerId: string
-    productId: string
+    sellerId:    string
+    productId:   string
     productName: string
   }&gt; = []
 
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const proportion = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
-    const orderFees = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
+    const proportion    = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
+    const orderFees     = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
 
-    // Ensure order numbers are unique even when multiple orders are created
-    // in rapid succession (timestamp alone can collide)
-    const orderNumber = `BATAMART-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
-    const itemsList = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
+    // FIX 1: Use crypto.randomUUID() instead of Date.now() + random suffix.
+    // Date.now() has millisecond resolution — two sellers processing in the same
+    // createOrders call can produce an identical timestamp, causing a unique
+    // constraint violation on orderNumber. UUID is globally unique by design.
+    const orderNumber = `BATAMART-${crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase()}`
+    const itemsList   = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
 
     console.log('🔨 Creating order:', orderNumber, 'for seller:', sellerId)
 
     try {
       const order = await prisma.$transaction(async (tx) =&gt; {
+        // FIX 2: Only fetch pendingBalance — availableBalance was dead data here.
         const seller = await tx.user.findUnique({
-          where: { id: sellerId },
-          select: { pendingBalance: true, availableBalance: true },
+          where:  { id: sellerId },
+          select: { pendingBalance: true },
         })
-
         if (!seller) throw new Error(`Seller not found: ${sellerId}`)
 
-        // Merge all notes from items in this order into one field
         const orderNote = sellerItems
           .map(item =&gt; item.orderNote?.trim())
           .filter((note): note is string =&gt; Boolean(note &amp;&amp; note.length &gt; 0))
@@ -21559,144 +21620,139 @@ export async function createOrders(
         const newOrder = await tx.order.create({
           data: {
             orderNumber,
-            buyerId: user.id,
+            buyerId:            user.id,
             sellerId,
-            productId: sellerItems[0].productId,
-            productPrice: Number(orderSubtotal),
-            deliveryFee: Number(orderFees.deliveryFee),
-            totalAmount: Number(orderFees.totalAmount),
+            productId:          sellerItems[0].productId,
+            productPrice:       Number(orderSubtotal),
+            deliveryFee:        Number(orderFees.deliveryFee),
+            totalAmount:        Number(orderFees.totalAmount),
             platformCommission: Number(orderFees.platformTotal),
-            quantity: Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
-            deliveryHostel: String(user.hostelName ?? ''),
-            deliveryRoom: String(user.roomNumber ?? ''),
-            deliveryPhone: String(user.phone ?? ''),
-            deliveryLandmark: String(user.landmark ?? ''),
-            isPaid: true,
-            status: 'PENDING' as const,
+            quantity:           Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
+            deliveryHostel:     String(user.hostelName ?? ''),
+            deliveryRoom:       String(user.roomNumber ?? ''),
+            deliveryPhone:      String(user.phone      ?? ''),
+            deliveryLandmark:   String(user.landmark   ?? ''),
+            isPaid:             true,
+            status:             'PENDING' as const,
             orderNote,
-            // Create the Payment record (one-to-one relation) at the same time.
-            // This is how we track the Paystack reference for duplicate-payment
-            // detection in the verify route — Payment.transactionId = reference.
-            payment: paymentReference ? {
+            payment: {
               create: {
-                amount: Number(orderFees.totalAmount),
-                method: 'CARD' as const,
-                status: 'COMPLETED' as const,
+                amount:        Number(orderFees.totalAmount),
+                method:        'CARD'      as const,
+                status:        'COMPLETED' as const,
                 transactionId: paymentReference,
-                paidAt: new Date(),
+                paidAt:        new Date(),
               },
-            } : undefined,
+            },
           },
         })
 
-        // Decrement stock for each product in this order
-        // If stock reaches zero, also mark the product inactive so it
-        // disappears from the marketplace automatically.
+        // FIX 3: TOCTOU-safe stock decrement.
+        // The verify route checks stock BEFORE calling createOrders, but two
+        // concurrent buyers could both pass that check for the last unit and
+        // then both enter this transaction. We guard against that by including
+        // a `where` filter that only matches rows with sufficient stock.
+        // If the updateMany affects 0 rows, the item was already snapped up —
+        // we throw immediately so Prisma rolls back the whole transaction and
+        // the second buyer gets a clean error rather than negative inventory.
         for (const item of sellerItems) {
-          const updatedProduct = await tx.product.update({
-            where: { id: item.productId },
+          const updated = await tx.product.updateMany({
+            where: {
+              id:       item.productId,
+              quantity: { gte: Number(item.quantity) }, // only proceed if stock is still sufficient
+            },
             data: { quantity: { decrement: Number(item.quantity) } },
+          })
+
+          if (updated.count === 0) {
+            // Stock was snatched between the pre-check and this transaction.
+            throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
+          }
+
+          // Check if stock just hit zero and deactivate if so.
+          // We re-fetch only the fields we need — updateMany doesn't return rows.
+          const afterUpdate = await tx.product.findUnique({
+            where:  { id: item.productId },
             select: { id: true, name: true, quantity: true },
           })
 
-          // If stock just hit zero, deactivate the listing immediately
-          if (updatedProduct.quantity &lt;= 0) {
+          if (afterUpdate &amp;&amp; afterUpdate.quantity &lt;= 0) {
             await tx.product.update({
               where: { id: item.productId },
-              data: { isActive: false },
+              data:  { isActive: false },
             })
-            // Queue out-of-stock seller notification (fire-and-forget after tx)
             outOfStockAlerts.push({
               sellerId,
-              productId: updatedProduct.id,
-              productName: updatedProduct.name,
+              productId:   afterUpdate.id,
+              productName: afterUpdate.name,
             })
           }
         }
 
         // Credit seller's pending (escrow) balance
-        const sellerShare = Number(orderFees.sellerShare)
+        const sellerShare          = Number(orderFees.sellerShare)
         const sellerPendingBalance = Number(seller.pendingBalance ?? 0)
 
         await tx.user.update({
           where: { id: sellerId },
-          data: { pendingBalance: { increment: sellerShare } },
+          data:  { pendingBalance: { increment: sellerShare } },
         })
 
-        // Create transaction ledger entries
         await tx.transaction.createMany({
           data: [
             {
-              userId: sellerId,
-              type: 'ESCROW',
-              amount: sellerShare,
-              description: `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
-              reference: `${orderNumber}-SELLER-ESCROW`,
+              userId:        sellerId,
+              type:          'ESCROW',
+              amount:        sellerShare,
+              description:   `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
+              reference:     `${orderNumber}-SELLER-ESCROW`,
               balanceBefore: sellerPendingBalance,
-              balanceAfter: sellerPendingBalance + sellerShare,
+              balanceAfter:  sellerPendingBalance + sellerShare,
             },
             {
-              userId: user.id,
-              type: 'ESCROW',
-              amount: Number(orderFees.riderShare),
-              description: `Rider fee held for delivery (Order: ${orderNumber})`,
-              reference: `${orderNumber}-RIDER-ESCROW`,
+              userId:        user.id,
+              type:          'DEBIT',
+              amount:        Number(orderFees.totalAmount),
+              description:   `Payment for ${itemsList} (Order: ${orderNumber})`,
+              reference:     `${orderNumber}-BUYER-PAYMENT`,
               balanceBefore: 0,
-              balanceAfter: 0,
-            },
-            {
-              userId: user.id,
-              type: 'DEBIT',
-              amount: Number(orderFees.totalAmount),
-              description: `Payment for ${itemsList} (Order: ${orderNumber})`,
-              reference: `${orderNumber}-BUYER-PAYMENT`,
-              balanceBefore: 0,
-              balanceAfter: 0,
+              balanceAfter:  0,
             },
           ],
         })
 
         return newOrder
-      }, {
-        timeout: 15000,
-        maxWait: 20000,
-      })
+      }, { timeout: 15000, maxWait: 20000 })
 
       createdOrders.push(order)
       notificationQueue.push({
-        orderId: order.id,
-        buyerId: user.id,
+        orderId:     order.id,
+        buyerId:     user.id,
         sellerId,
         orderNumber,
         itemsList,
       })
 
       console.log('✅ Order created:', orderNumber)
-
     } catch (orderError) {
       console.error('❌ Failed to create order for seller', sellerId, orderError)
       throw orderError
     }
   }
 
-  // Fire in-app notifications for each order — non-blocking
+  // Fire in-app notifications — non-blocking
   for (const n of notificationQueue) {
     notifyOrderPlaced(n.orderId, n.buyerId, n.sellerId, n.orderNumber, n.itemsList)
-      .then(() =&gt; console.log(`✅ Notification sent for ${n.orderNumber}`))
       .catch(err =&gt; console.error(`⚠️  Notification failed for ${n.orderNumber}:`, err))
   }
 
-  // Fire out-of-stock alerts — non-blocking, never delay order creation
+  // Fire out-of-stock alerts — non-blocking
   if (outOfStockAlerts.length &gt; 0) {
     Promise.allSettled(
-      outOfStockAlerts.map(alert =&gt; notifySellerOutOfStock(alert.sellerId, alert.productId, alert.productName))
-    ).then(results =&gt; {
-      results.forEach((r, i) =&gt; {
-        if (r.status === 'rejected') {
-          console.error(`⚠️  Out-of-stock notification failed for product ${outOfStockAlerts[i]?.productName}:`, r.reason)
-        }
-      })
-    })
+      outOfStockAlerts.map(alert =&gt;
+        notifySellerOutOfStock(alert.sellerId, alert.productId, alert.productName)
+      )
+    ).catch(() =&gt; {})
   }
 
   console.log('🎉 All orders created:', createdOrders.length)
@@ -21704,8 +21760,7 @@ export async function createOrders(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Out-of-stock seller notification
-// Fires after the transaction — notifies the seller via in-app bell + email
+// Out-of-stock seller notification (fire-and-forget, all imports dynamic)
 // ─────────────────────────────────────────────────────────────────────────────
 async function notifySellerOutOfStock(sellerId: string, productId: string, productName: string) {
   const [notifMod, emailMod, prismaMod] = await Promise.all([
@@ -21716,32 +21771,30 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-        where: { id: sellerId },
+        where:  { id: sellerId },
         select: { email: true, name: true },
       }).catch(() =&gt; null)
     : null
 
   const tasks: Promise&lt;any&gt;[] = []
 
-  // In-app bell notification
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId: sellerId,
-        type: 'STOCK_ALERT',
-        title: '⚠️ Product Out of Stock',
-        message: `"${productName}" has sold out and has been automatically hidden from the marketplace. Restock it to make it visible again.`,
+        userId:   sellerId,
+        type:     'ORDER_PLACED',
+        title:    '⚠️ Product Out of Stock',
+        message:  `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
         metadata: { productId, productName },
       })
     )
   }
 
-  // Email notification to seller
   if (seller?.email &amp;&amp; emailMod?.sendEmail) {
     const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to: seller.email,
+        to:      seller.email,
         subject: `⚠️ "${productName}" is out of stock — BATAMART`,
         html: `
 &lt;!DOCTYPE html&gt;
@@ -21804,27 +21857,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOrders, calculateFees } from '../initialize/route'
 
-// ⚠️  REMOVED the top-level import of @/lib/push/sendPushNotification.
-//     That import was causing the ENTIRE module to fail to load whenever
-//     the push notification env vars (VAPID keys etc.) were missing or
-//     the module had any runtime error — which crashes the verify route
-//     before a single line of code runs, sending every user to the
-//     catch block → /checkout?error=verification_failed → /marketplace.
-//     All push/notification calls are now done with dynamic imports inside
-//     a fire-and-forget Promise.allSettled so they NEVER block the redirect.
-
 export const dynamic = 'force-dynamic'
 
-// ── Helper: redirect to the correct app domain ──────────────────────────────
+// Helper: redirect to the correct app domain
 function appRedirect(path: string) {
   const base = process.env.NEXT_PUBLIC_APP_URL
   if (!base) {
-    // Hard-fail loudly rather than silently redirecting to the wrong place
     console.error('❌ CRITICAL: NEXT_PUBLIC_APP_URL is not set in environment variables!')
-    // Still fall back so the user is not left on a blank Paystack page
     return NextResponse.redirect(`https://bata-mart.vercel.app${path}`)
   }
-  // Strip any accidental trailing slash from the env var before building URL
   return NextResponse.redirect(`${base.replace(/\/$/, '')}${path}`)
 }
 
@@ -21837,7 +21878,7 @@ export async function GET(request: NextRequest) {
   console.log('═'.repeat(70))
   console.log('📍 Reference:', reference)
   console.log('📍 Timestamp:', new Date().toISOString())
-  console.log('📍 APP_URL:', process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
+  console.log('📍 APP_URL:',   process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
 
   if (!reference) {
     console.error('❌ ERROR: No reference in URL')
@@ -21845,7 +21886,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // ── STEP 1: Verify with Paystack ───────────────────────────────────────
+    // STEP 1: Verify with Paystack
     console.log('\n📞 STEP 1: Verifying with Paystack')
 
     let verifyData: any
@@ -21861,7 +21902,7 @@ export async function GET(request: NextRequest) {
       return appRedirect('/checkout?error=payment_failed')
     }
 
-    console.log('📦 Paystack Response status:', verifyData?.status, '| tx status:', verifyData?.data?.status)
+    console.log('📦 Paystack status:', verifyData?.status, '| tx status:', verifyData?.data?.status)
 
     if (!verifyData?.status) {
       console.error('❌ Paystack returned status=false:', verifyData?.message)
@@ -21875,54 +21916,44 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Payment verified with Paystack')
 
-    // ── STEP 2: Duplicate-payment guard ───────────────────────────────────
-    // The Payment model stores the Paystack reference in transactionId.
-    // The Order model has NO paymentId field — it has a `payment` relation.
-    // So we query Payment by transactionId and navigate to the order through
-    // the relation. This correctly prevents double-processing the same webhook.
-    console.log('\n🔄 STEP 2: Duplicate-payment guard')
+    // STEP 2: Idempotency guard
+    // If Paystack fires the callback twice or the user hits reload, we must
+    // NOT create a second order. We look up by Payment.transactionId (the
+    // Paystack reference stored when createOrders creates the Payment record).
+    console.log('\n🔄 STEP 2: Idempotency check')
 
     const existingPayment = await prisma.payment.findFirst({
-      where: { transactionId: reference },
-      include: {
-        order: { select: { id: true, orderNumber: true } },
-      },
+      where:   { transactionId: reference },
+      include: { order: { select: { id: true, orderNumber: true } } },
     })
 
     if (existingPayment?.order) {
-      console.log('⚠️  Payment already processed — idempotent redirect')
-      console.log('   Order:', existingPayment.order.orderNumber)
+      console.log('⚠️  Already processed — idempotent redirect to:', existingPayment.order.orderNumber)
       return appRedirect(`/orders?payment=success&amp;order=${existingPayment.order.orderNumber}`)
     }
 
-    console.log('✅ No duplicate found — safe to create order')
+    console.log('✅ No duplicate — safe to proceed')
 
-    // ── STEP 3: Extract metadata ───────────────────────────────────────────
+    // STEP 3: Extract metadata
     console.log('\n📋 STEP 3: Extracting Metadata')
 
     type CartItem = {
-      productId: string
-      name: string
-      price: number
-      quantity: number
-      category: string
-      sellerId: string
+      productId:  string
+      name:       string
+      price:      number
+      quantity:   number
+      category:   string
+      sellerId:   string
       sellerName: string
       orderNote?: string
     }
 
     const meta = verifyData.data.metadata as {
-      userId: string
-      cartItems: CartItem[]
+      userId:      string
+      cartItems:   CartItem[]
       deliveryFee: number
-      fees: ReturnType&lt;typeof calculateFees&gt;
+      fees:        ReturnType&lt;typeof calculateFees&gt;
     }
-
-    console.log('📋 Metadata snapshot:', JSON.stringify({
-      userId: meta?.userId,
-      itemCount: meta?.cartItems?.length,
-      deliveryFee: meta?.deliveryFee,
-    }))
 
     if (!meta?.userId || !Array.isArray(meta?.cartItems) || meta.cartItems.length === 0) {
       console.error('❌ Invalid/missing metadata:', JSON.stringify(meta))
@@ -21931,11 +21962,11 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Metadata OK — User:', meta.userId, '| Items:', meta.cartItems.length)
 
-    // ── STEP 4: Fetch buyer ────────────────────────────────────────────────
+    // STEP 4: Fetch buyer
     console.log('\n👤 STEP 4: Fetching Buyer')
 
     const buyer = await prisma.user.findUnique({
-      where: { id: meta.userId },
+      where:  { id: meta.userId },
       select: {
         id: true, name: true, email: true,
         hostelName: true, roomNumber: true,
@@ -21950,39 +21981,55 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Buyer found:', buyer.name)
 
-    // ── STEP 5: Validate products are still in stock ───────────────────────
-    console.log('\n📦 STEP 5: Validating Products')
+    // STEP 5: Optimistic stock check (fast path — catches obvious failures early)
+    // NOTE: This is NOT the authoritative stock gate. The real atomic guard is
+    // the updateMany(...where quantity &gt;= item.quantity) inside createOrders.
+    // This pre-check is just a cheap early-exit that saves us from entering the
+    // transaction when stock is clearly exhausted.
+    console.log('\n📦 STEP 5: Pre-flight Stock Check')
 
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
-        where: { id: item.productId },
+        where:  { id: item.productId },
         select: { id: true, name: true, quantity: true, isActive: true },
       })
 
       if (!product) {
-        console.error('❌ Product not found:', item.productId)
         return appRedirect(`/checkout?error=product_not_found&amp;product=${encodeURIComponent(item.name)}`)
       }
       if (!product.isActive) {
-        console.error('❌ Product inactive:', item.name)
         return appRedirect(`/checkout?error=product_inactive&amp;product=${encodeURIComponent(item.name)}`)
       }
       if (product.quantity &lt; item.quantity) {
-        console.error('❌ Insufficient stock:', item.name, '| has:', product.quantity, '| needs:', item.quantity)
         return appRedirect(`/checkout?error=out_of_stock&amp;product=${encodeURIComponent(item.name)}`)
       }
       console.log(`✅ ${item.name}: OK (stock: ${product.quantity})`)
     }
 
-    // ── STEP 6: Create orders ──────────────────────────────────────────────
+    // STEP 6: Create orders
+    // createOrders runs each seller's work inside a Prisma $transaction and uses
+    // updateMany with a `quantity &gt;= required` guard to atomically claim stock.
+    // If two buyers race for the last unit, the second one gets STOCK_GONE thrown
+    // from inside the transaction, which we catch and redirect cleanly below.
     console.log('\n💰 STEP 6: Creating Orders')
 
     const subtotal = meta.cartItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const fees = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
+    const fees     = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
 
-    console.log('💰 Fees:', JSON.stringify(fees))
-
-    const orders = await createOrders(meta.cartItems, buyer, fees, reference)
+    let orders: Awaited&lt;ReturnType&lt;typeof createOrders&gt;&gt;
+    try {
+      orders = await createOrders(meta.cartItems, buyer, fees, reference)
+    } catch (createErr) {
+      // FIX 3 (continued): Handle the STOCK_GONE error thrown by the
+      // TOCTOU-safe updateMany guard inside createOrders. We extract the
+      // product name from the error message and redirect with a friendly error.
+      if (createErr instanceof Error &amp;&amp; createErr.message.startsWith('STOCK_GONE:')) {
+        const [, , productName] = createErr.message.split(':')
+        console.error('❌ Stock claimed by concurrent buyer for:', productName)
+        return appRedirect(`/checkout?error=out_of_stock&amp;product=${encodeURIComponent(productName ?? 'item')}`)
+      }
+      throw createErr // re-throw anything else so the outer catch handles it
+    }
 
     if (!orders || orders.length === 0) {
       console.error('❌ createOrders returned empty result')
@@ -21991,37 +22038,33 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Orders created:', orders.map(o =&gt; o.orderNumber).join(', '))
 
-    // ── STEP 7: Fire notifications (non-blocking — NEVER delay the redirect) ─
-    console.log('\n🔔 STEP 7: Queueing Notifications (fire-and-forget)')
+    // STEP 7: Fire notifications (non-blocking — NEVER delays the redirect)
+    console.log('\n🔔 STEP 7: Queueing Notifications')
 
-    // Build a map of sellerId → order info for per-seller notifications
     const sellerMap = new Map&lt;string, {
-      orderId: string
+      orderId:     string
       orderNumber: string
-      orderNote?: string
-      itemsList: string
+      orderNote?:  string
+      itemsList:   string
     }&gt;()
 
     for (const order of orders) {
       if (order.sellerId &amp;&amp; !sellerMap.has(order.sellerId)) {
         const sellerItems = meta.cartItems.filter(i =&gt; i.sellerId === order.sellerId)
-        const matchingItem = sellerItems[0]
         sellerMap.set(order.sellerId, {
-          orderId: order.id,
+          orderId:     order.id,
           orderNumber: order.orderNumber,
-          orderNote: matchingItem?.orderNote,
-          itemsList: sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
+          orderNote:   sellerItems[0]?.orderNote,
+          itemsList:   sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
         })
       }
     }
 
-    // All notification work happens inside a fire-and-forget block.
-    // If ANY of these fail they log an error but DO NOT affect the redirect.
+    // All notification work is fire-and-forget — never blocks the redirect
     Promise.allSettled([
-      // 1. In-app bell for buyer
       import('@/lib/notification')
-        .then(({ notifyOrderPlaced: createBuyerNotif }) =&gt;
-          createBuyerNotif(
+        .then(({ notifyOrderPlaced }) =&gt;
+          notifyOrderPlaced(
             orders[0].id,
             buyer.id,
             orders[0].sellerId,
@@ -22031,12 +22074,10 @@ export async function GET(request: NextRequest) {
         )
         .catch(err =&gt; console.error('⚠️  Buyer bell notification failed:', err)),
 
-      // 2. Push notification for buyer
       import('@/lib/push/sendPushNotification')
         .then(({ notifyOrderPlaced: pushBuyer }) =&gt; pushBuyer(buyer.id, orders[0].orderNumber))
-        .catch(err =&gt; console.error('⚠️  Buyer push notification failed:', err)),
+        .catch(err =&gt; console.error('⚠️  Buyer push failed:', err)),
 
-      // 3. Per-seller notifications
       ...Array.from(sellerMap.entries()).map(([sellerId, info]) =&gt;
         notifySellerOfNewOrder(
           sellerId,
@@ -22048,25 +22089,19 @@ export async function GET(request: NextRequest) {
         ).catch(err =&gt; console.error(`⚠️  Seller notification failed for ${sellerId}:`, err))
       ),
 
-      // 4. Push notification to all available riders — so they know a new
-      //    order is waiting without having to manually refresh their dashboard
-      ...orders.map((order) =&gt;
+      ...orders.map(order =&gt;
         import('@/lib/push/sendPushNotification')
           .then(({ notifyAvailableRiders }) =&gt; notifyAvailableRiders(order.orderNumber))
-          .catch(err =&gt; console.error(`⚠️  Rider push notification failed for ${order.orderNumber}:`, err))
+          .catch(err =&gt; console.error(`⚠️  Rider push failed for ${order.orderNumber}:`, err))
       ),
     ]).then(results =&gt; {
       results.forEach((r, i) =&gt; {
-        if (r.status === 'rejected') {
-          console.error(`Notification slot ${i} rejected:`, r.reason)
-        }
+        if (r.status === 'rejected') console.error(`Notification slot ${i} rejected:`, r.reason)
       })
     })
 
-    // ── SUCCESS ────────────────────────────────────────────────────────────
-    const firstOrderNumber = orders[0]?.orderNumber ?? orders[0]?.id
-    const redirectUrl = `/orders?payment=success&amp;order=${firstOrderNumber}&amp;count=${orders.length}`
-
+    // SUCCESS
+    const redirectUrl = `/orders?payment=success&amp;order=${orders[0]?.orderNumber}&amp;count=${orders.length}`
     console.log('\n🎉 SUCCESS — Redirecting to:', redirectUrl)
     console.log('═'.repeat(70))
 
@@ -22076,23 +22111,21 @@ export async function GET(request: NextRequest) {
     console.error('\n💥 FATAL ERROR in payment verification:')
     console.error(error instanceof Error ? error.message : error)
     if (error instanceof Error) console.error(error.stack)
-    // Redirect to checkout with error flag — checkout page will display the
-    // "verification failed, contact support" message.
     return appRedirect('/checkout?error=verification_failed&amp;reason=exception')
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Seller notification helper (all imports are dynamic so a missing module
-// never crashes the verify route)
+// Seller notification helper — all imports are dynamic so a missing module
+// never crashes the verify route
 // ─────────────────────────────────────────────────────────────────────────────
 async function notifySellerOfNewOrder(
-  sellerId: string,
-  orderId: string,
+  sellerId:    string,
+  orderId:     string,
   orderNumber: string,
-  orderNote: string | undefined,
-  buyerName: string,
-  itemsList: string,
+  orderNote:   string | undefined,
+  buyerName:   string,
+  itemsList:   string,
 ) {
   const hasNote = Boolean(orderNote?.trim())
 
@@ -22105,34 +22138,32 @@ async function notifySellerOfNewOrder(
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-        where: { id: sellerId },
+        where:  { id: sellerId },
         select: { email: true },
       }).catch(() =&gt; null)
     : null
 
   const tasks: Promise&lt;any&gt;[] = []
 
-  // In-app bell: new order
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId: sellerId,
-        type: 'ORDER_PLACED',
-        title: '🛒 New Order Received!',
-        message: `You have a new order (#${orderNumber}) for ${itemsList}`,
+        userId:   sellerId,
+        type:     'ORDER_PLACED',
+        title:    '🛒 New Order Received!',
+        message:  `You have a new order (#${orderNumber}) for ${itemsList}`,
         orderId,
         metadata: { orderNumber, buyerName, itemsList },
       })
     )
 
-    // In-app bell: buyer note (separate notification so it stands out)
     if (hasNote) {
       tasks.push(
         notifMod.createNotification({
-          userId: sellerId,
-          type: 'ORDER_PLACED',
-          title: '📝 Note from Buyer',
-          message: `For order #${orderNumber}: "${orderNote}"`,
+          userId:   sellerId,
+          type:     'ORDER_PLACED',
+          title:    '📝 Note from Buyer',
+          message:  `For order #${orderNumber}: "${orderNote}"`,
           orderId,
           metadata: { orderNumber, orderNote },
         })
@@ -22140,43 +22171,17 @@ async function notifySellerOfNewOrder(
     }
   }
 
-  // Push notification
   if (pushMod?.notifyNewOrder) {
     tasks.push(pushMod.notifyNewOrder(sellerId, orderNumber))
   }
 
-  // Email to seller (only when there is a buyer note — keeps inbox clean)
   if (hasNote &amp;&amp; seller?.email &amp;&amp; emailMod?.sendEmail) {
-    const { subject, html } = buildSellerOrderEmail(orderNumber, buyerName, orderNote)
-    tasks.push(emailMod.sendEmail({ to: seller.email, subject, html }))
-  }
-
-  await Promise.allSettled(tasks)
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Seller email template
-// ─────────────────────────────────────────────────────────────────────────────
-function buildSellerOrderEmail(orderNumber: string, buyerName: string, orderNote?: string) {
-  const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
-  const hasNote = Boolean(orderNote?.trim())
-
-  const noteBlock = hasNote
-    ? `
-      &lt;div style="margin:20px 0;padding:16px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:8px;"&gt;
-        &lt;p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;"&gt;
-          📝 Customer's Note to You
-        &lt;/p&gt;
-        &lt;p style="margin:0;font-size:15px;color:#78350f;line-height:1.6;font-style:italic;"&gt;
-          "${orderNote}"
-        &lt;/p&gt;
-      &lt;/div&gt;
-    `
-    : ''
-
-  return {
-    subject: `🎉 New Order #${orderNumber} — BATAMART`,
-    html: `
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    tasks.push(
+      emailMod.sendEmail({
+        to:      seller.email,
+        subject: `🎉 New Order #${orderNumber} — BATAMART`,
+        html: `
 &lt;!DOCTYPE html&gt;
 &lt;html lang="en"&gt;
 &lt;head&gt;&lt;meta charset="UTF-8"/&gt;&lt;meta name="viewport" content="width=device-width,initial-scale=1.0"/&gt;&lt;/head&gt;
@@ -22202,7 +22207,14 @@ function buildSellerOrderEmail(orderNumber: string, buyerName: string, orderNote
               &lt;p style="font-size:14px;color:#6b7280;margin:0 0 20px;"&gt;
                 Please confirm it as soon as possible so a rider can be assigned.
               &lt;/p&gt;
-              ${noteBlock}
+              &lt;div style="margin:20px 0;padding:16px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:8px;"&gt;
+                &lt;p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;"&gt;
+                  📝 Customer's Note to You
+                &lt;/p&gt;
+                &lt;p style="margin:0;font-size:15px;color:#78350f;line-height:1.6;font-style:italic;"&gt;
+                  "${orderNote}"
+                &lt;/p&gt;
+              &lt;/div&gt;
               &lt;hr style="border:none;border-top:1px solid #f3f4f6;margin:24px 0;"/&gt;
               &lt;p style="font-size:13px;color:#9ca3af;margin:0 0 20px;"&gt;
                 ⚠️ Orders not confirmed within 30 minutes may be auto-cancelled.
@@ -22226,27 +22238,45 @@ function buildSellerOrderEmail(orderNumber: string, buyerName: string, orderNote
   &lt;/table&gt;
 &lt;/body&gt;
 &lt;/html&gt;
-    `,
+        `,
+      })
+    )
   }
+
+  await Promise.allSettled(tasks)
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/products/route.ts</div><pre>export const dynamic = 'force-dynamic'
+<div class='file-block'><div class='file-header'>app/api/products/route.ts</div><pre>// app/api/products/route.ts
+export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 
+// Maximum products returned per page — prevents returning thousands of rows
+const DEFAULT_PAGE_SIZE = 40
+const MAX_PAGE_SIZE     = 100
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const category  = searchParams.get('category')
-    const hostel    = searchParams.get('hostel')
-    const minPrice  = searchParams.get('minPrice')
-    const maxPrice  = searchParams.get('maxPrice')
-    const search    = searchParams.get('search')
+    const category = searchParams.get('category')
+    const hostel   = searchParams.get('hostel')
+    const minPrice = searchParams.get('minPrice')
+    const maxPrice = searchParams.get('maxPrice')
+    const search   = searchParams.get('search')
+
+    // ── Pagination ─────────────────────────────────────────────────────────
+    const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
+    const limit = Math.min(
+      MAX_PAGE_SIZE,
+      Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE)))
+    )
+    const skip = (page - 1) * limit
 
     const where: any = {
-      isActive: true,
-      quantity: { gt: 0 },
+      isActive:  true,
+      quantity:  { gt: 0 },
+      isDeleted: false,
     }
 
     if (category &amp;&amp; category !== 'All') {
@@ -22265,7 +22295,7 @@ export async function GET(request: NextRequest) {
 
     // Server-side keyword search across name, category, description
     if (search &amp;&amp; search.trim()) {
-      const tokens = search.trim().split(/\s+/).filter(Boolean)
+      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean) // cap search length
       where.AND = tokens.map((token: string) =&gt; ({
         OR: [
           { name:        { contains: token, mode: 'insensitive' } },
@@ -22275,26 +22305,35 @@ export async function GET(request: NextRequest) {
       }))
     }
 
-    const products = await prisma.product.findMany({
-      where,
-      include: {
-        seller: {
-          select: {
-            id: true,
-            name: true,
-            avgRating: true,
-            trustLevel: true,
-            completedOrders: true,
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          seller: {
+            select: {
+              id:             true,
+              name:           true,
+              avgRating:      true,
+              trustLevel:     true,
+              completedOrders:true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+        take:    limit,
+        skip,
+      }),
+      prisma.product.count({ where }),
+    ])
 
     return NextResponse.json({
-      success: true,
+      success:  true,
       products,
-      count: products.length,
+      count:    products.length,
+      total,
+      page,
+      pages:    Math.ceil(total / limit),
+      hasMore:  skip + products.length &lt; total,
     })
   } catch (error) {
     console.error('Fetch products error:', error)
@@ -22310,34 +22349,50 @@ export async function POST(request: NextRequest) {
     }
 
     if (user.role !== 'SELLER' &amp;&amp; user.role !== 'ADMIN') {
-      return NextResponse.json({
-        error: 'Only sellers can list products.'
-      }, { status: 403 })
+      return NextResponse.json({ error: 'Only sellers can list products.' }, { status: 403 })
     }
 
     const body = await request.json()
     const { name, description, price, images, category, quantity, hostelName, roomNumber, landmark } = body
 
+    // ── Required field checks ──────────────────────────────────────────────
     if (!name || !description || !price || !images || images.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-    if (price &lt;= 0) return NextResponse.json({ error: 'Price must be greater than 0' }, { status: 400 })
+    if (price &lt;= 0)          return NextResponse.json({ error: 'Price must be greater than 0' }, { status: 400 })
     if (!quantity || quantity &lt; 1) return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 })
-    if (!category) return NextResponse.json({ error: 'Please select a category' }, { status: 400 })
+    if (!category)           return NextResponse.json({ error: 'Please select a category' }, { status: 400 })
+
+    // ── Length limits — prevent DB bloat and abuse ─────────────────────────
+    if (String(name).trim().length &gt; 120) {
+      return NextResponse.json({ error: 'Product name must be under 120 characters' }, { status: 400 })
+    }
+    if (String(description).trim().length &gt; 2000) {
+      return NextResponse.json({ error: 'Description must be under 2,000 characters' }, { status: 400 })
+    }
+    if (!Array.isArray(images) || images.length &gt; 5) {
+      return NextResponse.json({ error: 'Maximum 5 images allowed' }, { status: 400 })
+    }
+    if (parseFloat(price) &gt; 1_000_000) {
+      return NextResponse.json({ error: 'Price cannot exceed ₦1,000,000' }, { status: 400 })
+    }
+    if (parseInt(quantity) &gt; 10_000) {
+      return NextResponse.json({ error: 'Quantity cannot exceed 10,000' }, { status: 400 })
+    }
 
     const product = await prisma.product.create({
       data: {
-        name: name.trim(),
+        name:        name.trim(),
         description: description.trim(),
-        price: parseFloat(price),
+        price:       parseFloat(price),
         images,
         category,
-        quantity: parseInt(quantity),
-        hostelName: hostelName || user.hostelName || '',
-        roomNumber: roomNumber || user.roomNumber || '',
-        landmark: landmark || user.landmark || '',
-        sellerId: user.id,
-        isActive: true,
+        quantity:    parseInt(quantity),
+        hostelName:  hostelName  || user.hostelName  || '',
+        roomNumber:  roomNumber  || user.roomNumber  || '',
+        landmark:    landmark    || user.landmark    || '',
+        sellerId:    user.id,
+        isActive:    true,
       },
     })
 
@@ -22484,9 +22539,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ✅ Fetch referralCode separately since getUserFromRequest doesn't select it
+    // Fetch referralCode separately since getUserFromRequest doesn't select it
     const fullUser = await prisma.user.findUnique({
-      where: { id: authUser.id },
+      where:  { id: authUser.id },
       select: { id: true, referralCode: true },
     })
 
@@ -22522,9 +22577,14 @@ export async function GET(request: NextRequest) {
     const totalReferrals      = referrals.length
     const totalReferralOrders = referrals.reduce((sum, u) =&gt; sum + u.orders.length, 0)
 
+    // Use NEXT_PUBLIC_APP_URL so the link works on any domain (custom domain,
+    // preview deployments, etc.) — never hardcode bata-mart.vercel.app here.
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const referralLink = `${APP_URL}/signup?ref=${fullUser.referralCode}`
+
     return NextResponse.json({
-      referralCode: fullUser.referralCode, // ✅ correctly fetched
-      referralLink: `https://bata-mart.vercel.app/signup?ref=${fullUser.referralCode}`,
+      referralCode:        fullUser.referralCode,
+      referralLink,
       totalReferrals,
       totalEarnings,
       totalReferralOrders,
@@ -24653,8 +24713,12 @@ export async function POST(request: NextRequest) {
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import bcrypt from 'bcryptjs'
 
 export const dynamic = 'force-dynamic'
+
+const MAX_PIN_ATTEMPTS  = 5
+const PIN_LOCK_DURATION = 15 * 60 * 1000 // 15 minutes
 
 export async function POST(request: NextRequest) {
   try {
@@ -24663,24 +24727,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { amount, bankCode, accountNumber, accountName } = await request.json()
+    const body = await request.json()
+    const { amount, bankCode, accountNumber, accountName, pin } = body
 
-    // ── Basic validation ───────────────────────────────────────────────────
-    if (!amount || amount &lt; 1000) {
+    // ── Input validation ───────────────────────────────────────────────────
+    if (!amount || typeof amount !== 'number' || amount &lt; 1000) {
       return NextResponse.json({ error: 'Minimum withdrawal is ₦1,000' }, { status: 400 })
     }
     if (!bankCode || !accountNumber || !accountName) {
       return NextResponse.json({ error: 'Bank details are required' }, { status: 400 })
     }
+    // PIN must be sent with every withdrawal request — never trust a prior verify call
+    if (!pin || !/^\d{6}$/.test(String(pin))) {
+      return NextResponse.json({ error: 'A valid 6-digit PIN is required' }, { status: 400 })
+    }
+    // Limit accountName and accountNumber length to prevent bloat
+    if (String(accountName).length &gt; 100 || String(accountNumber).length &gt; 20) {
+      return NextResponse.json({ error: 'Invalid bank details' }, { status: 400 })
+    }
 
-    // ── Check PIN is set ───────────────────────────────────────────────────
+    // ── Fetch user record (single DB call) ────────────────────────────────
     const currentUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
-        id: true,
-        availableBalance: true,
-        withdrawalPin: true,
-        withdrawalPinLockedUntil: true,
+        id:                      true,
+        availableBalance:        true,
+        withdrawalPin:           true,
+        withdrawalPinAttempts:   true,
+        withdrawalPinLockedUntil:true,
       },
     })
 
@@ -24688,41 +24762,65 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    // ── PIN required ───────────────────────────────────────────────────────
     if (!currentUser.withdrawalPin) {
       return NextResponse.json({ error: 'PIN_REQUIRED' }, { status: 403 })
     }
+
+    // ── PIN lockout check ──────────────────────────────────────────────────
+    if (currentUser.withdrawalPinLockedUntil &amp;&amp; currentUser.withdrawalPinLockedUntil &gt; new Date()) {
+      const minutes = Math.ceil(
+        (currentUser.withdrawalPinLockedUntil.getTime() - Date.now()) / 60000
+      )
+      return NextResponse.json(
+        { error: `Too many failed attempts. PIN locked for ${minutes} more minute${minutes !== 1 ? 's' : ''}.` },
+        { status: 429 }
+      )
+    }
+
+    // ── Verify PIN — this MUST happen inside the withdraw route itself ─────
+    // Never rely on a separate /verify-pin call. The frontend can be bypassed.
+    const isPinValid = await bcrypt.compare(String(pin), currentUser.withdrawalPin)
+
+    if (!isPinValid) {
+      const newAttempts = (currentUser.withdrawalPinAttempts ?? 0) + 1
+      const shouldLock  = newAttempts &gt;= MAX_PIN_ATTEMPTS
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          withdrawalPinAttempts:    newAttempts,
+          withdrawalPinLockedUntil: shouldLock
+            ? new Date(Date.now() + PIN_LOCK_DURATION)
+            : null,
+        },
+      })
+
+      const attemptsLeft = Math.max(0, MAX_PIN_ATTEMPTS - newAttempts)
+      return NextResponse.json(
+        {
+          error: shouldLock
+            ? 'Too many failed attempts. PIN locked for 15 minutes.'
+            : `Incorrect PIN. ${attemptsLeft} attempt${attemptsLeft !== 1 ? 's' : ''} remaining.`,
+        },
+        { status: 401 }
+      )
+    }
+
+    // PIN correct — reset lockout counter
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { withdrawalPinAttempts: 0, withdrawalPinLockedUntil: null },
+    })
 
     // ── Balance check ──────────────────────────────────────────────────────
     if (currentUser.availableBalance &lt; amount) {
       return NextResponse.json({ error: 'Insufficient balance' }, { status: 400 })
     }
 
-    const reference = `WD-${Date.now()}-${user.id.substring(0, 8)}`
-
-    // ── Dev mode ───────────────────────────────────────────────────────────
-    if (process.env.NODE_ENV !== 'production' || process.env.PAYSTACK_DEV_MODE === 'true') {
-      await prisma.$transaction(async (tx) =&gt; {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { availableBalance: { decrement: amount } },
-        })
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
-            type: 'WITHDRAWAL',
-            amount,
-            description: `Withdrawal to ${accountName} (${accountNumber}) - DEV MODE`,
-            reference,
-            balanceBefore: currentUser.availableBalance,
-            balanceAfter: currentUser.availableBalance - amount,
-          },
-        })
-      }, { timeout: 15000, maxWait: 20000 })
-
-      return NextResponse.json({ success: true, message: 'Withdrawal successful (Dev Mode)', reference })
-    }
-
     // ── Production: Paystack Transfer API ─────────────────────────────────
+    // Dev-mode bypass has been removed entirely. Use Paystack test keys in
+    // local development so the real transfer flow is always exercised.
     const transferReference = `WD-${Date.now()}-${user.id.substring(0, 8)}`
 
     // Step 1: Create transfer recipient
@@ -24733,17 +24831,17 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        type: 'nuban',
-        name: accountName,
+        type:           'nuban',
+        name:           accountName,
         account_number: accountNumber,
-        bank_code: bankCode,
-        currency: 'NGN',
+        bank_code:      bankCode,
+        currency:       'NGN',
       }),
     })
     const recipientData = await recipientResponse.json()
     if (!recipientData.status) {
       return NextResponse.json(
-        { error: recipientData.message || 'Failed to create recipient' },
+        { error: recipientData.message || 'Failed to create transfer recipient' },
         { status: 400 }
       )
     }
@@ -24756,43 +24854,44 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source: 'balance',
-        amount: amount * 100,
+        source:    'balance',
+        amount:    amount * 100, // kobo
         recipient: recipientData.data.recipient_code,
-        reason: `BATAMART withdrawal - ${accountName}`,
+        reason:    `BATAMART withdrawal - ${accountName}`,
         reference: transferReference,
       }),
     })
     const transferData = await transferResponse.json()
     if (!transferData.status) {
       return NextResponse.json(
-        { error: transferData.message || 'Transfer failed' },
+        { error: transferData.message || 'Transfer initiation failed' },
         { status: 400 }
       )
     }
 
+    // Step 3: Deduct balance + create ledger entry atomically
     await prisma.$transaction(async (tx) =&gt; {
       await tx.user.update({
         where: { id: user.id },
-        data: { availableBalance: { decrement: amount } },
+        data:  { availableBalance: { decrement: amount } },
       })
       await tx.transaction.create({
         data: {
-          userId: user.id,
-          type: 'WITHDRAWAL',
+          userId:        user.id,
+          type:          'WITHDRAWAL',
           amount,
-          description: `Withdrawal to ${accountName} (${accountNumber})`,
-          reference: transferReference,
+          description:   `Withdrawal to ${accountName} (${accountNumber})`,
+          reference:     transferReference,
           balanceBefore: currentUser.availableBalance,
-          balanceAfter: currentUser.availableBalance - amount,
+          balanceAfter:  currentUser.availableBalance - amount,
         },
       })
     }, { timeout: 15000, maxWait: 20000 })
 
     return NextResponse.json({
-      success: true,
-      message: 'Withdrawal initiated successfully',
-      reference: transferReference,
+      success:      true,
+      message:      'Withdrawal initiated successfully',
+      reference:    transferReference,
       transferCode: transferData.data.transfer_code,
     })
   } catch (error) {
@@ -27510,8 +27609,9 @@ main()
   .finally(async () =&gt; {
     await prisma.$disconnect()
   })</pre></div>
-<div class='file-block'><div class='file-header'>prisma/schema.prisma</div><pre>// ============================================================
-// COMPLETE PRISMA SCHEMA WITH REFERRAL SYSTEM
+<div class='file-block'><div class='file-header'>prisma/schema.prisma</div><pre>// prisma/schema.prisma
+// ============================================================
+// COMPLETE PRISMA SCHEMA — BATAMART
 // ============================================================
 
 generator client {
@@ -27519,8 +27619,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -27638,6 +27738,9 @@ enum NotificationType {
   WITHDRAWAL_PROCESSED
   PAYMENT_RECEIVED
   REFERRAL_REWARD
+
+  // Added: used by the out-of-stock seller alert in payments/initialize
+  STOCK_ALERT
 }
 
 enum SupportTicketStatus {
@@ -27681,80 +27784,80 @@ enum PaymentMethod {
 }
 
 model User {
-  id                 String      @id @default(cuid())
-  phone              String      @unique
-  email              String?     @unique
-  password           String
-  matricNumber       String?     @unique
-  name               String
-  profilePhoto       String?
-  role               UserRole    @default(BUYER)
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  email        String?  @unique
+  password     String
+  matricNumber String?  @unique
+  name         String
+  profilePhoto String?
+  role         UserRole @default(BUYER)
 
-  isSellerMode       Boolean     @default(true)
+  isSellerMode Boolean @default(true)
 
-  hostelName         String?
-  roomNumber         String?
-  landmark           String?
+  hostelName String?
+  roomNumber String?
+  landmark   String?
 
-  bio                String?
+  bio String?
 
   // Trust level and ratings
-  trustLevel         TrustLevel  @default(BRONZE)
-  avgRating          Float       @default(0)
-  totalReviews       Int         @default(0)
-  completedOrders    Int         @default(0)
+  trustLevel      TrustLevel @default(BRONZE)
+  avgRating       Float      @default(0)
+  totalReviews    Int        @default(0)
+  completedOrders Int        @default(0)
 
   // Penalty &amp; suspension
-  penaltyPoints      Int         @default(0)
-  isSuspended        Boolean     @default(false)
-  suspendedUntil     DateTime?
-  suspensionReason   String?
+  penaltyPoints    Int       @default(0)
+  isSuspended      Boolean   @default(false)
+  suspendedUntil   DateTime?
+  suspensionReason String?
 
   // Withdrawal PIN
-  withdrawalPin            String?
-  withdrawalPinAttempts    Int       @default(0)
-  withdrawalPinLockedUntil DateTime?
+  withdrawalPin             String?
+  withdrawalPinAttempts     Int       @default(0)
+  withdrawalPinLockedUntil  DateTime?
 
   // Dispute &amp; Safety fields
-  warningCount       Int         @default(0)
-  lastWarningAt      DateTime?
+  warningCount  Int       @default(0)
+  lastWarningAt DateTime?
 
   // Wallet
-  pendingBalance     Float       @default(0)
-  availableBalance   Float       @default(0)
+  pendingBalance   Float @default(0)
+  availableBalance Float @default(0)
 
   // Soft delete
-  isDeleted          Boolean     @default(false)
-  deletedAt          DateTime?
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
-  // Referral System Fields
-  referralCode              String         @unique
-  referredById              String?
-  referredBy                User?          @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals                 User[]         @relation("UserReferrals")
-  referralRewardsEarned     ReferralReward[] @relation("ReferrerRewards")
-  referralRewardsGenerated  ReferralReward[] @relation("ReferredUserRewards")
+  // Referral System
+  referralCode             String          @unique
+  referredById             String?
+  referredBy               User?           @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals                User[]          @relation("UserReferrals")
+  referralRewardsEarned    ReferralReward[] @relation("ReferrerRewards")
+  referralRewardsGenerated ReferralReward[] @relation("ReferredUserRewards")
 
   // Relations
-  products           Product[]
-  orders             Order[]     @relation("BuyerOrders")
-  sellerOrders       Order[]     @relation("SellerOrders")
-  riderDeliveries    Order[]     @relation("RiderDeliveries")
+  products        Product[]
+  orders          Order[]  @relation("BuyerOrders")
+  sellerOrders    Order[]  @relation("SellerOrders")
+  riderDeliveries Order[]  @relation("RiderDeliveries")
 
-  reviewsGiven       Review[]    @relation("UserReviewsGiven")
-  reviewsReceived    Review[]    @relation("UserReviewsReceived")
+  reviewsGiven    Review[] @relation("UserReviewsGiven")
+  reviewsReceived Review[] @relation("UserReviewsReceived")
 
   productReviewsGiven ProductReview[] @relation("ProductReviewsGiven")
 
-  reportsSubmitted   Report[]    @relation("ReportsSubmitted")
-  reportsReceived    Report[]    @relation("ReportsReceived")
-  disputesAsBuyer    Dispute[]   @relation("BuyerDisputes")
-  disputesAsSeller   Dispute[]   @relation("SellerDisputes")
-  penaltiesReceived  Penalty[]   @relation("UserPenalties")
+  reportsSubmitted  Report[]  @relation("ReportsSubmitted")
+  reportsReceived   Report[]  @relation("ReportsReceived")
+  disputesAsBuyer   Dispute[] @relation("BuyerDisputes")
+  disputesAsSeller  Dispute[] @relation("SellerDisputes")
+  penaltiesReceived Penalty[] @relation("UserPenalties")
 
-  resolvedDisputes   Dispute[]   @relation("ResolvedBy")
-  resolvedReports    Report[]    @relation("ResolvedBy")
-  issuedPenalties    Penalty[]   @relation("IssuedBy")
+  resolvedDisputes Dispute[] @relation("ResolvedBy")
+  resolvedReports  Report[]  @relation("ResolvedBy")
+  issuedPenalties  Penalty[] @relation("IssuedBy")
 
   notifications      Notification[]
   pushSubscriptions  PushSubscription[]
@@ -27764,12 +27867,12 @@ model User {
   cart               Cart?
   auditLogs          AuditLog[]
 
-  isRiderVerified    Boolean     @default(false)
-  riderIdDocument    String?
-  isAvailable        Boolean     @default(true)
+  isRiderVerified Boolean @default(false)
+  riderIdDocument String?
+  isAvailable     Boolean @default(true)
 
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([role])
   @@index([trustLevel])
@@ -27780,37 +27883,37 @@ model User {
 }
 
 model Product {
-  id                String      @id @default(cuid())
-  name              String
-  description       String
-  price             Float
-  images            String[]
-  category          String
-  quantity          Int         @default(1)
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  images      String[]
+  category    String
+  quantity    Int      @default(1)
 
-  hostelName        String
-  roomNumber        String
-  landmark          String
+  hostelName String
+  roomNumber String
+  landmark   String
 
-  sellerId          String
-  seller            User        @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerId String
+  seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
-  isActive          Boolean     @default(true)
-  viewCount         Int         @default(0)
+  isActive     Boolean @default(true)
+  viewCount    Int     @default(0)
 
-  avgRating         Float       @default(0)
-  totalReviews      Int         @default(0)
+  avgRating    Float @default(0)
+  totalReviews Int   @default(0)
 
-  isDeleted         Boolean     @default(false)
-  deletedAt         DateTime?
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
-  orders            Order[]
-  reviews           ProductReview[]
-  reports           Report[]
-  cartItems         CartItem[]
+  orders    Order[]
+  reviews   ProductReview[]
+  reports   Report[]
+  cartItems CartItem[]
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sellerId])
   @@index([category])
@@ -27820,20 +27923,20 @@ model Product {
 }
 
 model Order {
-  id                 String      @id @default(cuid())
-  orderNumber        String      @unique
+  id          String @id @default(cuid())
+  orderNumber String @unique
 
-  buyerId            String
-  buyer              User        @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyerId String
+  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id])
 
-  sellerId           String
-  seller             User        @relation("SellerOrders", fields: [sellerId], references: [id])
+  sellerId String
+  seller   User   @relation("SellerOrders", fields: [sellerId], references: [id])
 
-  productId          String
-  product            Product     @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  riderId            String?
-  rider              User?       @relation("RiderDeliveries", fields: [riderId], references: [id])
+  riderId String?
+  rider   User?   @relation("RiderDeliveries", fields: [riderId], references: [id])
 
   productPrice       Float
   deliveryFee        Float
@@ -27841,36 +27944,34 @@ model Order {
   platformCommission Float       @default(0)
   quantity           Int         @default(1)
 
-  deliveryHostel     String
-  deliveryRoom       String
-  deliveryLandmark   String
-  deliveryPhone      String
+  deliveryHostel   String
+  deliveryRoom     String
+  deliveryLandmark String
+  deliveryPhone    String
 
-  status             OrderStatus @default(PENDING)
+  status    OrderStatus @default(PENDING)
+  orderNote String?
 
-  orderNote          String?
+  orderedAt       DateTime  @default(now())
+  riderAssignedAt DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  completedAt     DateTime?
 
-  orderedAt          DateTime    @default(now())
-  riderAssignedAt    DateTime?
-  pickedUpAt         DateTime?
-  deliveredAt        DateTime?
-  completedAt        DateTime?
+  payment Payment?
 
-  payment            Payment?
+  isPaid     Boolean @default(false)
+  isDisputed Boolean @default(false)
+  disputeReason String?
 
-  isPaid             Boolean     @default(false)
+  reviews        Review[]
+  productReviews ProductReview[]
+  reports        Report[]
+  dispute        Dispute?
+  referralReward ReferralReward?
 
-  isDisputed         Boolean     @default(false)
-  disputeReason      String?
-
-  reviews            Review[]
-  productReviews     ProductReview[]
-  reports            Report[]
-  dispute            Dispute?
-  referralReward     ReferralReward?
-
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([buyerId])
   @@index([sellerId])
@@ -27883,23 +27984,23 @@ model Order {
 }
 
 model Review {
-  id                String      @id @default(cuid())
-  rating            Int
-  comment           String?
+  id      String @id @default(cuid())
+  rating  Int
+  comment String?
 
-  orderId           String
-  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  reviewerId        String
-  reviewer          User        @relation("UserReviewsGiven", fields: [reviewerId], references: [id])
+  reviewerId String
+  reviewer   User   @relation("UserReviewsGiven", fields: [reviewerId], references: [id])
 
-  revieweeId        String
-  reviewee          User        @relation("UserReviewsReceived", fields: [revieweeId], references: [id])
+  revieweeId String
+  reviewee   User   @relation("UserReviewsReceived", fields: [revieweeId], references: [id])
 
-  type              ReviewType  @default(SELLER)
+  type ReviewType @default(SELLER)
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([revieweeId])
@@ -27908,21 +28009,21 @@ model Review {
 }
 
 model ProductReview {
-  id                String      @id @default(cuid())
-  rating            Int
-  comment           String
+  id      String @id @default(cuid())
+  rating  Int
+  comment String
 
-  orderId           String
-  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  productId         String
-  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  reviewerId        String
-  reviewer          User        @relation("ProductReviewsGiven", fields: [reviewerId], references: [id])
+  reviewerId String
+  reviewer   User   @relation("ProductReviewsGiven", fields: [reviewerId], references: [id])
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([productId])
@@ -27931,12 +28032,12 @@ model ProductReview {
 }
 
 model OTP {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   phone     String?
   email     String?
   code      String
   expiresAt DateTime
-  isUsed    Boolean  @default(false)
+  isUsed    Boolean   @default(false)
 
   createdAt DateTime @default(now())
 
@@ -27945,16 +28046,19 @@ model OTP {
 }
 
 model Payment {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  orderId   String   @unique
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  amount    Float
-  method    PaymentMethod
-  status    PaymentStatus @default(PENDING)
+  amount Float
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
 
-  transactionId   String?
+  // transactionId stores the Paystack reference.
+  // The unique index ensures one Paystack reference → one Payment record,
+  // which is how we prevent duplicate order creation if the callback fires twice.
+  transactionId   String?  @unique
   gatewayResponse Json?
 
   paidAt       DateTime?
@@ -27967,18 +28071,19 @@ model Payment {
 
   @@index([orderId])
   @@index([status])
+  @@index([transactionId])
   @@index([createdAt])
 }
 
 model Transaction {
-  id     String          @id @default(cuid())
+  id     String @id @default(cuid())
   userId String
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type          TransactionType
-  amount        Float
-  description   String
-  reference     String?
+  type        TransactionType
+  amount      Float
+  description String
+  reference   String?
 
   balanceBefore Float
   balanceAfter  Float
@@ -27991,9 +28096,9 @@ model Transaction {
 }
 
 model WithdrawalRequest {
-  id      String           @id @default(cuid())
-  userId  String
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   amount      Float
   bankDetails Json
@@ -28011,9 +28116,9 @@ model WithdrawalRequest {
 }
 
 model Report {
-  id   String     @id @default(cuid())
-  type ReportType
-  reason      ReportReason
+  id     String     @id @default(cuid())
+  type   ReportType
+  reason ReportReason
   description String
   evidence    String[]
 
@@ -28049,13 +28154,13 @@ model Report {
 }
 
 model Dispute {
-  id      String @id @default(cuid())
+  id String @id @default(cuid())
 
   orderId String @unique
   order   Order  @relation(fields: [orderId], references: [id])
 
-  buyerId  String
-  buyer    User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
+  buyerId String
+  buyer   User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
 
   sellerId String
   seller   User   @relation("SellerDisputes", fields: [sellerId], references: [id])
@@ -28238,19 +28343,19 @@ model AuditLog {
 }
 
 model ReferralReward {
-  id             String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  referrerId     String
-  referrer       User     @relation("ReferrerRewards", fields: [referrerId], references: [id])
+  referrerId String
+  referrer   User   @relation("ReferrerRewards", fields: [referrerId], references: [id])
 
   referredUserId String
-  referredUser   User     @relation("ReferredUserRewards", fields: [referredUserId], references: [id])
+  referredUser   User   @relation("ReferredUserRewards", fields: [referredUserId], references: [id])
 
-  orderId        String   @unique
-  order          Order    @relation(fields: [orderId], references: [id])
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
 
-  amount         Float
-  createdAt      DateTime @default(now())
+  amount    Float
+  createdAt DateTime @default(now())
 
   @@index([referrerId])
   @@index([referredUserId])
@@ -28792,7 +28897,65 @@ body {
   "exclude": ["node_modules"]
 }</pre></div>
 <div class='file-block'><div class='file-header'>vercel.json</div><pre>{
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/_next/static/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/icon-(.*).png",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    }
+  ]
 }</pre></div>
 <div class='file-block'><div class='file-header'>public/manifest.json</div><pre>{
   "name": "BATAMART",

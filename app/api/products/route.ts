@@ -5,12 +5,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 
-// Maximum products returned per page — prevents returning thousands of rows
 const DEFAULT_PAGE_SIZE = 40
 const MAX_PAGE_SIZE     = 100
 
 export async function GET(request: NextRequest) {
   try {
+    // ── Auth required — can't browse without being logged in ───────────────
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // ── University scope — only show products from same university ─────────
+    if (!user.universityId) {
+      return NextResponse.json(
+        { error: 'No university associated with your account. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const hostel   = searchParams.get('hostel')
@@ -18,7 +31,6 @@ export async function GET(request: NextRequest) {
     const maxPrice = searchParams.get('maxPrice')
     const search   = searchParams.get('search')
 
-    // ── Pagination ─────────────────────────────────────────────────────────
     const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
     const limit = Math.min(
       MAX_PAGE_SIZE,
@@ -27,9 +39,11 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     const where: any = {
-      isActive:  true,
-      quantity:  { gt: 0 },
-      isDeleted: false,
+      isActive:     true,
+      quantity:     { gt: 0 },
+      isDeleted:    false,
+      // ── CORE SCOPE: only this user's university ──────────────────────────
+      universityId: user.universityId,
     }
 
     if (category && category !== 'All') {
@@ -46,9 +60,8 @@ export async function GET(request: NextRequest) {
       if (maxPrice) where.price.lte = parseFloat(maxPrice)
     }
 
-    // Server-side keyword search across name, category, description
     if (search && search.trim()) {
-      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean) // cap search length
+      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean)
       where.AND = tokens.map((token: string) => ({
         OR: [
           { name:        { contains: token, mode: 'insensitive' } },
@@ -80,13 +93,13 @@ export async function GET(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      success:  true,
+      success: true,
       products,
-      count:    products.length,
+      count:   products.length,
       total,
       page,
-      pages:    Math.ceil(total / limit),
-      hasMore:  skip + products.length < total,
+      pages:   Math.ceil(total / limit),
+      hasMore: skip + products.length < total,
     })
   } catch (error) {
     console.error('Fetch products error:', error)
@@ -101,55 +114,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (user.role !== 'SELLER' && user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Only sellers can list products.' }, { status: 403 })
+    if (!user.universityId) {
+      return NextResponse.json(
+        { error: 'No university associated with your account.' },
+        { status: 403 }
+      )
     }
 
     const body = await request.json()
-    const { name, description, price, images, category, quantity, hostelName, roomNumber, landmark } = body
+    const { name, description, price, category, quantity, images, hostelName } = body
 
-    // ── Required field checks ──────────────────────────────────────────────
-    if (!name || !description || !price || !images || images.length === 0) {
+    if (!name || !price || !category || !quantity) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-    if (price <= 0)          return NextResponse.json({ error: 'Price must be greater than 0' }, { status: 400 })
-    if (!quantity || quantity < 1) return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 })
-    if (!category)           return NextResponse.json({ error: 'Please select a category' }, { status: 400 })
 
-    // ── Length limits — prevent DB bloat and abuse ─────────────────────────
-    if (String(name).trim().length > 120) {
-      return NextResponse.json({ error: 'Product name must be under 120 characters' }, { status: 400 })
+    if (typeof price !== 'number' || price <= 0) {
+      return NextResponse.json({ error: 'Invalid price' }, { status: 400 })
     }
-    if (String(description).trim().length > 2000) {
-      return NextResponse.json({ error: 'Description must be under 2,000 characters' }, { status: 400 })
-    }
-    if (!Array.isArray(images) || images.length > 5) {
-      return NextResponse.json({ error: 'Maximum 5 images allowed' }, { status: 400 })
-    }
-    if (parseFloat(price) > 1_000_000) {
-      return NextResponse.json({ error: 'Price cannot exceed ₦1,000,000' }, { status: 400 })
-    }
-    if (parseInt(quantity) > 10_000) {
-      return NextResponse.json({ error: 'Quantity cannot exceed 10,000' }, { status: 400 })
+
+    if (typeof quantity !== 'number' || quantity < 1) {
+      return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 })
     }
 
     const product = await prisma.product.create({
       data: {
-        name:        name.trim(),
-        description: description.trim(),
-        price:       parseFloat(price),
-        images,
-        category,
-        quantity:    parseInt(quantity),
-        hostelName:  hostelName  || user.hostelName  || '',
-        roomNumber:  roomNumber  || user.roomNumber  || '',
-        landmark:    landmark    || user.landmark    || '',
-        sellerId:    user.id,
-        isActive:    true,
+        name:         String(name).trim().substring(0, 200),
+        description:  description ? String(description).trim().substring(0, 2000) : null,
+        price:        Number(price),
+        category:     String(category),
+        quantity:     Number(quantity),
+        images:       Array.isArray(images) ? images : [],
+        sellerId:     user.id,
+        hostelName:   hostelName || null,
+        // ── inherit university from seller ─────────────────────────────────
+        universityId: user.universityId,
       },
     })
 
-    return NextResponse.json({ success: true, product })
+    return NextResponse.json({ success: true, product }, { status: 201 })
   } catch (error) {
     console.error('Create product error:', error)
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })

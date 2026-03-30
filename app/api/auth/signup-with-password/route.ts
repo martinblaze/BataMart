@@ -9,11 +9,16 @@ import { verifyOtpSessionToken } from '@/app/api/auth/verify-otp/route'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, password, otpSessionToken, role, phone, referralCode } = body
+    const { email, name, password, otpSessionToken, role, phone, referralCode, universityId } = body
 
     // ── Field presence check ───────────────────────────────────────────────
     if (!email || !otpSessionToken || !password || !name || !phone) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // ── University required ────────────────────────────────────────────────
+    if (!universityId) {
+      return NextResponse.json({ error: 'Please select your university or campus area' }, { status: 400 })
     }
 
     // ── Input length guards ────────────────────────────────────────────────
@@ -25,10 +30,6 @@ export async function POST(request: NextRequest) {
     }
 
     // ── OTP session token verification ────────────────────────────────────
-    // The /verify-otp route issued this token after the user's OTP was confirmed.
-    // It contains the exact identifier (email) that was verified. We check that
-    // the email in the token matches the email the user is trying to sign up with,
-    // so it's impossible to verify OTP for email A then create an account for email B.
     const verifiedIdentifier = verifyOtpSessionToken(otpSessionToken)
 
     if (!verifiedIdentifier) {
@@ -38,12 +39,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalise both to lowercase for comparison
     if (verifiedIdentifier.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json(
         { error: 'Email does not match the verified address. Please restart the signup flow.' },
         { status: 400 }
       )
+    }
+
+    // ── Validate university exists ─────────────────────────────────────────
+    const university = await prisma.university.findUnique({
+      where:  { id: universityId },
+      select: { id: true, isActive: true, name: true, shortName: true },
+    })
+
+    if (!university || !university.isActive) {
+      return NextResponse.json({ error: 'Selected university is not available' }, { status: 400 })
     }
 
     // ── Duplicate account check ────────────────────────────────────────────
@@ -64,13 +74,12 @@ export async function POST(request: NextRequest) {
 
     if (referralCode && typeof referralCode === 'string') {
       const referrer = await prisma.user.findUnique({
-        where: { referralCode: referralCode.trim().toUpperCase() },
+        where:  { referralCode: referralCode.trim().toUpperCase() },
         select: { id: true },
       })
       if (referrer) {
         referredById = referrer.id
       }
-      // If code not found, silently ignore — don't block signup
     }
 
     const hashedPassword  = await hashPassword(password)
@@ -84,6 +93,7 @@ export async function POST(request: NextRequest) {
         password:     hashedPassword,
         role:         role || 'BUYER',
         referralCode: newReferralCode,
+        universityId: university.id,
         ...(referredById ? { referredById } : {}),
       },
     })
@@ -101,6 +111,8 @@ export async function POST(request: NextRequest) {
         role:         user.role,
         hostelName:   user.hostelName,
         referralCode: user.referralCode,
+        universityId: user.universityId,
+        university:   { name: university.name, shortName: university.shortName },
       },
     })
   } catch (error) {

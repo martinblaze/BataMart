@@ -4,13 +4,15 @@
 // ============================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+  schemas   = ["public"]
 }
 
 enum UserRole {
@@ -18,6 +20,8 @@ enum UserRole {
   SELLER
   RIDER
   ADMIN
+
+  @@schema("public")
 }
 
 enum TrustLevel {
@@ -25,6 +29,8 @@ enum TrustLevel {
   SILVER
   GOLD
   VERIFIED
+
+  @@schema("public")
 }
 
 enum OrderStatus {
@@ -38,6 +44,8 @@ enum OrderStatus {
   COMPLETED
   DISPUTED
   CANCELLED
+
+  @@schema("public")
 }
 
 enum TransactionType {
@@ -46,11 +54,15 @@ enum TransactionType {
   ESCROW
   WITHDRAWAL
   REFERRAL_REWARD
+
+  @@schema("public")
 }
 
 enum ReviewType {
   SELLER
   RIDER
+
+  @@schema("public")
 }
 
 enum ReportType {
@@ -58,6 +70,8 @@ enum ReportType {
   SELLER
   RIDER
   BUYER
+
+  @@schema("public")
 }
 
 enum ReportReason {
@@ -70,6 +84,8 @@ enum ReportReason {
   INAPPROPRIATE_CONTENT
   PAYMENT_ISSUE
   OTHER
+
+  @@schema("public")
 }
 
 enum ReportStatus {
@@ -77,6 +93,8 @@ enum ReportStatus {
   UNDER_REVIEW
   RESOLVED
   DISMISSED
+
+  @@schema("public")
 }
 
 enum DisputeStatus {
@@ -86,6 +104,8 @@ enum DisputeStatus {
   RESOLVED_SELLER_FAVOR
   RESOLVED_COMPROMISE
   DISMISSED
+
+  @@schema("public")
 }
 
 enum PenaltyAction {
@@ -96,6 +116,8 @@ enum PenaltyAction {
   TEMP_BAN_30DAYS
   PERMANENT_BAN
   TRUST_LEVEL_DOWNGRADE
+
+  @@schema("public")
 }
 
 enum NotificationType {
@@ -128,8 +150,9 @@ enum NotificationType {
   PAYMENT_RECEIVED
   REFERRAL_REWARD
 
-  // Added: used by the out-of-stock seller alert in payments/initialize
   STOCK_ALERT
+
+  @@schema("public")
 }
 
 enum SupportTicketStatus {
@@ -137,6 +160,8 @@ enum SupportTicketStatus {
   IN_REVIEW
   RESOLVED
   CLOSED
+
+  @@schema("public")
 }
 
 enum SupportTicketCategory {
@@ -148,6 +173,8 @@ enum SupportTicketCategory {
   RIDER_ISSUE
   BUG_REPORT
   OTHER
+
+  @@schema("public")
 }
 
 enum WithdrawalStatus {
@@ -155,6 +182,8 @@ enum WithdrawalStatus {
   PROCESSING
   COMPLETED
   REJECTED
+
+  @@schema("public")
 }
 
 enum PaymentStatus {
@@ -163,6 +192,8 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+
+  @@schema("public")
 }
 
 enum PaymentMethod {
@@ -170,6 +201,30 @@ enum PaymentMethod {
   BANK_TRANSFER
   WALLET
   ESCROW
+
+  @@schema("public")
+}
+
+model University {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  shortName   String  @unique
+  slug        String  @unique
+  location    String
+  isActive    Boolean @default(true)
+
+  deliveryAreas Json @default("[]")
+  hostels       Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  products Product[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@schema("public")
 }
 
 model User {
@@ -190,36 +245,32 @@ model User {
 
   bio String?
 
-  // Trust level and ratings
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
+
   trustLevel      TrustLevel @default(BRONZE)
   avgRating       Float      @default(0)
   totalReviews    Int        @default(0)
   completedOrders Int        @default(0)
 
-  // Penalty & suspension
   penaltyPoints    Int       @default(0)
   isSuspended      Boolean   @default(false)
   suspendedUntil   DateTime?
   suspensionReason String?
 
-  // Withdrawal PIN
   withdrawalPin             String?
   withdrawalPinAttempts     Int       @default(0)
   withdrawalPinLockedUntil  DateTime?
 
-  // Dispute & Safety fields
   warningCount  Int       @default(0)
   lastWarningAt DateTime?
 
-  // Wallet
   pendingBalance   Float @default(0)
   availableBalance Float @default(0)
 
-  // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  // Referral System
   referralCode             String          @unique
   referredById             String?
   referredBy               User?           @relation("UserReferrals", fields: [referredById], references: [id])
@@ -227,7 +278,6 @@ model User {
   referralRewardsEarned    ReferralReward[] @relation("ReferrerRewards")
   referralRewardsGenerated ReferralReward[] @relation("ReferredUserRewards")
 
-  // Relations
   products        Product[]
   orders          Order[]  @relation("BuyerOrders")
   sellerOrders    Order[]  @relation("SellerOrders")
@@ -269,6 +319,8 @@ model User {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([referralCode])
+  @@index([universityId])
+  @@schema("public")
 }
 
 model Product {
@@ -286,6 +338,9 @@ model Product {
 
   sellerId String
   seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
 
   isActive     Boolean @default(true)
   viewCount    Int     @default(0)
@@ -309,6 +364,8 @@ model Product {
   @@index([isActive])
   @@index([isDeleted])
   @@index([createdAt])
+  @@index([universityId])
+  @@schema("public")
 }
 
 model Order {
@@ -370,6 +427,7 @@ model Order {
   @@index([orderedAt])
   @@index([sellerId, status])
   @@index([riderId, status])
+  @@schema("public")
 }
 
 model Review {
@@ -395,6 +453,7 @@ model Review {
   @@index([revieweeId])
   @@index([reviewerId])
   @@unique([orderId, type, reviewerId])
+  @@schema("public")
 }
 
 model ProductReview {
@@ -418,6 +477,7 @@ model ProductReview {
   @@index([productId])
   @@index([reviewerId])
   @@unique([orderId, productId, reviewerId])
+  @@schema("public")
 }
 
 model OTP {
@@ -432,6 +492,7 @@ model OTP {
 
   @@index([phone])
   @@index([email])
+  @@schema("public")
 }
 
 model Payment {
@@ -444,9 +505,6 @@ model Payment {
   method PaymentMethod
   status PaymentStatus @default(PENDING)
 
-  // transactionId stores the Paystack reference.
-  // The unique index ensures one Paystack reference → one Payment record,
-  // which is how we prevent duplicate order creation if the callback fires twice.
   transactionId   String?  @unique
   gatewayResponse Json?
 
@@ -462,6 +520,7 @@ model Payment {
   @@index([status])
   @@index([transactionId])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Transaction {
@@ -482,6 +541,7 @@ model Transaction {
   @@index([userId])
   @@index([type])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model WithdrawalRequest {
@@ -502,6 +562,7 @@ model WithdrawalRequest {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Report {
@@ -540,6 +601,7 @@ model Report {
   @@index([reportedUserId])
   @@index([reportedProductId])
   @@index([status])
+  @@schema("public")
 }
 
 model Dispute {
@@ -579,6 +641,7 @@ model Dispute {
   @@index([buyerId])
   @@index([sellerId])
   @@index([status])
+  @@schema("public")
 }
 
 model DisputeMessage {
@@ -595,6 +658,7 @@ model DisputeMessage {
   createdAt DateTime @default(now())
 
   @@index([disputeId])
+  @@schema("public")
 }
 
 model Penalty {
@@ -618,6 +682,7 @@ model Penalty {
 
   @@index([userId])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Notification {
@@ -647,6 +712,7 @@ model Notification {
   @@index([isRead])
   @@index([createdAt])
   @@index([type])
+  @@schema("public")
 }
 
 model PushSubscription {
@@ -660,6 +726,7 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@schema("public")
 }
 
 model SupportTicket {
@@ -682,6 +749,7 @@ model SupportTicket {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Cart {
@@ -693,6 +761,7 @@ model Cart {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@schema("public")
 }
 
 model CartItem {
@@ -708,6 +777,7 @@ model CartItem {
   @@unique([cartId, productId])
   @@index([cartId])
   @@index([productId])
+  @@schema("public")
 }
 
 model AuditLog {
@@ -729,6 +799,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([action])
+  @@schema("public")
 }
 
 model ReferralReward {
@@ -749,4 +820,5 @@ model ReferralReward {
   @@index([referrerId])
   @@index([referredUserId])
   @@index([createdAt])
+  @@schema("public")
 }

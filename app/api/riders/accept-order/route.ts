@@ -22,9 +22,9 @@ export async function POST(request: NextRequest) {
     // ── Block if rider has a pending dispute pickup ───────────────────────
     const pendingDisputePickup = await prisma.order.findFirst({
       where: {
-        riderId: user.id,
+        riderId:    user.id,
         isDisputed: true,
-        status: 'RIDER_ASSIGNED',
+        status:     'RIDER_ASSIGNED',
         dispute: {
           resolution: '__AWAITING_PICKUP__',
         },
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     if (pendingDisputePickup) {
       return NextResponse.json({
-        error: `You have a pending dispute pickup (Order #${pendingDisputePickup.orderNumber}). You must complete that return first before accepting new orders.`,
+        error:       `You have a pending dispute pickup (Order #${pendingDisputePickup.orderNumber}). Complete that return first.`,
         blockReason: 'DISPUTE_PICKUP_PENDING',
       }, { status: 400 })
     }
@@ -43,9 +43,7 @@ export async function POST(request: NextRequest) {
     const activeDelivery = await prisma.order.findFirst({
       where: {
         riderId: user.id,
-        status: {
-          in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'],
-        },
+        status:  { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] },
         isDisputed: false,
       },
       select: { orderNumber: true, status: true },
@@ -53,19 +51,32 @@ export async function POST(request: NextRequest) {
 
     if (activeDelivery) {
       return NextResponse.json({
-        error: `You still have an active delivery (Order #${activeDelivery.orderNumber} — ${activeDelivery.status.replace('_', ' ')}). Complete it before accepting a new order.`,
+        error:       `You still have an active delivery (Order #${activeDelivery.orderNumber} — ${activeDelivery.status.replace('_', ' ')}). Complete it first.`,
         blockReason: 'ACTIVE_DELIVERY',
       }, { status: 400 })
     }
 
     // ── Fetch order ───────────────────────────────────────────────────────
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { product: true, buyer: true, seller: true },
+      where:   { id: orderId },
+      include: {
+        product: true,
+        buyer:   { select: { name: true, phone: true, universityId: true } },
+        seller:  { select: { name: true, phone: true } },
+      },
     })
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    // ── University cross-check — rider can only take orders from same campus ─
+    // We check buyer's universityId as the authoritative scope on the order.
+    if (user.universityId && order.buyer.universityId !== user.universityId) {
+      return NextResponse.json(
+        { error: 'This order is outside your campus area.' },
+        { status: 403 }
+      )
     }
 
     if (order.status !== 'PENDING') {
@@ -78,44 +89,42 @@ export async function POST(request: NextRequest) {
 
     const riderShare = 560
 
-    // ── Transaction ───────────────────────────────────────────────────────
     await prisma.$transaction(
       async (tx) => {
         await tx.order.update({
           where: { id: orderId },
           data: {
-            riderId: user.id,
-            status: 'RIDER_ASSIGNED',
+            riderId:         user.id,
+            status:          'RIDER_ASSIGNED',
             riderAssignedAt: new Date(),
           },
         })
 
         const rider = await tx.user.findUnique({
-          where: { id: user.id },
+          where:  { id: user.id },
           select: { pendingBalance: true },
         })
 
         await tx.transaction.create({
           data: {
-            userId: user.id,
-            type: 'ESCROW',
-            amount: riderShare,
-            description: `Escrow for delivery: ${order.product.name} (Order: ${order.orderNumber})`,
-            reference: `${order.orderNumber}-RIDER-ESCROW`,
+            userId:        user.id,
+            type:          'ESCROW',
+            amount:        riderShare,
+            description:   `Escrow for delivery: ${order.product.name} (Order: ${order.orderNumber})`,
+            reference:     `${order.orderNumber}-RIDER-ESCROW`,
             balanceBefore: rider?.pendingBalance || 0,
-            balanceAfter: (rider?.pendingBalance || 0) + riderShare,
+            balanceAfter:  (rider?.pendingBalance || 0) + riderShare,
           },
         })
 
         await tx.user.update({
           where: { id: user.id },
-          data: { pendingBalance: { increment: riderShare } },
+          data:  { pendingBalance: { increment: riderShare } },
         })
       },
       { timeout: 15000, maxWait: 20000 }
     )
 
-    // ── Notify buyer and seller ───────────────────────────────────────────
     Promise.allSettled([
       import('@/lib/notification').then(({ notifyRiderAssigned }) =>
         notifyRiderAssigned(
@@ -128,20 +137,20 @@ export async function POST(request: NextRequest) {
         )
       ),
     ]).then(results => {
-      results.forEach((r) => {
+      results.forEach(r => {
         if (r.status === 'rejected') console.error('Rider assigned notification failed:', r.reason)
       })
     })
 
     return NextResponse.json({
-      success: true,
-      message: 'Order accepted successfully',
+      success:  true,
+      message:  'Order accepted successfully',
       riderFee: riderShare,
     })
   } catch (error) {
     console.error('Accept order error:', error)
     return NextResponse.json({
-      error: 'Failed to accept order',
+      error:   'Failed to accept order',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
