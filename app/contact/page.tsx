@@ -7,9 +7,6 @@ import {
   Mail, MessageCircle, HelpCircle, Clock, MapPin, Send, CheckCircle, Loader2
 } from 'lucide-react'
 
-// ── Platform university name ─────────────────────────────────────────────────
-const UNI_SHORT = 'UNIZIK'
-
 const CATEGORIES = [
   { value: 'PAYMENT_ISSUE', label: '💳 Payment Issue' },
   { value: 'ORDER_PROBLEM', label: '📦 Order Problem' },
@@ -24,7 +21,7 @@ const CATEGORIES = [
 const faqs = [
   {
     question: 'How do I create an account?',
-    answer: `Click on "Join BATAMART" and fill in your ${UNI_SHORT} student details. You'll receive a verification email to activate your account.`
+    answer: "Click on \"Join BATAMART\" and fill in your details. You'll receive a verification email to activate your account."
   },
   {
     question: 'Is my payment secure?',
@@ -40,7 +37,7 @@ const faqs = [
   },
   {
     question: 'How do I become a seller?',
-    answer: `Any verified ${UNI_SHORT} student can sell on BATAMART. Just toggle to seller mode in your account and start listing products!`
+    answer: 'Any verified student can sell on BATAMART. Just toggle to seller mode in your account and start listing products!'
   },
   {
     question: 'Can I become a rider?',
@@ -64,8 +61,10 @@ export default function ContactPage() {
     try {
       const token = localStorage.getItem('token')
       if (!token) return
+      // Decode JWT payload (no verification needed — just for UX prefill)
       const payload = JSON.parse(atob(token.split('.')[1]))
       if (payload.userId) {
+        // Fetch user info
         fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -126,10 +125,10 @@ export default function ContactPage() {
             <HelpCircle className="w-5 h-5" />
             <span className="font-semibold">Contact Us</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">We&apos;re Here to Help</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-6">We're Here to Help</h1>
           <p className="text-xl text-white/90 max-w-2xl mx-auto">
             Have questions? Need support? Get in touch with the BATAMART team.
-            We&apos;re committed to helping you have the best experience.
+            We're committed to helping you have the best experience.
           </p>
         </div>
       </section>
@@ -175,7 +174,7 @@ export default function ContactPage() {
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-10">
             <h2 className="text-3xl font-bold text-gray-900 mb-3">Send Us a Message</h2>
-            <p className="text-gray-600">Fill in the form below and we&apos;ll get back to you within 24–48 hours.</p>
+            <p className="text-gray-600">Fill in the form below and we'll get back to you within 24–48 hours.</p>
           </div>
 
           {status === 'success' ? (
@@ -183,7 +182,7 @@ export default function ContactPage() {
               <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Message Sent!</h3>
               <p className="text-gray-600 mb-6">
-                We&apos;ve received your message and sent a confirmation to <strong>{form.email}</strong>.
+                We've received your message and sent a confirmation to <strong>{form.email}</strong>.
                 Our team will get back to you within 24–48 hours.
               </p>
               <div className="bg-white border border-green-200 rounded-xl p-4 inline-block mb-6">
@@ -304,15 +303,8 @@ export default function ContactPage() {
           <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <MapPin className="w-8 h-8 text-purple-600" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Serving {UNI_SHORT} Community</h2>
-          <p className="text-xl text-gray-600 mb-8">We deliver across all {UNI_SHORT} campuses including:</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {['Aroma', 'Tempsite', 'Express Gate', 'Ifite', 'Amansea', 'Bus Stand', 'School Hostel'].map(loc => (
-              <div key={loc} className="bg-gray-50 px-4 py-2 rounded-full font-medium text-gray-700 border border-gray-200">
-                📍 {loc}
-              </div>
-            ))}
-          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Serving Global University Community</h2>
+          <p className="text-xl text-gray-600 mb-8">We deliver across all areas in your CAMPUS</p>
         </div>
       </section>
 
@@ -362,7 +354,7 @@ export default function ContactPage() {
       <section className="py-16 px-4 bg-gradient-to-br from-BATAMART-primary to-BATAMART-dark text-white">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Still Have Questions?</h2>
-          <p className="text-xl mb-8 text-white/90">Don&apos;t hesitate to reach out. We&apos;re always happy to help {UNI_SHORT} students!</p>
+          <p className="text-xl mb-8 text-white/90">Don't hesitate to reach out. We're always happy to help students!</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a href="mailto:support@BATAMART-mart.com"
               className="bg-white text-BATAMART-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2">

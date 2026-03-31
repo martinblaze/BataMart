@@ -4,12 +4,6 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Image from 'next/image'
 
-// ── Platform university name ─────────────────────────────────────────────────
-// Single source of truth for the public/landing pages.
-// When multi-university support ships, swap these for a dynamic lookup.
-const UNI_SHORT = 'UNIZIK'
-const UNI_FULL  = 'Nnamdi Azikiwe University'
-
 // ── Particle Canvas ────────────────────────────────────────────────────────────
 function ParticleCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -59,6 +53,7 @@ function ParticleCanvas() {
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+      // Very subtle mouse glow
       const grd = ctx.createRadialGradient(
         mouse.current.x, mouse.current.y, 0,
         mouse.current.x, mouse.current.y, 180
@@ -69,14 +64,17 @@ function ParticleCanvas() {
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       particles.forEach((p) => {
+        // Drift origin point
         p.ox += p.vx
         p.oy += p.vy
 
+        // Wrap origin around edges
         if (p.ox < 0) p.ox = canvas.width
         if (p.ox > canvas.width) p.ox = 0
         if (p.oy < 0) p.oy = canvas.height
         if (p.oy > canvas.height) p.oy = 0
 
+        // Mouse repulsion — subtle, no glow or size change
         const dx = p.ox - mouse.current.x
         const dy = p.oy - mouse.current.y
         const dist = Math.sqrt(dx * dx + dy * dy)
@@ -91,6 +89,7 @@ function ParticleCanvas() {
           p.y += (p.oy - p.y) * 0.05
         }
 
+        // Plain dot — fixed size, fixed alpha, no glow
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
         ctx.fillStyle = p.color + Math.round(p.alpha * 255).toString(16).padStart(2, '0')
@@ -246,6 +245,7 @@ export default function HomePage() {
 
   return (
     <>
+      {/* Google Fonts - must be a link tag, not @import inside style, to avoid hydration mismatch */}
       <link
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
@@ -364,6 +364,7 @@ export default function HomePage() {
           height: 400px;
         }
 
+        /* Sections sit above canvas but let it show through via transparent backgrounds */
         .BATAMART-page section, .BATAMART-page footer {
           position: relative;
           z-index: 1;
@@ -389,6 +390,7 @@ export default function HomePage() {
 
         {/* ── HERO ── */}
         <section className="relative min-h-screen flex items-center justify-center px-4 hero-bg grid-pattern">
+          {/* Background orbs */}
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-300/20 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-300/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -399,7 +401,7 @@ export default function HomePage() {
               <div className="inline-flex items-center gap-2.5 bg-white/80 border border-purple-200 backdrop-blur-sm px-5 py-2 rounded-full mb-8 glow-ring shadow-sm">
                 <div className="pulse-ring w-2 h-2 bg-purple-600 rounded-full" />
                 <span className="text-sm font-medium text-purple-700 tracking-wide BATAMART-display">
-                  BATAMART — {UNI_SHORT}&apos;s Campus Marketplace
+                  BATAMART — Campus Marketplace
                 </span>
               </div>
             </Reveal>
@@ -415,7 +417,7 @@ export default function HomePage() {
 
             <Reveal delay={200}>
               <p className="text-gray-500 text-lg md:text-xl max-w-xl mx-auto leading-relaxed mb-10">
-                The smartest way for {UNI_SHORT} students to trade — secure escrow payments,
+                The smartest way for CAMPUS students to trade — secure escrow payments,
                 campus-wide delivery, real seller verification.
               </p>
             </Reveal>
@@ -427,7 +429,7 @@ export default function HomePage() {
                   href="/signup"
                   className="cta-btn group relative w-full sm:w-auto bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-10 py-4 rounded-xl font-semibold text-base BATAMART-display tracking-wide transition-all duration-300 shadow-[0_0_30px_rgba(91,33,182,0.4)] hover:shadow-[0_0_50px_rgba(91,33,182,0.6)]"
                 >
-                  Join BATAMART — It&apos;s Free
+                  Join BATAMART — It's Free
                 </Link>
                 <Link
                   href="/marketplace"
@@ -482,7 +484,7 @@ export default function HomePage() {
                 {
                   num: '01',
                   title: 'Browse & Buy',
-                  desc: `Explore products from verified ${UNI_SHORT} students across all faculties and hostels.`,
+                  desc: 'Explore products from verified students across all faculties and hostels.',
                   icon: '🔍',
                   color: 'from-purple-50 to-white',
                   border: 'border-purple-200',
@@ -535,7 +537,7 @@ export default function HomePage() {
               <div className="text-center mb-16">
                 <p className="text-purple-600 text-xs tracking-[0.3em] uppercase font-semibold mb-3 BATAMART-display">Products</p>
                 <h2 className="BATAMART-display text-4xl md:text-5xl font-bold text-gray-900 mb-4">Shop by Category</h2>
-                <p className="text-gray-500">Everything a {UNI_SHORT} student needs — in one place</p>
+                <p className="text-gray-500">Everything a student needs — in one place</p>
               </div>
             </Reveal>
 
@@ -546,10 +548,12 @@ export default function HomePage() {
                     <div
                       className="category-card relative p-5 rounded-xl border border-gray-100 bg-white hover:shadow-lg transition-all duration-300 cursor-pointer overflow-hidden group"
                     >
+                      {/* Accent glow on hover */}
                       <div
                         className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-xl"
                         style={{ background: `radial-gradient(ellipse at top left, ${accent}10, transparent 70%)` }}
                       />
+                      {/* Top border accent */}
                       <div
                         className="absolute top-0 left-0 right-0 h-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-t-xl"
                         style={{ background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` }}
@@ -573,7 +577,7 @@ export default function HomePage() {
             <Reveal>
               <p className="text-purple-600 text-xs tracking-[0.3em] uppercase font-semibold mb-3 BATAMART-display">Coverage</p>
               <h2 className="BATAMART-display text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-                Delivering Across {UNI_SHORT}
+                Delivering Across Your Campus
               </h2>
               <p className="text-gray-500 mb-12 max-w-md mx-auto">
                 Our rider network covers every major location on and around campus
@@ -644,6 +648,7 @@ export default function HomePage() {
         <section className="relative py-28 px-4 section-white overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-200/50 to-transparent" />
 
+          {/* Giant watermark */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
             <span className="BATAMART-display text-[20vw] font-bold text-purple-100 tracking-tighter">BATAMART</span>
           </div>
@@ -657,7 +662,7 @@ export default function HomePage() {
                 <span className="hero-text-gradient">Trading?</span>
               </h2>
               <p className="text-gray-500 text-lg max-w-md mx-auto mb-10">
-                Join thousands of {UNI_SHORT} students using BATAMART for campus commerce. Free to join, easy to use.
+                Join thousands of CAMPUS students using BATAMART for campus commerce. Free to join, easy to use.
               </p>
             </Reveal>
 
@@ -711,7 +716,7 @@ export default function HomePage() {
                   />
                 </div>
                 <p className="text-gray-500 text-sm leading-relaxed">
-                  Student-to-student marketplace built exclusively for {UNI_FULL} students.
+                  Student-to-student marketplace built exclusively for Your Campus.
                 </p>
               </div>
               {[
@@ -759,7 +764,7 @@ export default function HomePage() {
             <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-8" />
 
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <p className="text-gray-400 text-xs">© 2026 BATAMART. Built with ❤️ for {UNI_SHORT} Students.</p>
+              <p className="text-gray-400 text-xs">© 2026 BATAMART. Built with ❤️ for UNIVERSITY Students.</p>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                 <span className="text-xs text-gray-400">All systems operational</span>
