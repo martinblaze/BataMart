@@ -257,6 +257,8 @@ export default function MarketplacePage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
+  // ── Dynamic university name ────────────────────────────────────────────────
+  const [universityShortName, setUniversityShortName] = useState<string>('')
   const inputRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
   const isClickingSuggestionRef = useRef(false)
@@ -266,7 +268,6 @@ export default function MarketplacePage() {
     if (splashDone) return
     const handler = () => setSplashDone(true)
     window.addEventListener('batamart:splash-done', handler)
-    // Safety fallback — if event never fires for any reason, unblock after 4s
     const fallback = setTimeout(() => setSplashDone(true), 4000)
     return () => {
       window.removeEventListener('batamart:splash-done', handler)
@@ -288,6 +289,18 @@ export default function MarketplacePage() {
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch { }
     fetchInterests()
     fetchProducts()
+    // ── Fetch university short name from user session ──────────────────────
+    const token = localStorage.getItem('token')
+    if (token) {
+      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.user?.university?.shortName) {
+            setUniversityShortName(data.user.university.shortName)
+          }
+        })
+        .catch(() => {})
+    }
   }, [])
 
   useEffect(() => {
@@ -439,7 +452,7 @@ export default function MarketplacePage() {
             <div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
               <Search className="w-4 h-4 text-BATAMART-primary" />
             </div>
-            <span className="text-sm font-bold text-BATAMART-primary">Search for "{searchInput}"</span>
+            <span className="text-sm font-bold text-BATAMART-primary">Search for &quot;{searchInput}&quot;</span>
             <ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" />
           </button>
         )}
@@ -476,7 +489,11 @@ export default function MarketplacePage() {
               </span>
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[2.75rem] font-black text-white tracking-tight leading-tight sm:leading-none">
                 Your Feed{''}
-                <span className="text-white/70 block sm:inline"><br className="hidden sm:block" /> at UNIZIK</span>
+                {/* ── Dynamic university name — falls back gracefully while loading ── */}
+                <span className="text-white/70 block sm:inline">
+                  <br className="hidden sm:block" />
+                  {universityShortName ? ` at ${universityShortName}` : ' on Campus'}
+                </span>
               </h1>
               <p className="text-white/65 text-xs sm:text-sm md:text-base max-w-md">
                 Discover products picked for you — from your campus, by your campus.
@@ -531,7 +548,6 @@ export default function MarketplacePage() {
                   <button onClick={() => handleSearch()} className="btn-press flex-1 sm:flex-none px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-3.5 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm shadow-md transition-colors">
                     Search
                   </button>
-                  {/* Only show quick sell icon in non-app mode on mobile */}
                   {!isApp && (
                     <Link href="/sell" className="btn-press sm:hidden flex items-center justify-center w-10 h-10 my-auto bg-white border border-gray-200 rounded-lg shadow-sm">
                       <Sparkles className="w-4 h-4 text-BATAMART-primary" />

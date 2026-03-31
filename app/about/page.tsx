@@ -10,6 +10,10 @@ import {
   Zap
 } from 'lucide-react'
 
+// ── Platform university name ─────────────────────────────────────────────────
+const UNI_SHORT = 'UNIZIK'
+const UNI_FULL  = 'Nnamdi Azikiwe University'
+
 export default function AboutPage() {
   const features = [
     {
@@ -20,7 +24,7 @@ export default function AboutPage() {
     {
       icon: Users,
       title: 'Student Community',
-      description: 'Buy and sell exclusively within the UNIZIK student community'
+      description: `Buy and sell exclusively within the ${UNI_SHORT} student community`
     },
     {
       icon: Zap,
@@ -73,7 +77,7 @@ export default function AboutPage() {
             Your Campus Marketplace, Reimagined
           </h1>
           <p className="text-xl text-white/90 max-w-2xl mx-auto">
-            BATAMART is the trusted peer-to-peer marketplace connecting UNIZIK students for safe,
+            BATAMART is the trusted peer-to-peer marketplace connecting {UNI_SHORT} students for safe,
             convenient buying and selling right on campus.
           </p>
         </div>
@@ -91,20 +95,20 @@ export default function AboutPage() {
 
           <div className="prose prose-lg max-w-none text-gray-700 space-y-6">
             <p className="text-lg leading-relaxed">
-              BATAMART was born from a simple observation: students at UNIZIK needed a better way to
+              BATAMART was born from a simple observation: students at {UNI_FULL} needed a better way to
               buy and sell items on campus. Traditional online marketplaces were too broad, social
               media groups were chaotic, and there was no way to ensure trust and safety.
             </p>
 
             <p className="text-lg leading-relaxed">
-              We created BATAMART to solve these problems. A platform exclusively for UNIZIK students,
+              We created BATAMART to solve these problems. A platform exclusively for {UNI_SHORT} students,
               where you can buy textbooks from a classmate, sell your old phone to someone in the
               next hostel, or order food delivered right to your door — all with the confidence
               that comes from our secure escrow system and verified student community.
             </p>
 
             <p className="text-lg leading-relaxed">
-              Today, BATAMART serves thousands of students across all UNIZIK campuses, making campus
+              Today, BATAMART serves thousands of students across all {UNI_SHORT} campuses, making campus
               commerce easier, safer, and more convenient than ever before.
             </p>
           </div>
@@ -119,7 +123,7 @@ export default function AboutPage() {
               BATAMART by the Numbers
             </h2>
             <p className="text-gray-600">
-              Growing stronger every day with the UNIZIK community
+              Growing stronger every day with the {UNI_SHORT} community
             </p>
           </div>
 
@@ -144,7 +148,7 @@ export default function AboutPage() {
               Why Choose BATAMART?
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              We've built features that make buying and selling on campus simple, safe, and reliable
+              We&apos;ve built features that make buying and selling on campus simple, safe, and reliable
             </p>
           </div>
 
@@ -217,8 +221,8 @@ export default function AboutPage() {
               Our Mission
             </h2>
             <p className="text-xl text-gray-700 leading-relaxed max-w-3xl mx-auto">
-              To empower UNIZIK students with a safe, reliable, and convenient platform for
-              campus commerce — making it easy to buy what you need and sell what you don't,
+              To empower {UNI_SHORT} students with a safe, reliable, and convenient platform for
+              campus commerce — making it easy to buy what you need and sell what you don&apos;t,
               while building a stronger student community.
             </p>
           </div>
@@ -232,7 +236,7 @@ export default function AboutPage() {
             Join the BATAMART Community Today
           </h2>
           <p className="text-xl mb-8 text-white/90">
-            Thousands of UNIZIK students are already buying and selling on BATAMART.
+            Thousands of {UNI_SHORT} students are already buying and selling on BATAMART.
             Start your journey today!
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

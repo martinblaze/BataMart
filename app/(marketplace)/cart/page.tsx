@@ -12,9 +12,25 @@ import {
 export default function CartPage() {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
+  // ── Dynamic university name ───────────────────────────────────────────────
+  const [universityShortName, setUniversityShortName] = useState<string>('');
   const { items, updateQuantity, removeItem, clearCart, getTotalPrice } = useCartStore();
 
-  useEffect(() => { setIsClient(true) }, []);
+  useEffect(() => {
+    setIsClient(true);
+    // Fetch university name for the logged-in user
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.user?.university?.shortName) {
+            setUniversityShortName(data.user.university.shortName);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(price);
@@ -175,9 +191,27 @@ export default function CartPage() {
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Why shop with BATAMART?</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
-                  { icon: <Shield className="w-5 h-5 text-emerald-600" />, bg: 'bg-emerald-50', title: 'Secure Payments', sub: 'Money held until delivery confirmed' },
-                  { icon: <Truck className="w-5 h-5 text-blue-600" />, bg: 'bg-blue-50', title: 'Campus Delivery', sub: 'Fast delivery within UNIZIK' },
-                  { icon: <Lock className="w-5 h-5 text-violet-600" />, bg: 'bg-violet-50', title: 'Verified Sellers', sub: 'All sellers are verified students' },
+                  {
+                    icon: <Shield className="w-5 h-5 text-emerald-600" />,
+                    bg: 'bg-emerald-50',
+                    title: 'Secure Payments',
+                    sub: 'Money held until delivery confirmed',
+                  },
+                  {
+                    icon: <Truck className="w-5 h-5 text-blue-600" />,
+                    bg: 'bg-blue-50',
+                    title: 'Campus Delivery',
+                    // ── Dynamic: shows user's university, falls back gracefully ──
+                    sub: universityShortName
+                      ? `Fast delivery within ${universityShortName}`
+                      : 'Fast campus delivery',
+                  },
+                  {
+                    icon: <Lock className="w-5 h-5 text-violet-600" />,
+                    bg: 'bg-violet-50',
+                    title: 'Verified Sellers',
+                    sub: 'All sellers are verified students',
+                  },
                 ].map(({ icon, bg, title, sub }) => (
                   <div key={title} className="flex items-start gap-3">
                     <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center flex-shrink-0`}>{icon}</div>

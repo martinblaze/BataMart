@@ -4170,28 +4170,54 @@ export default function RiderSignupPage() {
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { MapPin, ChevronRight } from 'lucide-react'
+
+interface University {
+  id:    string
+  name:  string
+  shortName: string
+  slug:  string
+  location: string
+}
 
 function SignupForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [step, setStep] = useState(1)
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
-  const [password, setPassword] = useState('')
+  // ── Step 0 = university select, then steps 1–4 as before ──────────────────
+  const [step, setStep]           = useState(0)
+  const [universities, setUniversities] = useState&lt;University[]&gt;([])
+  const [selectedUniversity, setSelectedUniversity] = useState&lt;University | null&gt;(null)
+  const [uniLoading, setUniLoading] = useState(true)
+
+  const [email, setEmail]         = useState('')
+  const [name, setName]           = useState('')
+  const [phone, setPhone]         = useState('')
+  const [otp, setOtp]             = useState(['', '', '', '', '', ''])
+  const [otpSessionToken, setOtpSessionToken] = useState('')
+  const [password, setPassword]   = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [wantToSell, setWantToSell] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState('')
   const [referralCode, setReferralCode] = useState('')
+
   useEffect(() =&gt; {
     const ref = searchParams.get('ref')
     if (ref) setReferralCode(ref.trim().toUpperCase())
   }, [searchParams])
+
+  // ── Fetch universities on mount ────────────────────────────────────────────
+  useEffect(() =&gt; {
+    fetch('/api/universities')
+      .then(r =&gt; r.json())
+      .then(data =&gt; {
+        setUniversities(data.universities ?? [])
+      })
+      .catch(() =&gt; {})
+      .finally(() =&gt; setUniLoading(false))
+  }, [])
 
   const validatePassword = (pwd: string) =&gt; {
     if (pwd.length &lt; 8) return 'Password must be at least 8 characters'
@@ -4213,14 +4239,12 @@ function SignupForm() {
 
     setLoading(true)
     setError('')
-
     try {
       const response = await fetch('/api/auth/send-otp', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body:    JSON.stringify({ email }),
       })
-
       const data = await response.json()
       if (response.ok) {
         setStep(2)
@@ -4252,28 +4276,22 @@ function SignupForm() {
 
   const handleVerifyOTP = async () =&gt; {
     const code = otp.join('')
-    if (code.length !== 6) {
-      setError('Please enter the complete 6-digit code')
-      return
-    }
+    if (code.length !== 6) { setError('Please enter the complete 6-digit code'); return }
 
     setLoading(true)
     setError('')
-
     try {
       const response = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otpCode: code }),
+        body:    JSON.stringify({ email, otpCode: code }),
       })
-
       const data = await response.json()
-      if (response.ok) {
+      if (response.ok &amp;&amp; data.otpSessionToken) {
+        setOtpSessionToken(data.otpSessionToken)
         setStep(3)
       } else {
-        setError(data.error || 'Invalid or expired code. Please try again.')
-        setOtp(['', '', '', '', '', ''])
-        document.getElementById('otp-0')?.focus()
+        setError(data.error || 'Invalid OTP')
       }
     } catch {
       setError('Network error. Please try again.')
@@ -4282,38 +4300,37 @@ function SignupForm() {
     }
   }
 
-  const handleSetPassword = async (e: React.FormEvent) =&gt; {
+  const handleSignup = async (e: React.FormEvent) =&gt; {
     e.preventDefault()
+    if (!agreedToTerms) { setError('Please agree to the Terms of Service'); return }
     const pwdError = validatePassword(password)
     if (pwdError) { setError(pwdError); return }
     if (password !== confirmPassword) { setError('Passwords do not match'); return }
-    if (!agreedToTerms) { setError('You must agree to the Terms &amp; Conditions to continue'); return }
 
     setLoading(true)
     setError('')
-
     try {
       const response = await fetch('/api/auth/signup-with-password', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email,
           name,
           phone,
           password,
-          otpCode: otp.join(''),
-          role: wantToSell ? 'SELLER' : 'BUYER',
+          otpSessionToken,
+          role:         wantToSell ? 'SELLER' : 'BUYER',
           referralCode: referralCode || undefined,
+          universityId: selectedUniversity!.id,
         }),
       })
-
       const data = await response.json()
       if (response.ok) {
-        localStorage.setItem('token', data.token)
+        localStorage.setItem('token',    data.token)
         localStorage.setItem('userName', data.user.name)
         localStorage.setItem('userRole', data.user.role)
-        window.dispatchEvent(new Event('auth-change'))
-        router.push(data.user.hostelName ? '/marketplace' : '/profile/setup')
+        localStorage.setItem('userId',   data.user.id)
+        router.push('/marketplace')
       } else {
         setError(data.error || 'Signup failed')
       }
@@ -4324,268 +4341,329 @@ function SignupForm() {
     }
   }
 
-  const totalSteps = 3
+  // ════════════════════════════════════════════════════════
+  // STEP 0 — University selector
+  // ════════════════════════════════════════════════════════
+  if (step === 0) {
+    return (
+      &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
+        &lt;div className="w-full max-w-md"&gt;
+          {/* Logo */}
+          &lt;div className="text-center mb-8"&gt;
+            &lt;h1 className="text-3xl font-black text-white tracking-tight"&gt;BATAMART&lt;/h1&gt;
+            &lt;p className="text-blue-300 text-sm mt-1"&gt;Campus Marketplace&lt;/p&gt;
+          &lt;/div&gt;
 
-  const BATAMARTLogo = () =&gt; (
-    &lt;div className="text-center mb-8"&gt;
-      &lt;div className="flex items-center justify-center gap-2 mb-2"&gt;
-        &lt;div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}&gt;
-          &lt;span className="text-white font-black text-xl"&gt;B&lt;/span&gt;
+          &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+            &lt;div className="text-center mb-6"&gt;
+              &lt;div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}&gt;
+                &lt;MapPin className="w-7 h-7 text-white" /&gt;
+              &lt;/div&gt;
+              &lt;h2 className="text-xl font-black text-gray-900"&gt;Select Your Campus&lt;/h2&gt;
+              &lt;p className="text-sm text-gray-500 mt-1"&gt;
+                You'll only see buyers, sellers, and riders from your campus.
+              &lt;/p&gt;
+            &lt;/div&gt;
+
+            {uniLoading ? (
+              &lt;div className="flex justify-center py-8"&gt;
+                &lt;svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24"&gt;
+                  &lt;circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/&gt;
+                  &lt;path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/&gt;
+                &lt;/svg&gt;
+              &lt;/div&gt;
+            ) : (
+              &lt;div className="space-y-3"&gt;
+                {universities.map(uni =&gt; (
+                  &lt;button
+                    key={uni.id}
+                    onClick={() =&gt; setSelectedUniversity(uni)}
+                    className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
+                      selectedUniversity?.id === uni.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'
+                    }`}
+                  &gt;
+                    &lt;div className="flex items-center justify-between"&gt;
+                      &lt;div&gt;
+                        &lt;p className="font-bold text-gray-900 text-sm"&gt;{uni.shortName}&lt;/p&gt;
+                        &lt;p className="text-xs text-gray-500 mt-0.5"&gt;{uni.name}&lt;/p&gt;
+                        &lt;p className="text-xs text-blue-500 mt-0.5"&gt;{uni.location}&lt;/p&gt;
+                      &lt;/div&gt;
+                      &lt;div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        selectedUniversity?.id === uni.id
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-gray-300'
+                      }`}&gt;
+                        {selectedUniversity?.id === uni.id &amp;&amp; (
+                          &lt;div className="w-2 h-2 rounded-full bg-white" /&gt;
+                        )}
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+                  &lt;/button&gt;
+                ))}
+
+                {universities.length === 0 &amp;&amp; (
+                  &lt;p className="text-center text-gray-400 text-sm py-4"&gt;
+                    No campuses available yet.
+                  &lt;/p&gt;
+                )}
+              &lt;/div&gt;
+            )}
+
+            &lt;button
+              onClick={() =&gt; { if (selectedUniversity) setStep(1) }}
+              disabled={!selectedUniversity}
+              className="w-full mt-6 py-4 rounded-2xl text-white font-bold text-base transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
+            &gt;
+              Continue with {selectedUniversity?.shortName ?? 'your campus'}
+              &lt;ChevronRight className="w-5 h-5" /&gt;
+            &lt;/button&gt;
+
+            &lt;p className="text-center text-sm text-gray-500 mt-4"&gt;
+              Already have an account?{' '}
+              &lt;Link href="/login" className="font-semibold text-blue-600"&gt;Sign in&lt;/Link&gt;
+            &lt;/p&gt;
+          &lt;/div&gt;
         &lt;/div&gt;
-        &lt;span className="text-2xl font-black text-gray-900"&gt;BATAMART&lt;/span&gt;
       &lt;/div&gt;
-      &lt;h1 className="text-xl font-bold text-gray-800"&gt;Create Account&lt;/h1&gt;
-      &lt;p className="text-sm text-gray-500 mt-1"&gt;Step {step} of {totalSteps}&lt;/p&gt;
-    &lt;/div&gt;
-  )
+    )
+  }
 
-  return (
-    &lt;div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4"&gt;
-      &lt;div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8"&gt;
-        &lt;BATAMARTLogo /&gt;
+  // ════════════════════════════════════════════════════════
+  // STEP 1 — Email + name + phone
+  // ════════════════════════════════════════════════════════
+  if (step === 1) {
+    return (
+      &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
+        &lt;div className="w-full max-w-md"&gt;
+          &lt;div className="text-center mb-8"&gt;
+            &lt;h1 className="text-3xl font-black text-white tracking-tight"&gt;BATAMART&lt;/h1&gt;
+            &lt;div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30"&gt;
+              &lt;MapPin className="w-3.5 h-3.5 text-blue-300" /&gt;
+              &lt;span className="text-blue-300 text-xs font-semibold"&gt;
+                {selectedUniversity?.shortName} — {selectedUniversity?.location}
+              &lt;/span&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
 
-        &lt;div className="space-y-4"&gt;
+          &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+            &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Create account&lt;/h2&gt;
+            &lt;p className="text-sm text-gray-500 mb-6"&gt;Join the {selectedUniversity?.shortName} marketplace&lt;/p&gt;
 
-          {/* Step 1 */}
-          {step === 1 &amp;&amp; (
+            {error &amp;&amp; (
+              &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;
+                {error}
+              &lt;/div&gt;
+            )}
+
             &lt;form onSubmit={handleSendOTP} className="space-y-4"&gt;
               &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;Full Name&lt;/label&gt;
+                &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Full Name&lt;/label&gt;
                 &lt;input
                   type="text"
                   value={name}
-                  onChange={(e) =&gt; setName(e.target.value)}
+                  onChange={e =&gt; setName(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                  placeholder="Enter your full name"
+                  placeholder="Your full name"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 /&gt;
               &lt;/div&gt;
-
               &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;Phone Number&lt;/label&gt;
-                &lt;div className="flex"&gt;
-                  &lt;span className="flex items-center px-3 border-2 border-r-0 border-gray-200 rounded-l-lg bg-gray-50 text-gray-500 text-sm font-semibold"&gt;
-                    +234
-                  &lt;/span&gt;
-                  &lt;input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) =&gt; {
-                      const digits = e.target.value.replace(/\D/g, '')
-                      setPhone(digits)
-                    }}
-                    required
-                    maxLength={11}
-                    className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-r-lg focus:border-BATAMART-primary focus:outline-none"
-                    placeholder="08012345678"
-                  /&gt;
-                &lt;/div&gt;
-              &lt;/div&gt;
-
-              &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;Email Address&lt;/label&gt;
+                &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Email Address&lt;/label&gt;
                 &lt;input
                   type="email"
                   value={email}
-                  onChange={(e) =&gt; setEmail(e.target.value)}
+                  onChange={e =&gt; setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                  placeholder="you@example.com"
+                  placeholder="your@email.com"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 /&gt;
-                &lt;p className="text-xs text-gray-500 mt-1"&gt;A verification code will be sent to this email&lt;/p&gt;
               &lt;/div&gt;
-
               &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;
-                  Referral Code &lt;span className="font-normal text-gray-400"&gt;(optional)&lt;/span&gt;
-                &lt;/label&gt;
+                &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Phone Number&lt;/label&gt;
                 &lt;input
-                  type="text"
-                  value={referralCode}
-                  onChange={(e) =&gt; setReferralCode(e.target.value.trim().toUpperCase())}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none font-mono tracking-widest uppercase"
-                  placeholder="BATAMART-XXXXXX"
-                  maxLength={11}
-                /&gt;
-                {referralCode &amp;&amp; (
-                  &lt;p className="text-xs text-green-600 font-semibold mt-1"&gt;🎉 Referral code applied!&lt;/p&gt;
-                )}
-              &lt;/div&gt;
-
-              &lt;div&gt;
-                &lt;label className="flex items-start gap-3 cursor-pointer"&gt;
-                  &lt;input
-                    type="checkbox"
-                    checked={wantToSell}
-                    onChange={(e) =&gt; setWantToSell(e.target.checked)}
-                    className="h-5 w-5 text-BATAMART-primary focus:ring-BATAMART-primary border-gray-300 rounded mt-0.5"
-                  /&gt;
-                  &lt;span className="text-sm text-gray-700 font-medium"&gt;
-                    I want to sell products on BATAMART
-                  &lt;/span&gt;
-                &lt;/label&gt;
-                {wantToSell &amp;&amp; (
-                  &lt;div className="mt-2 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1"&gt;
-                    &lt;p className="font-bold"&gt;🎉 Welcome Seller!&lt;/p&gt;
-                    &lt;ul className="space-y-0.5 list-disc list-inside"&gt;
-                      &lt;li&gt;List products for sale immediately&lt;/li&gt;
-                      &lt;li&gt;Get paid securely via escrow&lt;/li&gt;
-                      &lt;li&gt;Free to list — no fees&lt;/li&gt;
-                      &lt;li&gt;🔐 PIN required for withdrawals&lt;/li&gt;
-                    &lt;/ul&gt;
-                  &lt;/div&gt;
-                )}
-              &lt;/div&gt;
-
-              {error &amp;&amp; &lt;p className="text-red-500 text-sm font-medium"&gt;{error}&lt;/p&gt;}
-
-              &lt;button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 text-white font-bold rounded-lg transition disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-              &gt;
-                {loading ? 'Sending...' : 'Send Verification Code'}
-              &lt;/button&gt;
-            &lt;/form&gt;
-          )}
-
-          {/* Step 2 */}
-          {step === 2 &amp;&amp; (
-            &lt;div className="space-y-4"&gt;
-              &lt;p className="text-center text-sm text-gray-500"&gt;
-                Code sent to &lt;span className="font-semibold text-gray-800"&gt;{email}&lt;/span&gt;
-              &lt;/p&gt;
-
-              &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-3"&gt;Enter 6-Digit Code&lt;/label&gt;
-                &lt;div className="flex gap-2 justify-center"&gt;
-                  {otp.map((digit, i) =&gt; (
-                    &lt;input
-                      key={i}
-                      id={`otp-${i}`}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) =&gt; handleOtpChange(i, e.target.value)}
-                      onKeyDown={(e) =&gt; handleKeyDown(i, e)}
-                      className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none transition-colors"
-                    /&gt;
-                  ))}
-                &lt;/div&gt;
-              &lt;/div&gt;
-
-              {error &amp;&amp; &lt;p className="text-red-500 text-sm font-medium"&gt;{error}&lt;/p&gt;}
-
-              &lt;button
-                onClick={handleVerifyOTP}
-                disabled={loading}
-                className="w-full py-3.5 text-white font-bold rounded-lg transition disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-              &gt;
-                {loading ? 'Verifying...' : 'Verify Code'}
-              &lt;/button&gt;
-
-              &lt;div className="flex items-center justify-between"&gt;
-                &lt;button
-                  type="button"
-                  onClick={() =&gt; { setStep(1); setOtp(['', '', '', '', '', '']); setError('') }}
-                  className="text-sm text-gray-500 hover:text-BATAMART-primary transition-colors"
-                &gt;
-                  ← Change email
-                &lt;/button&gt;
-                &lt;button
-                  type="button"
-                  onClick={handleSendOTP as any}
-                  className="text-sm text-BATAMART-primary hover:underline font-semibold"
-                &gt;
-                  Resend code
-                &lt;/button&gt;
-              &lt;/div&gt;
-            &lt;/div&gt;
-          )}
-
-          {/* Step 3 */}
-          {step === 3 &amp;&amp; (
-            &lt;form onSubmit={handleSetPassword} className="space-y-4"&gt;
-              &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;Create Password&lt;/label&gt;
-                &lt;input
-                  type="password"
-                  value={password}
-                  onChange={(e) =&gt; setPassword(e.target.value)}
+                  type="tel"
+                  value={phone}
+                  onChange={e =&gt; setPhone(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                  placeholder="Min 8 characters, include a number"
-                /&gt;
-              &lt;/div&gt;
-              &lt;div&gt;
-                &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;Confirm Password&lt;/label&gt;
-                &lt;input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) =&gt; setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                  placeholder="Repeat your password"
+                  placeholder="08012345678"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 /&gt;
               &lt;/div&gt;
 
-              {wantToSell &amp;&amp; (
-                &lt;div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700 font-medium"&gt;
-                  ✅ Signing up as a Seller — You can set your withdrawal PIN after signup.
-                &lt;/div&gt;
-              )}
-
-              &lt;label className="flex items-start gap-3 cursor-pointer"&gt;
+              &lt;div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl"&gt;
                 &lt;input
                   type="checkbox"
-                  checked={agreedToTerms}
-                  onChange={(e) =&gt; setAgreedToTerms(e.target.checked)}
-                  className="mt-0.5 h-5 w-5 flex-shrink-0 text-BATAMART-primary focus:ring-BATAMART-primary border-gray-300 rounded cursor-pointer"
+                  id="wantToSell"
+                  checked={wantToSell}
+                  onChange={e =&gt; setWantToSell(e.target.checked)}
+                  className="w-4 h-4 rounded accent-blue-600"
                 /&gt;
-                &lt;span className="text-sm text-gray-600"&gt;
-                  I have read and agree to BATAMART's{' '}
-                  &lt;Link href="/terms/buyers" className="text-BATAMART-primary hover:underline font-semibold"&gt;
-                    Terms &amp; Conditions
-                  &lt;/Link&gt;
-                  {' '}and{' '}
-                  &lt;Link href="/privacy" className="text-BATAMART-primary hover:underline font-semibold"&gt;
-                    Privacy Policy
-                  &lt;/Link&gt;
-                &lt;/span&gt;
-              &lt;/label&gt;
-
-              {error &amp;&amp; &lt;p className="text-red-500 text-sm font-medium"&gt;{error}&lt;/p&gt;}
+                &lt;label htmlFor="wantToSell" className="text-sm text-gray-700"&gt;
+                  I also want to sell on {selectedUniversity?.shortName}
+                &lt;/label&gt;
+              &lt;/div&gt;
 
               &lt;button
                 type="submit"
-                disabled={loading || !agreedToTerms}
-                className="w-full py-3.5 text-white font-bold rounded-lg transition disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+                disabled={loading}
+                className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
               &gt;
-                {loading
-                  ? 'Creating account...'
-                  : wantToSell
-                    ? '🎉 Create Seller Account'
-                    : 'Complete Signup'}
+                {loading ? 'Sending OTP…' : 'Continue →'}
               &lt;/button&gt;
-
-              {!agreedToTerms &amp;&amp; (
-                &lt;p className="text-xs text-amber-600 text-center"&gt;
-                  Please agree to the Terms &amp; Conditions to continue
-                &lt;/p&gt;
-              )}
             &lt;/form&gt;
+
+            &lt;button onClick={() =&gt; setStep(0)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
+              ← Change campus
+            &lt;/button&gt;
+
+            &lt;p className="text-center text-sm text-gray-500 mt-4"&gt;
+              Already have an account?{' '}
+              &lt;Link href="/login" className="font-semibold text-blue-600"&gt;Sign in&lt;/Link&gt;
+            &lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    )
+  }
+
+  // ════════════════════════════════════════════════════════
+  // STEP 2 — OTP verification
+  // ════════════════════════════════════════════════════════
+  if (step === 2) {
+    return (
+      &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
+        &lt;div className="w-full max-w-md"&gt;
+          &lt;div className="text-center mb-8"&gt;
+            &lt;h1 className="text-3xl font-black text-white"&gt;BATAMART&lt;/h1&gt;
+          &lt;/div&gt;
+          &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+            &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Verify your email&lt;/h2&gt;
+            &lt;p className="text-sm text-gray-500 mb-6"&gt;Enter the 6-digit code sent to &lt;strong&gt;{email}&lt;/strong&gt;&lt;/p&gt;
+
+            {error &amp;&amp; (
+              &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;{error}&lt;/div&gt;
+            )}
+
+            &lt;div className="flex justify-center gap-2 mb-6"&gt;
+              {otp.map((digit, i) =&gt; (
+                &lt;input
+                  key={i}
+                  id={`otp-${i}`}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e =&gt; handleOtpChange(i, e.target.value)}
+                  onKeyDown={e =&gt; handleKeyDown(i, e)}
+                  className="w-12 h-12 text-center text-xl font-bold border-2 rounded-xl outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                /&gt;
+              ))}
+            &lt;/div&gt;
+
+            &lt;button
+              onClick={handleVerifyOTP}
+              disabled={loading || otp.join('').length !== 6}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
+            &gt;
+              {loading ? 'Verifying…' : 'Verify Code'}
+            &lt;/button&gt;
+
+            &lt;button onClick={() =&gt; setStep(1)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
+              ← Back
+            &lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    )
+  }
+
+  // ════════════════════════════════════════════════════════
+  // STEP 3 — Password + terms
+  // ════════════════════════════════════════════════════════
+  return (
+    &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+      style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
+      &lt;div className="w-full max-w-md"&gt;
+        &lt;div className="text-center mb-8"&gt;
+          &lt;h1 className="text-3xl font-black text-white"&gt;BATAMART&lt;/h1&gt;
+          &lt;div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30"&gt;
+            &lt;MapPin className="w-3.5 h-3.5 text-blue-300" /&gt;
+            &lt;span className="text-blue-300 text-xs font-semibold"&gt;{selectedUniversity?.shortName}&lt;/span&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+          &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Set your password&lt;/h2&gt;
+          &lt;p className="text-sm text-gray-500 mb-6"&gt;Almost done, {name}!&lt;/p&gt;
+
+          {error &amp;&amp; (
+            &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;{error}&lt;/div&gt;
           )}
 
-          &lt;p className="text-center text-sm text-gray-500 pt-2"&gt;
-            Already have an account?{' '}
-            &lt;Link href="/login" className="text-BATAMART-primary font-semibold hover:underline"&gt;
-              Login
-            &lt;/Link&gt;
-          &lt;/p&gt;
+          &lt;form onSubmit={handleSignup} className="space-y-4"&gt;
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Password&lt;/label&gt;
+              &lt;input
+                type="password"
+                value={password}
+                onChange={e =&gt; setPassword(e.target.value)}
+                required
+                placeholder="Min 8 characters, include a number"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              /&gt;
+            &lt;/div&gt;
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Confirm Password&lt;/label&gt;
+              &lt;input
+                type="password"
+                value={confirmPassword}
+                onChange={e =&gt; setConfirmPassword(e.target.value)}
+                required
+                placeholder="Repeat password"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              /&gt;
+            &lt;/div&gt;
+
+            {referralCode &amp;&amp; (
+              &lt;div className="p-3 bg-green-50 rounded-xl border border-green-100 text-sm text-green-700"&gt;
+                🎁 Referral code &lt;strong&gt;{referralCode}&lt;/strong&gt; applied
+              &lt;/div&gt;
+            )}
+
+            &lt;div className="flex items-start gap-2 p-3 bg-gray-50 rounded-xl"&gt;
+              &lt;input
+                type="checkbox"
+                id="terms"
+                checked={agreedToTerms}
+                onChange={e =&gt; setAgreedToTerms(e.target.checked)}
+                className="w-4 h-4 rounded accent-blue-600 mt-0.5"
+              /&gt;
+              &lt;label htmlFor="terms" className="text-sm text-gray-700"&gt;
+                I agree to the{' '}
+                &lt;Link href="/terms" className="text-blue-600 font-semibold"&gt;Terms of Service&lt;/Link&gt;
+                {' '}and{' '}
+                &lt;Link href="/privacy" className="text-blue-600 font-semibold"&gt;Privacy Policy&lt;/Link&gt;
+              &lt;/label&gt;
+            &lt;/div&gt;
+
+            &lt;button
+              type="submit"
+              disabled={loading || !agreedToTerms}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
+            &gt;
+              {loading ? 'Creating account…' : `Join ${selectedUniversity?.shortName} 🎉`}
+            &lt;/button&gt;
+          &lt;/form&gt;
         &lt;/div&gt;
       &lt;/div&gt;
     &lt;/div&gt;
@@ -4595,8 +4673,9 @@ function SignupForm() {
 export default function SignupPage() {
   return (
     &lt;Suspense fallback={
-      &lt;div className="min-h-screen flex items-center justify-center"&gt;
-        &lt;div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent" /&gt;
+      &lt;div className="min-h-screen flex items-center justify-center"
+        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
+        &lt;div className="text-white text-xl font-bold"&gt;Loading…&lt;/div&gt;
       &lt;/div&gt;
     }&gt;
       &lt;SignupForm /&gt;
@@ -12661,7 +12740,7 @@ export default function PrivacyPage() {
               👶 Children's Privacy
             &lt;/h2&gt;
             &lt;p className="text-gray-700 leading-relaxed"&gt;
-              BATAMART is intended for UNIZIK students aged 18 and above. We do not knowingly collect
+              BATAMART is intended for University students aged 18 and above. We do not knowingly collect
               information from individuals under 18. If we discover we have collected data from someone
               under 18, we will delete it promptly.
             &lt;/p&gt;
@@ -12729,7 +12808,7 @@ export default function TermsPage() {
     {
       icon: ShieldCheck,
       title: "Eligibility",
-      content: "BATAMART is exclusively for verified students of Nnamdi Azikiwe University (UNIZIK). You must be at least 18 years old to use this platform. You are responsible for providing accurate student verification information."
+      content: "BATAMART is exclusively for verified students of University. You must be at least 18 years old to use this platform. You are responsible for providing accurate student verification information."
     }
   ]
 
@@ -12840,7 +12919,7 @@ export default function TermsPage() {
             &lt;/h2&gt;
             &lt;p className="text-gray-700 leading-relaxed"&gt;
               These Terms of Service ("Terms") govern your use of BATAMART, the student-to-student
-              marketplace platform for Nnamdi Azikiwe University (UNIZIK) students. By creating
+              marketplace platform for University students. By creating
               an account or using our services, you enter into a legally binding agreement with us.
             &lt;/p&gt;
           &lt;/div&gt;
@@ -19495,7 +19574,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/me/route.ts</div><pre>import { NextRequest, NextResponse } from 'next/server'
+<div class='file-block'><div class='file-header'>app/api/auth/me/route.ts</div><pre>// app/api/auth/me/route.ts
+import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -19503,7 +19583,6 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    // ── 1. Extract &amp; verify token ──────────────────────────────────────────
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19515,36 +19594,48 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ── 2. Fetch user ──────────────────────────────────────────────────────
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
-        id: true,
-        name: true,
-        phone: true,
-        email: true,
-        matricNumber: true,
-        profilePhoto: true,
-        role: true,
-        isSellerMode: true,
-        hostelName: true,
-        roomNumber: true,
-        landmark: true,
-        trustLevel: true,
-        avgRating: true,
-        totalReviews: true,
-        completedOrders: true,
+        id:             true,
+        name:           true,
+        phone:          true,
+        email:          true,
+        matricNumber:   true,
+        profilePhoto:   true,
+        role:           true,
+        isSellerMode:   true,
+        hostelName:     true,
+        roomNumber:     true,
+        landmark:       true,
+        trustLevel:     true,
+        avgRating:      true,
+        totalReviews:   true,
+        completedOrders:true,
         pendingBalance: true,
-        availableBalance: true,
-        penaltyPoints: true,
-        isSuspended: true,
+        availableBalance:true,
+        penaltyPoints:  true,
+        isSuspended:    true,
         suspendedUntil: true,
-        suspensionReason: true,
-        isRiderVerified: true,
-        isAvailable: true,
-        withdrawalPin: true,
-        createdAt: true,
-        updatedAt: true,
+        suspensionReason:true,
+        isRiderVerified:true,
+        isAvailable:    true,
+        withdrawalPin:  true,
+        createdAt:      true,
+        updatedAt:      true,
+        // ── University ────────────────────────────────────────────────────
+        universityId:   true,
+        university: {
+          select: {
+            id:            true,
+            name:          true,
+            shortName:     true,
+            slug:          true,
+            location:      true,
+            deliveryAreas: true,
+            hostels:       true,
+          },
+        },
       },
     })
 
@@ -19552,58 +19643,59 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ── 3. Auto-lift expired suspension ───────────────────────────────────
+    // Auto-lift expired suspension
     if (user.isSuspended &amp;&amp; user.suspendedUntil &amp;&amp; new Date(user.suspendedUntil) &lt; new Date()) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { isSuspended: false, suspendedUntil: null, suspensionReason: null },
+        data:  { isSuspended: false, suspendedUntil: null, suspensionReason: null },
       })
-      user.isSuspended = false
-      user.suspendedUntil = null
+      user.isSuspended     = false
+      user.suspendedUntil  = null
       user.suspensionReason = null
     }
 
-    // ── 4. Return 403 for suspended users ─────────────────────────────────
     if (user.isSuspended) {
       return NextResponse.json(
         {
-          error: 'Account suspended',
+          error:     'Account suspended',
           suspended: true,
-          reason: user.suspensionReason ?? 'Violation of platform terms',
-          until: user.suspendedUntil,
+          reason:    user.suspensionReason ?? 'Violation of platform terms',
+          until:     user.suspendedUntil,
         },
         { status: 403 }
       )
     }
 
-    // ── 5. Normal response ─────────────────────────────────────────────────
     return NextResponse.json({
       user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        matricNumber: user.matricNumber,
-        profilePhoto: user.profilePhoto,
-        role: user.role,
-        isSellerMode: user.isSellerMode,
-        hostelName: user.hostelName,
-        roomNumber: user.roomNumber,
-        landmark: user.landmark,
-        trustLevel: user.trustLevel,
-        rating: user.avgRating,
-        totalRatings: user.totalReviews,
+        id:              user.id,
+        name:            user.name,
+        phone:           user.phone,
+        email:           user.email,
+        matricNumber:    user.matricNumber,
+        profilePhoto:    user.profilePhoto,
+        role:            user.role,
+        isSellerMode:    user.isSellerMode,
+        hostelName:      user.hostelName,
+        roomNumber:      user.roomNumber,
+        landmark:        user.landmark,
+        trustLevel:      user.trustLevel,
+        rating:          user.avgRating,
+        totalRatings:    user.totalReviews,
         completedOrders: user.completedOrders,
-        pendingBalance: user.pendingBalance,
-        availableBalance: user.availableBalance,
-        penaltyPoints: user.penaltyPoints,
-        isSuspended: user.isSuspended,
-        suspendedUntil: user.suspendedUntil,
+        pendingBalance:  user.pendingBalance,
+        availableBalance:user.availableBalance,
+        penaltyPoints:   user.penaltyPoints,
+        isSuspended:     user.isSuspended,
+        suspendedUntil:  user.suspendedUntil,
         isRiderVerified: user.isRiderVerified,
-        isAvailable: user.isAvailable,
-        hasWithdrawalPin: !!user.withdrawalPin,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        isAvailable:     user.isAvailable,
+        hasWithdrawalPin:!!user.withdrawalPin,
+        createdAt:       user.createdAt,
+        updatedAt:       user.updatedAt,
+        // ── University ─────────────────────────────────────────────────────
+        universityId:    user.universityId,
+        university:      user.university,
       },
     })
   } catch (error) {
@@ -19830,11 +19922,16 @@ import { verifyOtpSessionToken } from '@/app/api/auth/verify-otp/route'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, password, otpSessionToken, role, phone, referralCode } = body
+    const { email, name, password, otpSessionToken, role, phone, referralCode, universityId } = body
 
     // ── Field presence check ───────────────────────────────────────────────
     if (!email || !otpSessionToken || !password || !name || !phone) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // ── University required ────────────────────────────────────────────────
+    if (!universityId) {
+      return NextResponse.json({ error: 'Please select your university or campus area' }, { status: 400 })
     }
 
     // ── Input length guards ────────────────────────────────────────────────
@@ -19846,10 +19943,6 @@ export async function POST(request: NextRequest) {
     }
 
     // ── OTP session token verification ────────────────────────────────────
-    // The /verify-otp route issued this token after the user's OTP was confirmed.
-    // It contains the exact identifier (email) that was verified. We check that
-    // the email in the token matches the email the user is trying to sign up with,
-    // so it's impossible to verify OTP for email A then create an account for email B.
     const verifiedIdentifier = verifyOtpSessionToken(otpSessionToken)
 
     if (!verifiedIdentifier) {
@@ -19859,12 +19952,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalise both to lowercase for comparison
     if (verifiedIdentifier.toLowerCase() !== email.toLowerCase()) {
       return NextResponse.json(
         { error: 'Email does not match the verified address. Please restart the signup flow.' },
         { status: 400 }
       )
+    }
+
+    // ── Validate university exists ─────────────────────────────────────────
+    const university = await prisma.university.findUnique({
+      where:  { id: universityId },
+      select: { id: true, isActive: true, name: true, shortName: true },
+    })
+
+    if (!university || !university.isActive) {
+      return NextResponse.json({ error: 'Selected university is not available' }, { status: 400 })
     }
 
     // ── Duplicate account check ────────────────────────────────────────────
@@ -19885,13 +19987,12 @@ export async function POST(request: NextRequest) {
 
     if (referralCode &amp;&amp; typeof referralCode === 'string') {
       const referrer = await prisma.user.findUnique({
-        where: { referralCode: referralCode.trim().toUpperCase() },
+        where:  { referralCode: referralCode.trim().toUpperCase() },
         select: { id: true },
       })
       if (referrer) {
         referredById = referrer.id
       }
-      // If code not found, silently ignore — don't block signup
     }
 
     const hashedPassword  = await hashPassword(password)
@@ -19905,6 +20006,7 @@ export async function POST(request: NextRequest) {
         password:     hashedPassword,
         role:         role || 'BUYER',
         referralCode: newReferralCode,
+        universityId: university.id,
         ...(referredById ? { referredById } : {}),
       },
     })
@@ -19922,6 +20024,8 @@ export async function POST(request: NextRequest) {
         role:         user.role,
         hostelName:   user.hostelName,
         referralCode: user.referralCode,
+        universityId: user.universityId,
+        university:   { name: university.name, shortName: university.shortName },
       },
     })
   } catch (error) {
@@ -22252,12 +22356,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 
-// Maximum products returned per page — prevents returning thousands of rows
 const DEFAULT_PAGE_SIZE = 40
 const MAX_PAGE_SIZE     = 100
 
 export async function GET(request: NextRequest) {
   try {
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!user.universityId) {
+      return NextResponse.json(
+        { error: 'No university associated with your account. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const hostel   = searchParams.get('hostel')
@@ -22265,7 +22380,6 @@ export async function GET(request: NextRequest) {
     const maxPrice = searchParams.get('maxPrice')
     const search   = searchParams.get('search')
 
-    // ── Pagination ─────────────────────────────────────────────────────────
     const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
     const limit = Math.min(
       MAX_PAGE_SIZE,
@@ -22274,9 +22388,10 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     const where: any = {
-      isActive:  true,
-      quantity:  { gt: 0 },
-      isDeleted: false,
+      isActive:     true,
+      quantity:     { gt: 0 },
+      isDeleted:    false,
+      universityId: user.universityId,
     }
 
     if (category &amp;&amp; category !== 'All') {
@@ -22293,9 +22408,8 @@ export async function GET(request: NextRequest) {
       if (maxPrice) where.price.lte = parseFloat(maxPrice)
     }
 
-    // Server-side keyword search across name, category, description
     if (search &amp;&amp; search.trim()) {
-      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean) // cap search length
+      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean)
       where.AND = tokens.map((token: string) =&gt; ({
         OR: [
           { name:        { contains: token, mode: 'insensitive' } },
@@ -22311,11 +22425,11 @@ export async function GET(request: NextRequest) {
         include: {
           seller: {
             select: {
-              id:             true,
-              name:           true,
-              avgRating:      true,
-              trustLevel:     true,
-              completedOrders:true,
+              id:              true,
+              name:            true,
+              avgRating:       true,
+              trustLevel:      true,
+              completedOrders: true,
             },
           },
         },
@@ -22327,13 +22441,13 @@ export async function GET(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      success:  true,
+      success: true,
       products,
-      count:    products.length,
+      count:   products.length,
       total,
       page,
-      pages:    Math.ceil(total / limit),
-      hasMore:  skip + products.length &lt; total,
+      pages:   Math.ceil(total / limit),
+      hasMore: skip + products.length &lt; total,
     })
   } catch (error) {
     console.error('Fetch products error:', error)
@@ -22348,55 +22462,57 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (user.role !== 'SELLER' &amp;&amp; user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Only sellers can list products.' }, { status: 403 })
+    if (!user.universityId) {
+      return NextResponse.json(
+        { error: 'No university associated with your account.' },
+        { status: 403 }
+      )
     }
 
     const body = await request.json()
-    const { name, description, price, images, category, quantity, hostelName, roomNumber, landmark } = body
+    const {
+      name,
+      description,
+      price,
+      category,
+      quantity,
+      images,
+      hostelName,
+      roomNumber,
+      landmark,
+    } = body
 
-    // ── Required field checks ──────────────────────────────────────────────
-    if (!name || !description || !price || !images || images.length === 0) {
+    if (!name || !price || !category || !quantity) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-    if (price &lt;= 0)          return NextResponse.json({ error: 'Price must be greater than 0' }, { status: 400 })
-    if (!quantity || quantity &lt; 1) return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 })
-    if (!category)           return NextResponse.json({ error: 'Please select a category' }, { status: 400 })
 
-    // ── Length limits — prevent DB bloat and abuse ─────────────────────────
-    if (String(name).trim().length &gt; 120) {
-      return NextResponse.json({ error: 'Product name must be under 120 characters' }, { status: 400 })
+    if (typeof price !== 'number' || price &lt;= 0) {
+      return NextResponse.json({ error: 'Invalid price' }, { status: 400 })
     }
-    if (String(description).trim().length &gt; 2000) {
-      return NextResponse.json({ error: 'Description must be under 2,000 characters' }, { status: 400 })
-    }
-    if (!Array.isArray(images) || images.length &gt; 5) {
-      return NextResponse.json({ error: 'Maximum 5 images allowed' }, { status: 400 })
-    }
-    if (parseFloat(price) &gt; 1_000_000) {
-      return NextResponse.json({ error: 'Price cannot exceed ₦1,000,000' }, { status: 400 })
-    }
-    if (parseInt(quantity) &gt; 10_000) {
-      return NextResponse.json({ error: 'Quantity cannot exceed 10,000' }, { status: 400 })
+
+    if (typeof quantity !== 'number' || quantity &lt; 1) {
+      return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 })
     }
 
     const product = await prisma.product.create({
       data: {
-        name:        name.trim(),
-        description: description.trim(),
-        price:       parseFloat(price),
-        images,
-        category,
-        quantity:    parseInt(quantity),
-        hostelName:  hostelName  || user.hostelName  || '',
-        roomNumber:  roomNumber  || user.roomNumber  || '',
-        landmark:    landmark    || user.landmark    || '',
-        sellerId:    user.id,
-        isActive:    true,
+        name:        String(name).trim().substring(0, 200),
+        description: description ? String(description).trim().substring(0, 2000) : '',
+        price:       Number(price),
+        category:    String(category),
+        quantity:    Number(quantity),
+        images:      Array.isArray(images) ? images : [],
+        seller:      { connect: { id: user.id } },
+        // ── location: prefer body values, fall back to seller's profile ────
+        hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
+        roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
+        landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
+        // ── scope to seller's university via relation connect ─────────────
+        university:  { connect: { id: user.universityId } },
       },
     })
 
-    return NextResponse.json({ success: true, product })
+    return NextResponse.json({ success: true, product }, { status: 201 })
   } catch (error) {
     console.error('Create product error:', error)
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
@@ -23209,9 +23325,9 @@ export async function POST(request: NextRequest) {
     // ── Block if rider has a pending dispute pickup ───────────────────────
     const pendingDisputePickup = await prisma.order.findFirst({
       where: {
-        riderId: user.id,
+        riderId:    user.id,
         isDisputed: true,
-        status: 'RIDER_ASSIGNED',
+        status:     'RIDER_ASSIGNED',
         dispute: {
           resolution: '__AWAITING_PICKUP__',
         },
@@ -23221,7 +23337,7 @@ export async function POST(request: NextRequest) {
 
     if (pendingDisputePickup) {
       return NextResponse.json({
-        error: `You have a pending dispute pickup (Order #${pendingDisputePickup.orderNumber}). You must complete that return first before accepting new orders.`,
+        error:       `You have a pending dispute pickup (Order #${pendingDisputePickup.orderNumber}). Complete that return first.`,
         blockReason: 'DISPUTE_PICKUP_PENDING',
       }, { status: 400 })
     }
@@ -23230,9 +23346,7 @@ export async function POST(request: NextRequest) {
     const activeDelivery = await prisma.order.findFirst({
       where: {
         riderId: user.id,
-        status: {
-          in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'],
-        },
+        status:  { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] },
         isDisputed: false,
       },
       select: { orderNumber: true, status: true },
@@ -23240,19 +23354,32 @@ export async function POST(request: NextRequest) {
 
     if (activeDelivery) {
       return NextResponse.json({
-        error: `You still have an active delivery (Order #${activeDelivery.orderNumber} — ${activeDelivery.status.replace('_', ' ')}). Complete it before accepting a new order.`,
+        error:       `You still have an active delivery (Order #${activeDelivery.orderNumber} — ${activeDelivery.status.replace('_', ' ')}). Complete it first.`,
         blockReason: 'ACTIVE_DELIVERY',
       }, { status: 400 })
     }
 
     // ── Fetch order ───────────────────────────────────────────────────────
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { product: true, buyer: true, seller: true },
+      where:   { id: orderId },
+      include: {
+        product: true,
+        buyer:   { select: { name: true, phone: true, universityId: true } },
+        seller:  { select: { name: true, phone: true } },
+      },
     })
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    // ── University cross-check — rider can only take orders from same campus ─
+    // We check buyer's universityId as the authoritative scope on the order.
+    if (user.universityId &amp;&amp; order.buyer.universityId !== user.universityId) {
+      return NextResponse.json(
+        { error: 'This order is outside your campus area.' },
+        { status: 403 }
+      )
     }
 
     if (order.status !== 'PENDING') {
@@ -23265,44 +23392,42 @@ export async function POST(request: NextRequest) {
 
     const riderShare = 560
 
-    // ── Transaction ───────────────────────────────────────────────────────
     await prisma.$transaction(
       async (tx) =&gt; {
         await tx.order.update({
           where: { id: orderId },
           data: {
-            riderId: user.id,
-            status: 'RIDER_ASSIGNED',
+            riderId:         user.id,
+            status:          'RIDER_ASSIGNED',
             riderAssignedAt: new Date(),
           },
         })
 
         const rider = await tx.user.findUnique({
-          where: { id: user.id },
+          where:  { id: user.id },
           select: { pendingBalance: true },
         })
 
         await tx.transaction.create({
           data: {
-            userId: user.id,
-            type: 'ESCROW',
-            amount: riderShare,
-            description: `Escrow for delivery: ${order.product.name} (Order: ${order.orderNumber})`,
-            reference: `${order.orderNumber}-RIDER-ESCROW`,
+            userId:        user.id,
+            type:          'ESCROW',
+            amount:        riderShare,
+            description:   `Escrow for delivery: ${order.product.name} (Order: ${order.orderNumber})`,
+            reference:     `${order.orderNumber}-RIDER-ESCROW`,
             balanceBefore: rider?.pendingBalance || 0,
-            balanceAfter: (rider?.pendingBalance || 0) + riderShare,
+            balanceAfter:  (rider?.pendingBalance || 0) + riderShare,
           },
         })
 
         await tx.user.update({
           where: { id: user.id },
-          data: { pendingBalance: { increment: riderShare } },
+          data:  { pendingBalance: { increment: riderShare } },
         })
       },
       { timeout: 15000, maxWait: 20000 }
     )
 
-    // ── Notify buyer and seller ───────────────────────────────────────────
     Promise.allSettled([
       import('@/lib/notification').then(({ notifyRiderAssigned }) =&gt;
         notifyRiderAssigned(
@@ -23315,26 +23440,27 @@ export async function POST(request: NextRequest) {
         )
       ),
     ]).then(results =&gt; {
-      results.forEach((r) =&gt; {
+      results.forEach(r =&gt; {
         if (r.status === 'rejected') console.error('Rider assigned notification failed:', r.reason)
       })
     })
 
     return NextResponse.json({
-      success: true,
-      message: 'Order accepted successfully',
+      success:  true,
+      message:  'Order accepted successfully',
       riderFee: riderShare,
     })
   } catch (error) {
     console.error('Accept order error:', error)
     return NextResponse.json({
-      error: 'Failed to accept order',
+      error:   'Failed to accept order',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/available-orders/route.ts</div><pre>export const dynamic = 'force-dynamic'
-// app/api/riders/available-orders/route.ts
+<div class='file-block'><div class='file-header'>app/api/riders/available-orders/route.ts</div><pre>// app/api/riders/available-orders/route.ts
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -23346,55 +23472,59 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Regular pending orders (not disputed)
+    if (!user.universityId) {
+      return NextResponse.json({ orders: [], disputePickups: [] })
+    }
+
+    // ── Regular pending orders — scoped to rider's university ──────────────
+    // Orders inherit universityId from the buyer who placed them.
+    // A rider only sees orders from buyers in their own university.
     const orders = await prisma.order.findMany({
       where: {
-        status: 'PENDING',
-        riderId: null,
-        isDisputed: false,
+        status:      'PENDING',
+        riderId:     null,
+        isDisputed:  false,
+        buyer: {
+          universityId: user.universityId,
+        },
       },
       include: {
         product: true,
-        seller: { select: { name: true, phone: true } },
-        buyer:  { select: { name: true, phone: true } },
+        seller:  { select: { name: true, phone: true } },
+        buyer:   { select: { name: true, phone: true } },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    // Dispute pickup jobs assigned specifically to this rider
-    // These are orders that were disputed and admin sent THIS rider back to collect
+    // ── Dispute pickup jobs assigned specifically to this rider ────────────
     const disputePickups = await prisma.order.findMany({
       where: {
-        riderId: user.id,
+        riderId:    user.id,
         isDisputed: true,
-        status: 'RIDER_ASSIGNED',
+        status:     'RIDER_ASSIGNED',
         dispute: {
           resolution: '__AWAITING_PICKUP__',
         },
       },
       include: {
         product: true,
-        seller: { select: { name: true, phone: true } },
-        buyer:  { select: { name: true, phone: true } },
+        seller:  { select: { name: true, phone: true } },
+        buyer:   { select: { name: true, phone: true } },
         dispute: {
           select: {
-            id: true,
-            reason: true,
-            pickupAddress: true,
+            id:             true,
+            reason:         true,
+            pickupAddress:  true,
           },
         },
       },
     })
 
-    return NextResponse.json({
-      orders,
-      disputePickups, // separate array so dashboard can render them differently
-    })
+    return NextResponse.json({ orders, disputePickups })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
   }
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/riders/dispute-picked-up/route.ts</div><pre>// app/api/riders/dispute-picked-up/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -24182,14 +24312,35 @@ export async function GET() {
     }, { status: 500 })
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/test-push/route.ts</div><pre>import { NextResponse } from 'next/server'
+<div class='file-block'><div class='file-header'>app/api/universities/route.ts</div><pre>// app/api/universities/route.ts
+// Public route — no auth needed. Returns all active universities for signup dropdown.
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  return NextResponse.json({
-    vapidEmail: process.env.VAPID_EMAIL,
-    vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-    hasPrivateKey: !!process.env.VAPID_PRIVATE_KEY,
-  })
+  try {
+    const universities = await prisma.university.findMany({
+      where:   { isActive: true },
+      select: {
+        id:            true,
+        name:          true,
+        shortName:     true,
+        slug:          true,
+        location:      true,
+        deliveryAreas: true,
+        hostels:       true,
+      },
+      orderBy: { name: 'asc' },
+    })
+
+    return NextResponse.json({ universities })
+  } catch (error) {
+    console.error('Fetch universities error:', error)
+    return NextResponse.json({ error: 'Failed to fetch universities' }, { status: 500 })
+  }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/upload/route.ts</div><pre>// app/api/upload/route.ts
 export const dynamic = 'force-dynamic'
@@ -26606,31 +26757,32 @@ export const getUserFromRequest = async (request: Request) =&gt; {
   const user = await prisma.user.findUnique({
     where: { id: decoded.userId },
     select: {
-      id: true,
-      name: true,
-      phone: true,
-      email: true,
-      matricNumber: true,
-      profilePhoto: true,
-      role: true,
-      hostelName: true,
-      roomNumber: true,
-      landmark: true,
-      trustLevel: true,
-      avgRating: true,
-      totalReviews: true,
-      completedOrders: true,
-      pendingBalance: true,
+      id:               true,
+      name:             true,
+      phone:            true,
+      email:            true,
+      matricNumber:     true,
+      profilePhoto:     true,
+      role:             true,
+      hostelName:       true,
+      roomNumber:       true,
+      landmark:         true,
+      trustLevel:       true,
+      avgRating:        true,
+      totalReviews:     true,
+      completedOrders:  true,
+      pendingBalance:   true,
       availableBalance: true,
-      penaltyPoints: true,
-      isSuspended: true,
-      suspendedUntil: true,
+      penaltyPoints:    true,
+      isSuspended:      true,
+      suspendedUntil:   true,
       suspensionReason: true,
-      isRiderVerified: true,
-      isAvailable: true,
-      withdrawalPin: true,
-      createdAt: true,
-      updatedAt: true,
+      isRiderVerified:  true,
+      isAvailable:      true,
+      withdrawalPin:    true,
+      universityId:     true,   // ← this was the missing field
+      createdAt:        true,
+      updatedAt:        true,
     },
   })
 
@@ -27518,6 +27670,76 @@ export async function updateSellerStats(sellerId: string) {
     };
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>prisma/seed-universities.ts</div><pre>// prisma/seed-universities.ts
+// Run: npx tsx prisma/seed-universities.ts
+// This seeds the University table with UNIZIK data.
+// When you add more universities later, just add entries to the UNIVERSITIES array.
+
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+const UNIVERSITIES = [
+  {
+    name:         'Nnamdi Azikiwe University',
+    shortName:    'UNIZIK',
+    slug:         'unizik',
+    location:     'Awka, Anambra State',
+    isActive:     true,
+    deliveryAreas: [
+      'Aroma',
+      'Tempsite',
+      'Town Campus',
+      'Bus Stand',
+      'Zik Avenue',
+      'Unizik Junction',
+      'Ifite',
+      'Okpuno',
+      'Amawbia',
+      'Awka Town',
+    ],
+    hostels: [
+      'Python Hall',
+      'Cobra Hall',
+      'Bison Hall',
+      'Antelope Hall',
+      'Buffalo Hall',
+      'Impala Hall',
+      'Cheetah Hall',
+      'Leopard Hall',
+      'Lioness Hall',
+      'Panther Hall',
+      'Gazelle Hall',
+      'Zebra Hall',
+    ],
+  },
+]
+
+async function main() {
+  console.log('🌱 Seeding universities...')
+
+  for (const uni of UNIVERSITIES) {
+    const result = await prisma.university.upsert({
+      where:  { slug: uni.slug },
+      update: {
+        name:          uni.name,
+        shortName:     uni.shortName,
+        location:      uni.location,
+        isActive:      uni.isActive,
+        deliveryAreas: uni.deliveryAreas,
+        hostels:       uni.hostels,
+      },
+      create: uni,
+    })
+    console.log(`✅ ${result.shortName} (${result.id})`)
+  }
+
+  console.log('🎉 Done.')
+}
+
+main()
+  .catch((e) =&gt; { console.error(e); process.exit(1) })
+  .finally(() =&gt; prisma.$disconnect())</pre></div>
 <div class='file-block'><div class='file-header'>prisma/seed.ts</div><pre>// prisma/seed.ts
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
@@ -27615,13 +27837,15 @@ main()
 // ============================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+  schemas   = ["public"]
 }
 
 enum UserRole {
@@ -27629,6 +27853,8 @@ enum UserRole {
   SELLER
   RIDER
   ADMIN
+
+  @@schema("public")
 }
 
 enum TrustLevel {
@@ -27636,6 +27862,8 @@ enum TrustLevel {
   SILVER
   GOLD
   VERIFIED
+
+  @@schema("public")
 }
 
 enum OrderStatus {
@@ -27649,6 +27877,8 @@ enum OrderStatus {
   COMPLETED
   DISPUTED
   CANCELLED
+
+  @@schema("public")
 }
 
 enum TransactionType {
@@ -27657,11 +27887,15 @@ enum TransactionType {
   ESCROW
   WITHDRAWAL
   REFERRAL_REWARD
+
+  @@schema("public")
 }
 
 enum ReviewType {
   SELLER
   RIDER
+
+  @@schema("public")
 }
 
 enum ReportType {
@@ -27669,6 +27903,8 @@ enum ReportType {
   SELLER
   RIDER
   BUYER
+
+  @@schema("public")
 }
 
 enum ReportReason {
@@ -27681,6 +27917,8 @@ enum ReportReason {
   INAPPROPRIATE_CONTENT
   PAYMENT_ISSUE
   OTHER
+
+  @@schema("public")
 }
 
 enum ReportStatus {
@@ -27688,6 +27926,8 @@ enum ReportStatus {
   UNDER_REVIEW
   RESOLVED
   DISMISSED
+
+  @@schema("public")
 }
 
 enum DisputeStatus {
@@ -27697,6 +27937,8 @@ enum DisputeStatus {
   RESOLVED_SELLER_FAVOR
   RESOLVED_COMPROMISE
   DISMISSED
+
+  @@schema("public")
 }
 
 enum PenaltyAction {
@@ -27707,6 +27949,8 @@ enum PenaltyAction {
   TEMP_BAN_30DAYS
   PERMANENT_BAN
   TRUST_LEVEL_DOWNGRADE
+
+  @@schema("public")
 }
 
 enum NotificationType {
@@ -27739,8 +27983,9 @@ enum NotificationType {
   PAYMENT_RECEIVED
   REFERRAL_REWARD
 
-  // Added: used by the out-of-stock seller alert in payments/initialize
   STOCK_ALERT
+
+  @@schema("public")
 }
 
 enum SupportTicketStatus {
@@ -27748,6 +27993,8 @@ enum SupportTicketStatus {
   IN_REVIEW
   RESOLVED
   CLOSED
+
+  @@schema("public")
 }
 
 enum SupportTicketCategory {
@@ -27759,6 +28006,8 @@ enum SupportTicketCategory {
   RIDER_ISSUE
   BUG_REPORT
   OTHER
+
+  @@schema("public")
 }
 
 enum WithdrawalStatus {
@@ -27766,6 +28015,8 @@ enum WithdrawalStatus {
   PROCESSING
   COMPLETED
   REJECTED
+
+  @@schema("public")
 }
 
 enum PaymentStatus {
@@ -27774,6 +28025,8 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+
+  @@schema("public")
 }
 
 enum PaymentMethod {
@@ -27781,6 +28034,30 @@ enum PaymentMethod {
   BANK_TRANSFER
   WALLET
   ESCROW
+
+  @@schema("public")
+}
+
+model University {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  shortName   String  @unique
+  slug        String  @unique
+  location    String
+  isActive    Boolean @default(true)
+
+  deliveryAreas Json @default("[]")
+  hostels       Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  products Product[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@schema("public")
 }
 
 model User {
@@ -27801,36 +28078,32 @@ model User {
 
   bio String?
 
-  // Trust level and ratings
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
+
   trustLevel      TrustLevel @default(BRONZE)
   avgRating       Float      @default(0)
   totalReviews    Int        @default(0)
   completedOrders Int        @default(0)
 
-  // Penalty &amp; suspension
   penaltyPoints    Int       @default(0)
   isSuspended      Boolean   @default(false)
   suspendedUntil   DateTime?
   suspensionReason String?
 
-  // Withdrawal PIN
   withdrawalPin             String?
   withdrawalPinAttempts     Int       @default(0)
   withdrawalPinLockedUntil  DateTime?
 
-  // Dispute &amp; Safety fields
   warningCount  Int       @default(0)
   lastWarningAt DateTime?
 
-  // Wallet
   pendingBalance   Float @default(0)
   availableBalance Float @default(0)
 
-  // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  // Referral System
   referralCode             String          @unique
   referredById             String?
   referredBy               User?           @relation("UserReferrals", fields: [referredById], references: [id])
@@ -27838,7 +28111,6 @@ model User {
   referralRewardsEarned    ReferralReward[] @relation("ReferrerRewards")
   referralRewardsGenerated ReferralReward[] @relation("ReferredUserRewards")
 
-  // Relations
   products        Product[]
   orders          Order[]  @relation("BuyerOrders")
   sellerOrders    Order[]  @relation("SellerOrders")
@@ -27880,6 +28152,8 @@ model User {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([referralCode])
+  @@index([universityId])
+  @@schema("public")
 }
 
 model Product {
@@ -27897,6 +28171,9 @@ model Product {
 
   sellerId String
   seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
 
   isActive     Boolean @default(true)
   viewCount    Int     @default(0)
@@ -27920,6 +28197,8 @@ model Product {
   @@index([isActive])
   @@index([isDeleted])
   @@index([createdAt])
+  @@index([universityId])
+  @@schema("public")
 }
 
 model Order {
@@ -27981,6 +28260,7 @@ model Order {
   @@index([orderedAt])
   @@index([sellerId, status])
   @@index([riderId, status])
+  @@schema("public")
 }
 
 model Review {
@@ -28006,6 +28286,7 @@ model Review {
   @@index([revieweeId])
   @@index([reviewerId])
   @@unique([orderId, type, reviewerId])
+  @@schema("public")
 }
 
 model ProductReview {
@@ -28029,6 +28310,7 @@ model ProductReview {
   @@index([productId])
   @@index([reviewerId])
   @@unique([orderId, productId, reviewerId])
+  @@schema("public")
 }
 
 model OTP {
@@ -28043,6 +28325,7 @@ model OTP {
 
   @@index([phone])
   @@index([email])
+  @@schema("public")
 }
 
 model Payment {
@@ -28055,9 +28338,6 @@ model Payment {
   method PaymentMethod
   status PaymentStatus @default(PENDING)
 
-  // transactionId stores the Paystack reference.
-  // The unique index ensures one Paystack reference → one Payment record,
-  // which is how we prevent duplicate order creation if the callback fires twice.
   transactionId   String?  @unique
   gatewayResponse Json?
 
@@ -28073,6 +28353,7 @@ model Payment {
   @@index([status])
   @@index([transactionId])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Transaction {
@@ -28093,6 +28374,7 @@ model Transaction {
   @@index([userId])
   @@index([type])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model WithdrawalRequest {
@@ -28113,6 +28395,7 @@ model WithdrawalRequest {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Report {
@@ -28151,6 +28434,7 @@ model Report {
   @@index([reportedUserId])
   @@index([reportedProductId])
   @@index([status])
+  @@schema("public")
 }
 
 model Dispute {
@@ -28190,6 +28474,7 @@ model Dispute {
   @@index([buyerId])
   @@index([sellerId])
   @@index([status])
+  @@schema("public")
 }
 
 model DisputeMessage {
@@ -28206,6 +28491,7 @@ model DisputeMessage {
   createdAt DateTime @default(now())
 
   @@index([disputeId])
+  @@schema("public")
 }
 
 model Penalty {
@@ -28229,6 +28515,7 @@ model Penalty {
 
   @@index([userId])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Notification {
@@ -28258,6 +28545,7 @@ model Notification {
   @@index([isRead])
   @@index([createdAt])
   @@index([type])
+  @@schema("public")
 }
 
 model PushSubscription {
@@ -28271,6 +28559,7 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@schema("public")
 }
 
 model SupportTicket {
@@ -28293,6 +28582,7 @@ model SupportTicket {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@schema("public")
 }
 
 model Cart {
@@ -28304,6 +28594,7 @@ model Cart {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@schema("public")
 }
 
 model CartItem {
@@ -28319,6 +28610,7 @@ model CartItem {
   @@unique([cartId, productId])
   @@index([cartId])
   @@index([productId])
+  @@schema("public")
 }
 
 model AuditLog {
@@ -28340,6 +28632,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([action])
+  @@schema("public")
 }
 
 model ReferralReward {
@@ -28360,8 +28653,8 @@ model ReferralReward {
   @@index([referrerId])
   @@index([referredUserId])
   @@index([createdAt])
-}
-</pre></div>
+  @@schema("public")
+}</pre></div>
 <div class='file-block'><div class='file-header'>styles/cart-animations.css</div><pre>/* Add these to your global CSS file (globals.css or similar) */
 
 @keyframes slide-in {
