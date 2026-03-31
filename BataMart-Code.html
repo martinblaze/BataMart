@@ -1,4 +1,50 @@
-﻿<!DOCTYPE html><html><head><meta charset="UTF-8"><title>BataMart Code</title><style>body{margin:0;padding:20px;background:#1e1e1e;color:#d4d4d4;font-family:monospace;font-size:13px;line-height:1.6;}.file-block{margin-bottom:48px;}.file-header{background:#333;color:#9cdcfe;padding:8px 14px;font-weight:bold;font-size:13px;border-left:4px solid #569cd6;margin-bottom:0;}pre{margin:0;padding:16px;background:#252526;overflow-x:auto;white-space:pre-wrap;word-break:break-word;border:1px solid #333;}</style></head><body><div class='file-block'><div class='file-header'>app/layout.tsx</div><pre>import type { Metadata, Viewport } from 'next'
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>BataMart Code</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .file-block {
+      margin-bottom: 48px;
+    }
+
+    .file-header {
+      background: #333;
+      color: #9cdcfe;
+      padding: 8px 14px;
+      font-weight: bold;
+      font-size: 13px;
+      border-left: 4px solid #569cd6;
+      margin-bottom: 0;
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px;
+      background: #252526;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid #333;
+    }
+  </style>
+</head>
+
+<body>
+  <div class='file-block'>
+    <div class='file-header'>app/layout.tsx</div>
+    <pre>import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import '@/styles/globals.css'
 
@@ -171,8 +217,11 @@ export default function RootLayout({
       &lt;/body&gt;
     &lt;/html&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/page.tsx</div>
+    <pre>'use client'
 
 import Link from 'next/link'
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -949,8 +998,11 @@ export default function HomePage() {
       &lt;/div&gt;
     &lt;/&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/layout.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/layout.tsx</div>
+    <pre>'use client'
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -1107,8 +1159,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/page.tsx</div><pre>// app/(admin)/admin/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/page.tsx</div>
+    <pre>// app/(admin)/admin/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -1299,8 +1354,11 @@ export default function AdminDashboardPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/analytics/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/analytics/page.tsx</div>
+    <pre>'use client'
 // app/(admin)/admin/analytics/page.tsx
 
 import { useState, useEffect } from 'react'
@@ -1502,8 +1560,11 @@ function StatCard({
       {sub &amp;&amp; &lt;p className="text-gray-500 text-xs mt-1"&gt;{sub}&lt;/p&gt;}
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/disputes/page.tsx</div><pre>// app/(admin)/admin/disputes/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/disputes/page.tsx</div>
+    <pre>// app/(admin)/admin/disputes/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -1644,9 +1705,15 @@ export default function DisputesPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/disputes/[id]/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/products/page.tsx</div><pre>// app/(admin)/admin/products/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/disputes/[id]/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/products/page.tsx</div>
+    <pre>// app/(admin)/admin/products/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -1816,8 +1883,11 @@ export default function ProductsPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/reports/page.tsx</div><pre>// app/(admin)/admin/reports/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/reports/page.tsx</div>
+    <pre>// app/(admin)/admin/reports/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -1978,9 +2048,15 @@ export default function ReportsPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/reports/[id]/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/revenue/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/reports/[id]/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/revenue/page.tsx</div>
+    <pre>'use client'
 // app/(admin)/admin/revenue/page.tsx
 
 import { useState, useEffect } from 'react'
@@ -2261,8 +2337,11 @@ function ObligationCard({
       &lt;p className="text-xs text-gray-500 mt-3"&gt;⚠ Do NOT withdraw this from Paystack&lt;/p&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/support/page.tsx</div><pre>// app/(admin)/admin/support/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/support/page.tsx</div>
+    <pre>// app/(admin)/admin/support/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -2527,8 +2606,11 @@ export default function AdminSupportPage() {
       )}
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin/users/page.tsx</div><pre>// app/(admin)/admin/users/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin/users/page.tsx</div>
+    <pre>// app/(admin)/admin/users/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -2909,8 +2991,11 @@ export default function UsersPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(admin)/admin-login/page.tsx</div><pre>// app/(admin)/admin-login/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(admin)/admin-login/page.tsx</div>
+    <pre>// app/(admin)/admin-login/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -3043,8 +3128,11 @@ export default function AdminLoginPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/forgot-password/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/forgot-password/page.tsx</div>
+    <pre>'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -3303,8 +3391,11 @@ export default function ForgotPasswordPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/login/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/login/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
@@ -3499,8 +3590,11 @@ function buildSuspensionMessage(reason: string | null, until: string | null): st
     month: 'long',
     year: 'numeric',
   })}.\n\nReason: ${reasonText}.`
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/profile/setup/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/profile/setup/page.tsx</div>
+    <pre>'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -3681,8 +3775,11 @@ export default function ProfileSetupPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/rider/login/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/rider/login/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
@@ -3843,8 +3940,11 @@ export default function RiderLoginPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/rider-signup/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/rider-signup/page.tsx</div>
+    <pre>'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -4164,8 +4264,11 @@ export default function RiderSignupPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/signup/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/signup/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
@@ -4681,8 +4784,11 @@ export default function SignupPage() {
       &lt;SignupForm /&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(auth)/verify/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(auth)/verify/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -4873,8 +4979,11 @@ export default function VerifyPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/become-seller/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/become-seller/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -5076,8 +5185,11 @@ export default function BecomeSellerPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/cart/page.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/cart/page.tsx</div>
+    <pre>'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -5324,8 +5436,11 @@ export default function CartPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/checkout/page.tsx</div><pre>// app/(marketplace)/checkout/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/checkout/page.tsx</div>
+    <pre>// app/(marketplace)/checkout/page.tsx
 // ── FIX #4: Delivery fee is no longer hardcoded on the client.
 //    The server returns the canonical deliveryFee inside the payment
 //    initialization response and we display that value. The client
@@ -5792,8 +5907,11 @@ export default function CheckoutPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/dispute/select-order/page.tsx</div><pre>// app/(marketplace)/rider-dashboard/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/dispute/select-order/page.tsx</div>
+    <pre>// app/(marketplace)/rider-dashboard/page.tsx
 // ── FIX #7 (race condition): acceptOrder uses authFetch which handles 409
 //    conflict responses from the server. The server must use a DB transaction
 //    to atomically check + assign the order, so only one rider wins.
@@ -6256,8 +6374,11 @@ export default function RiderDashboardPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/marketplace/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/marketplace/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
@@ -7001,8 +7122,11 @@ export default function MarketplacePage() {
 
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/my-shop/page.tsx</div><pre>// app/(marketplace)/my-shop/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/my-shop/page.tsx</div>
+    <pre>// app/(marketplace)/my-shop/page.tsx
 // ── FIX #10: Replaced all alert(), confirm() browser dialogs with:
 //   - Inline toast notifications for success/error feedback
 //   - A proper inline confirmation dialog for destructive actions (delete)
@@ -7561,8 +7685,11 @@ export default function MyShopPage() {
       )}
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/notifications/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/notifications/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect } from 'react'
 import { Bell, Trash2, Check, Filter } from 'lucide-react'
@@ -7899,8 +8026,11 @@ export default function NotificationsPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/orders/page.tsx</div><pre>// app/(marketplace)/orders/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/orders/page.tsx</div>
+    <pre>// app/(marketplace)/orders/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -8288,15 +8418,39 @@ export default function OrdersPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/dispute/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/review-product/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/review-seller/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/product/[id]/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/product/[id]/reviews/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/products/[productId]/reviews/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/referrals/page.tsx</div><pre>// app/(marketplace)/referrals/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/orders/[id]/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/orders/[id]/dispute/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/orders/[id]/review-product/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/orders/[id]/review-seller/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/product/[id]/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/product/[id]/reviews/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/products/[productId]/reviews/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/referrals/page.tsx</div>
+    <pre>// app/(marketplace)/referrals/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -8590,8 +8744,11 @@ export default function ReferralsPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/report/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/report/page.tsx</div>
+    <pre>'use client'
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -9042,8 +9199,11 @@ export default function ReportPage() {
             &lt;ReportFormContent /&gt;
         &lt;/Suspense&gt;
     )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/rider-dashboard/page.tsx</div><pre>// app/(marketplace)/rider-dashboard/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/rider-dashboard/page.tsx</div>
+    <pre>// app/(marketplace)/rider-dashboard/page.tsx
 // ── FIX #7 (race condition): acceptOrder uses authFetch which handles 409
 //    conflict responses from the server. The server must use a DB transaction
 //    to atomically check + assign the order, so only one rider wins.
@@ -9506,8 +9666,11 @@ export default function RiderDashboardPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/search/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/search/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -9855,8 +10018,11 @@ export default function SearchPageWrapper() {
       &lt;SearchPage /&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/sell/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/sell/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
@@ -10315,10 +10481,19 @@ export default function SellPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/seller/[id]/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/sellers/[sellerId]/reviews/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/(marketplace)/wallet/page.tsx</div><pre>// app/(marketplace)/wallet/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/seller/[id]/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/sellers/[sellerId]/reviews/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/(marketplace)/wallet/page.tsx</div>
+    <pre>// app/(marketplace)/wallet/page.tsx
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -11147,8 +11322,11 @@ export default function WalletPage() {
 
     &lt;/div&gt;
   )
-} </pre></div>
-<div class='file-block'><div class='file-header'>app/about/page.tsx</div><pre>import Link from 'next/link'
+} </pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/about/page.tsx</div>
+    <pre>import Link from 'next/link'
 import {
   ShoppingBag,
   Users,
@@ -11403,8 +11581,11 @@ export default function AboutPage() {
       &lt;/section&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/contact/page.tsx</div><pre>// app/contact/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/contact/page.tsx</div>
+    <pre>// app/contact/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -11547,7 +11728,7 @@ export default function ContactPage() {
             &lt;p className="text-gray-600"&gt;Choose your preferred way to reach us&lt;/p&gt;
           &lt;/div&gt;
           &lt;div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto"&gt;
-            &lt;a href="mailto:support@BATAMART-mart.com"
+            &lt;a href="mailto:support@BATAMART.com"
               className="bg-white p-8 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300 group"&gt;
               &lt;div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300"&gt;
                 &lt;Mail className="w-8 h-8 text-white" /&gt;
@@ -11555,7 +11736,7 @@ export default function ContactPage() {
               &lt;h3 className="text-2xl font-bold text-gray-900 mb-2"&gt;Email Support&lt;/h3&gt;
               &lt;p className="text-gray-600 mb-4"&gt;Get help via email&lt;/p&gt;
               &lt;div className="flex items-center justify-between"&gt;
-                &lt;span className="text-BATAMART-primary font-semibold text-lg"&gt;support@BATAMART-mart.com&lt;/span&gt;
+                &lt;span className="text-BATAMART-primary font-semibold text-lg"&gt;support@BATAMART.com&lt;/span&gt;
                 &lt;span className="text-BATAMART-primary group-hover:translate-x-2 transition-transform duration-300"&gt;→&lt;/span&gt;
               &lt;/div&gt;
             &lt;/a&gt;
@@ -11769,7 +11950,7 @@ export default function ContactPage() {
           &lt;h2 className="text-3xl md:text-4xl font-bold mb-6"&gt;Still Have Questions?&lt;/h2&gt;
           &lt;p className="text-xl mb-8 text-white/90"&gt;Don't hesitate to reach out. We're always happy to help UNIZIK students!&lt;/p&gt;
           &lt;div className="flex flex-col sm:flex-row gap-4 justify-center"&gt;
-            &lt;a href="mailto:support@BATAMART-mart.com"
+            &lt;a href="mailto:support@BATAMART.com"
               className="bg-white text-BATAMART-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2"&gt;
               &lt;Mail className="w-5 h-5" /&gt; Email Us
             &lt;/a&gt;
@@ -11783,9 +11964,15 @@ export default function ContactPage() {
 
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/disputes/[id]/page.tsx</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/myprofile/page.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/disputes/[id]/page.tsx</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/myprofile/page.tsx</div>
+    <pre>'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -12478,8 +12665,11 @@ function SearchHistory() {
       ))}
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/privacy/page.tsx</div><pre>import Link from 'next/link'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/privacy/page.tsx</div>
+    <pre>import Link from 'next/link'
 import { Shield, Eye, Lock, Database, UserCheck, Bell } from 'lucide-react'
 
 export default function PrivacyPage() {
@@ -12576,7 +12766,7 @@ export default function PrivacyPage() {
         },
         {
           subtitle: "Data Deletion",
-          text: "You can request deletion of your account and personal data by contacting us at support@BATAMART-mart.com. Some data may be retained for legal obligations."
+          text: "You can request deletion of your account and personal data by contacting us at support@BATAMART.com. Some data may be retained for legal obligations."
         },
         {
           subtitle: "Opt-Out",
@@ -12776,10 +12966,10 @@ export default function PrivacyPage() {
           &lt;/p&gt;
           &lt;div className="flex flex-col sm:flex-row gap-4 justify-center"&gt;
             &lt;a
-              href="mailto:support@BATAMART-mart.com"
+              href="mailto:support@BATAMART.com"
               className="bg-white text-BATAMART-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl"
             &gt;
-              Email: support@BATAMART-mart.com
+              Email: support@BATAMART.com
             &lt;/a&gt;
             &lt;Link
               href="/contact"
@@ -12792,8 +12982,11 @@ export default function PrivacyPage() {
       &lt;/section&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/terms/page.tsx</div><pre>import Link from 'next/link'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/terms/page.tsx</div>
+    <pre>import Link from 'next/link'
 import { FileText, AlertCircle, CheckCircle, XCircle, Scale, ShieldCheck } from 'lucide-react'
 
 export default function TermsPage() {
@@ -13138,10 +13331,10 @@ export default function TermsPage() {
           &lt;/p&gt;
           &lt;div className="flex flex-col sm:flex-row gap-4 justify-center"&gt;
             &lt;a
-              href="mailto:support@BATAMART-mart.com"
+              href="mailto:support@BATAMART.com"
               className="bg-white text-BATAMART-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl"
             &gt;
-              Email: support@BATAMART-mart.com
+              Email: support@BATAMART.com
             &lt;/a&gt;
             &lt;Link
               href="/contact"
@@ -13157,8 +13350,11 @@ export default function TermsPage() {
       &lt;/section&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/terms/sellers/page.tsx</div><pre>// app/terms/sellers/page.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/terms/sellers/page.tsx</div>
+    <pre>// app/terms/sellers/page.tsx
 import Link from 'next/link'
 
 export const metadata = {
@@ -13394,16 +13590,19 @@ export default function SellerTermsPage() {
 
         &lt;p className="text-center text-xs text-gray-400 mt-6 pb-8"&gt;
           Questions? Contact us at{' '}
-          &lt;a href="mailto:support@BATAMART-mart.com" className="hover:text-BATAMART-primary underline"&gt;
-            support@BATAMART-mart.com
+          &lt;a href="mailto:support@BATAMART.com" className="hover:text-BATAMART-primary underline"&gt;
+            support@BATAMART.com
           &lt;/a&gt;
         &lt;/p&gt;
 
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/InstallPrompt.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/InstallPrompt.tsx</div>
+    <pre>'use client'
 
 import { useEffect, useState } from 'react'
 
@@ -13545,8 +13744,11 @@ export default function InstallPrompt() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/IosInstallPrompt.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/IosInstallPrompt.tsx</div>
+    <pre>'use client'
 
 import { useEffect, useState } from 'react'
 
@@ -13742,8 +13944,11 @@ export default function IosInstallPrompt() {
       /&gt;
     &lt;/&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/PWARegister.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/PWARegister.tsx</div>
+    <pre>'use client'
 
 // components/PWARegister.tsx
 // Registers the service worker and sets up token message handler
@@ -13776,8 +13981,11 @@ export default function PWARegister() {
   }, [])
 
   return null
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/SplashScreen.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/SplashScreen.tsx</div>
+    <pre>'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
@@ -13947,8 +14155,11 @@ export default function SplashScreen() {
       &lt;/p&gt;
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/AppScrollFix.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/AppScrollFix.tsx</div>
+    <pre>'use client'
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -13983,8 +14194,11 @@ export function AppScrollFix({ children }: { children: React.ReactNode }) {
       &lt;AppScrollFixInner&gt;{children}&lt;/AppScrollFixInner&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/IOSAppShell.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/IOSAppShell.tsx</div>
+    <pre>'use client'
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -14062,8 +14276,11 @@ export function IOSAppShell({ children }: { children: React.ReactNode }) {
       &lt;IOSAppShellInner&gt;{children}&lt;/IOSAppShellInner&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/MobileNav.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/MobileNav.tsx</div>
+    <pre>'use client';
 
 import { X, Menu, Home, ShoppingBag, Package, Wallet, User, Settings, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -14202,8 +14419,11 @@ export function MobileBottomNav() {
       &lt;/div&gt;
     &lt;/nav&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/Navbar.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/Navbar.tsx</div>
+    <pre>'use client'
 
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
@@ -15259,8 +15479,11 @@ export function Navbar() {
       )}
     &lt;/nav&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/NavbarWrapper.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/NavbarWrapper.tsx</div>
+    <pre>'use client'
 
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Navbar } from '@/components/layout/Navbar'
@@ -15322,8 +15545,11 @@ export function NavbarWrapper() {
       &lt;NavbarContent /&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/NotificationBell.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/NotificationBell.tsx</div>
+    <pre>'use client'
 
 // components/layout/NotificationBell.tsx
 // Real-time notification bell with polling, mark-as-read, and delete.
@@ -15628,8 +15854,11 @@ export default function NotificationBell() {
       )}
     &lt;/div&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/OrderNotificationBanner.tsx</div><pre>// components/layout/OrderNotificationBanner.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/OrderNotificationBanner.tsx</div>
+    <pre>// components/layout/OrderNotificationBanner.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -15852,8 +16081,11 @@ export function OrderNotificationBanner({ postPayment = false }: Props) {
       &lt;/div&gt;
     &lt;/&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/SuspensionGuard.tsx</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/SuspensionGuard.tsx</div>
+    <pre>'use client'
 
 import { useSuspensionGuard } from '@/hooks/Usesuspensionguard'
 
@@ -15868,8 +16100,11 @@ export function SuspensionGuard() {
   useSuspensionGuard()
   return null
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>components/layout/ThemeProvider.tsx</div><pre>'use client'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/layout/ThemeProvider.tsx</div>
+    <pre>'use client'
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -15877,8 +16112,11 @@ type ThemeProviderProps = {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   return &lt;&gt;{children}&lt;/&gt;
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/reviews/ProductReviewModal.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/reviews/ProductReviewModal.tsx</div>
+    <pre>'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -16070,8 +16308,11 @@ export default function ProductReviewModal({
       &lt;/div&gt;
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/reviews/RatingBadge.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/reviews/RatingBadge.tsx</div>
+    <pre>'use client';
 
 import { Star, Shield } from 'lucide-react';
 
@@ -16144,8 +16385,11 @@ export default function RatingBadge({
       )}
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/reviews/ReviewList.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/reviews/ReviewList.tsx</div>
+    <pre>'use client';
 
 import { Star, User } from 'lucide-react';
 
@@ -16255,8 +16499,11 @@ export default function ReviewList({ reviews, emptyMessage }: ReviewListProps) {
       ))}
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/reviews/ReviewModal.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/reviews/ReviewModal.tsx</div>
+    <pre>'use client';
 
 import { useState } from 'react';
 import { X, Star } from 'lucide-react';
@@ -16437,8 +16684,11 @@ export default function ReviewModal({
       &lt;/div&gt;
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/reviews/ReviewStats.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/reviews/ReviewStats.tsx</div>
+    <pre>'use client';
 
 import { Star } from 'lucide-react';
 
@@ -16545,8 +16795,11 @@ export default function ReviewStats({
       &lt;/div&gt;
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/ui/button.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/ui/button.tsx</div>
+    <pre>'use client';
 
 import { Loader2 } from 'lucide-react';
 import { ButtonHTMLAttributes, forwardRef } from 'react';
@@ -16658,8 +16911,11 @@ export function ButtonGroup({ children, className }: { children: React.ReactNode
       {children}
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/ui/ErrorBoundary.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/ui/ErrorBoundary.tsx</div>
+    <pre>'use client';
 
 import { Component, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
@@ -16802,8 +17058,11 @@ export function EmptyState({
       )}
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/ui/LoadingSpinner.tsx</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/ui/LoadingSpinner.tsx</div>
+    <pre>'use client';
 
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16894,8 +17153,11 @@ export function LoadingTable({ rows = 5 }: { rows?: number }) {
       ))}
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>components/ui/ReferralCard.tsx</div><pre>// ============================================================
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/ui/ReferralCard.tsx</div>
+    <pre>// ============================================================
 // FILE 1: components/ui/ReferralCard.tsx
 // Drop this into myprofile/page.tsx — see usage note below
 // ============================================================
@@ -16995,8 +17257,11 @@ export function ReferralCard() {
     &lt;/div&gt;
   )
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>components/ui/Toast.tsx</div><pre>'use client';
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>components/ui/Toast.tsx</div>
+    <pre>'use client';
 
 import { create } from 'zustand';
 import { CheckCircle2, XCircle, AlertCircle, Info, X } from 'lucide-react';
@@ -17113,8 +17378,11 @@ export function ToastContainer() {
       ))}
     &lt;/div&gt;
   );
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/use-push-notifications.tsx</div><pre>// hooks/use-push-notifications.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/use-push-notifications.tsx</div>
+    <pre>// hooks/use-push-notifications.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -17436,8 +17704,11 @@ export function useNotificationEvents() {
     notifyDispute,
     notifyReview,
   };
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/usePushSubscription.tsx</div><pre>// hooks/usePushSubscription.tsx
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/usePushSubscription.tsx</div>
+    <pre>// hooks/usePushSubscription.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -17837,8 +18108,11 @@ export function NotificationPrompt() {
       &lt;/div&gt;
     &lt;/&gt;
   )
-}</pre></div>
-<div class='file-block'><div class='file-header'>create-admin.ts</div><pre>import { PrismaClient } from '@prisma/client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>create-admin.ts</div>
+    <pre>import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -17912,8 +18186,11 @@ async function createAdmin() {
   }
 }
 
-createAdmin();</pre></div>
-<div class='file-block'><div class='file-header'>middleware.ts</div><pre>// middleware.ts — place in project root, same level as /app
+createAdmin();</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>middleware.ts</div>
+    <pre>// middleware.ts — place in project root, same level as /app
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
@@ -17974,14 +18251,20 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: ['/admin/:path*'],
-}</pre></div>
-<div class='file-block'><div class='file-header'>next-env.d.ts</div><pre>/// &lt;reference types="next" /&gt;
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>next-env.d.ts</div>
+    <pre>/// &lt;reference types="next" /&gt;
 /// &lt;reference types="next/image-types/global" /&gt;
 
 // NOTE: This file should not be edited
 // see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
-</pre></div>
-<div class='file-block'><div class='file-header'>tailwind.config.ts</div><pre>/** @type {import('tailwindcss').Config} */
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>tailwind.config.ts</div>
+    <pre>/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
@@ -18137,8 +18420,11 @@ module.exports = {
       addUtilities(newUtilities);
     },
   ],
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/analytics/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/analytics/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -18252,8 +18538,11 @@ export async function GET(req: NextRequest) {
     console.error('Analytics fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/dashboard/stats/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/dashboard/stats/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/dashboard/stats/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -18328,8 +18617,11 @@ export async function GET(req: NextRequest) {
   }
 }
 
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/debug/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/debug/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/debug/route.ts
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
@@ -18364,8 +18656,11 @@ export async function GET() {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 } 
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/disputes/route.ts</div><pre>// app/api/admin/disputes/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/disputes/route.ts</div>
+    <pre>// app/api/admin/disputes/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
@@ -18486,11 +18781,23 @@ export async function GET(req: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/disputes/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/disputes/[id]/pickup/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/disputes/[id]/resolve/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/login/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/disputes/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/disputes/[id]/pickup/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/disputes/[id]/resolve/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/login/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/login/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
@@ -18570,8 +18877,11 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/me/route.ts</div><pre>// app/api/admin/me/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/me/route.ts</div>
+    <pre>// app/api/admin/me/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
@@ -18616,8 +18926,11 @@ export async function GET(req: NextRequest) {
     console.error('Admin auth error:', error)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/penalties/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/penalties/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/penalties/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -18842,8 +19155,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch penalties' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/products/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/products/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/products/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -18884,10 +19200,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/products/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/products/[id]/toggle/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/referrals/route.ts</div><pre>// app/api/admin/referrals/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/products/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/products/[id]/toggle/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/referrals/route.ts</div>
+    <pre>// app/api/admin/referrals/route.ts
 // Extends admin analytics with referral metrics
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18971,8 +19296,11 @@ export async function GET(request: NextRequest) {
     console.error('Admin referral analytics error:', error)
     return NextResponse.json({ error: 'Failed to fetch referral analytics' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/reports/route.ts</div><pre>// app/api/admin/reports/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/reports/route.ts</div>
+    <pre>// app/api/admin/reports/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
@@ -19051,10 +19379,19 @@ export async function GET(req: NextRequest) {
         console.error('Error fetching reports:', error)
         return NextResponse.json({ error: 'Failed to fetch reports' }, { status: 500 })
     }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/reports/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/reports/[id]/resolve/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/revenue/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/reports/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/reports/[id]/resolve/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/revenue/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/revenue/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -19303,8 +19640,11 @@ export async function GET(req: NextRequest) {
     console.error('Revenue fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch revenue' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/support/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/support/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/support/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -19340,9 +19680,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/support/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/users/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/support/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/users/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -19421,10 +19767,19 @@ export async function GET(req: NextRequest) {
     console.error('Admin users fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/users/[id]/suspend/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/admin/users/[id]/unsuspend/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/become-seller/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/users/[id]/suspend/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/admin/users/[id]/unsuspend/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/become-seller/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/auth/become-seller/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -19460,8 +19815,11 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/login-with-password/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/login-with-password/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/auth/login-with-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -19573,8 +19931,11 @@ export async function POST(request: NextRequest) {
     console.error('Login error:', error)
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/me/route.ts</div><pre>// app/api/auth/me/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/me/route.ts</div>
+    <pre>// app/api/auth/me/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
@@ -19702,8 +20063,11 @@ export async function GET(request: NextRequest) {
     console.error('Get user error:', error)
     return NextResponse.json({ error: 'Failed to get user' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/profile/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/profile/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -19754,8 +20118,11 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/reset-password/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/reset-password/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyOTP, hashPassword } from '@/lib/auth/auth'
@@ -19797,8 +20164,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/send-otp/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/send-otp/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOTP, sendEmailOTP } from '@/lib/auth/auth'
@@ -19910,8 +20280,11 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/signup-with-password/route.ts</div><pre>// app/api/auth/signup-with-password/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/signup-with-password/route.ts</div>
+    <pre>// app/api/auth/signup-with-password/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -20032,8 +20405,11 @@ export async function POST(request: NextRequest) {
     console.error('Signup error:', error)
     return NextResponse.json({ error: 'Signup failed' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/suspension-info/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/suspension-info/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/auth/suspension-info/route.ts
 //
 // Called by the login page when ?suspended=1 is in the URL.
@@ -20113,8 +20489,11 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     )
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/toggle-seller-mode/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/toggle-seller-mode/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -20154,8 +20533,11 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/update-profile/route.ts</div><pre>// app/api/auth/update-profile/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/update-profile/route.ts</div>
+    <pre>// app/api/auth/update-profile/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth/auth'
@@ -20213,8 +20595,11 @@ export async function PATCH(request: NextRequest) {
     console.error('Update profile error:', error)
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/auth/verify-otp/route.ts</div><pre>// app/api/auth/verify-otp/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/auth/verify-otp/route.ts</div>
+    <pre>// app/api/auth/verify-otp/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -20359,8 +20744,11 @@ export async function POST(request: NextRequest) {
     console.error('Verify OTP error:', error)
     return NextResponse.json({ error: 'Verification failed. Please try again.' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/disputes/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/disputes/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/disputes/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
@@ -20542,10 +20930,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create dispute' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/disputes/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/disputes/[id]/messages/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/notifications/route.ts</div><pre>// app/api/notifications/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/disputes/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/disputes/[id]/messages/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/notifications/route.ts</div>
+    <pre>// app/api/notifications/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -20702,8 +21099,11 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/orders/route.ts</div><pre>// app/api/orders/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/orders/route.ts</div>
+    <pre>// app/api/orders/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -20875,8 +21275,11 @@ export async function POST(request: NextRequest) {
     console.error('Create order error:', error)
     return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/orders/confirm-delivery/route.ts</div><pre>// app/api/orders/confirm-delivery/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/orders/confirm-delivery/route.ts</div>
+    <pre>// app/api/orders/confirm-delivery/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -21063,8 +21466,11 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/orders/my-orders/route.ts</div><pre>import { NextRequest, NextResponse } from 'next/server'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/orders/my-orders/route.ts</div>
+    <pre>import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 import { OrderStatus } from '@prisma/client'
@@ -21367,8 +21773,11 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/orders/seller-orders/route.ts</div><pre>// app/api/orders/seller-orders/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/orders/seller-orders/route.ts</div>
+    <pre>// app/api/orders/seller-orders/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
@@ -21456,9 +21865,15 @@ export async function GET(req: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/orders/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/payments/initialize/route.ts</div><pre>// app/api/payments/initialize/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/orders/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/payments/initialize/route.ts</div>
+    <pre>// app/api/payments/initialize/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
@@ -21955,8 +22370,11 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
   }
 
   await Promise.allSettled(tasks)
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/payments/verify/route.ts</div><pre>// app/api/payments/verify/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/payments/verify/route.ts</div>
+    <pre>// app/api/payments/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOrders, calculateFees } from '../initialize/route'
@@ -22348,8 +22766,11 @@ async function notifySellerOfNewOrder(
   }
 
   await Promise.allSettled(tasks)
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/products/route.ts</div><pre>// app/api/products/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/products/route.ts</div>
+    <pre>// app/api/products/route.ts
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22517,8 +22938,11 @@ export async function POST(request: NextRequest) {
     console.error('Create product error:', error)
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/products/my-products/route.ts</div><pre>// app/api/products/my-products/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/products/my-products/route.ts</div>
+    <pre>// app/api/products/my-products/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -22567,10 +22991,19 @@ export async function GET(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/products/[id]/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/products/[id]/restock/route.ts</div><pre>Could not read file.</pre></div>
-<div class='file-block'><div class='file-header'>app/api/push/subscribe/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/products/[id]/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/products/[id]/restock/route.ts</div>
+    <pre>Could not read file.</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/push/subscribe/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/push/subscribe/route.ts
 // Handles saving and deleting push subscriptions
 
@@ -22640,8 +23073,11 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to remove subscription' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/referrals/route.ts</div><pre>// app/api/referrals/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/referrals/route.ts</div>
+    <pre>// app/api/referrals/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -22722,8 +23158,11 @@ export async function GET(request: NextRequest) {
     console.error('Referral stats error:', error)
     return NextResponse.json({ error: 'Failed to fetch referral data' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/reports/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/reports/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/reports/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -22833,8 +23272,11 @@ export async function GET(req: NextRequest) {
     )
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/reviews/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/reviews/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/reviews/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
@@ -23055,8 +23497,11 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/reviews/product/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/reviews/product/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/reviews/product/route.ts - FULLY CORRECTED
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -23300,8 +23745,11 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/accept-order/route.ts</div><pre>// app/api/riders/accept-order/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/accept-order/route.ts</div>
+    <pre>// app/api/riders/accept-order/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -23457,8 +23905,11 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/available-orders/route.ts</div><pre>// app/api/riders/available-orders/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/available-orders/route.ts</div>
+    <pre>// app/api/riders/available-orders/route.ts
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -23524,8 +23975,11 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/dispute-picked-up/route.ts</div><pre>// app/api/riders/dispute-picked-up/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/dispute-picked-up/route.ts</div>
+    <pre>// app/api/riders/dispute-picked-up/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -23598,8 +24052,11 @@ export async function POST(request: NextRequest) {
     console.error('Dispute picked up error:', error)
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/login/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/login/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/riders/login/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -23659,8 +24116,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/my-deliveries/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/my-deliveries/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/riders/my-deliveries/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -23691,8 +24151,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch deliveries' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/register/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/register/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/riders/register/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -23801,8 +24264,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/toggle-availability/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/toggle-availability/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/riders/toggle-availability/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -23825,8 +24291,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to toggle availability' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/update-status/route.ts</div><pre>// app/api/riders/update-status/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/riders/update-status/route.ts</div>
+    <pre>// app/api/riders/update-status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -23936,8 +24405,11 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/sellers/update-stats/route.ts</div><pre>export const dynamic = 'force-dynamic'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/sellers/update-stats/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { TrustLevel, ReviewType } from '@prisma/client';
@@ -24057,15 +24529,18 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/support/contact/route.ts</div><pre>export const dynamic = 'force-dynamic'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/support/contact/route.ts</div>
+    <pre>export const dynamic = 'force-dynamic'
 // app/api/support/contact/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { sendEmail } from '@/lib/email/sendEmail'
 
-const ADMIN_EMAIL = 'support@BATAMART-mart.com'
+const ADMIN_EMAIL = 'support@BATAMART.com'
 
 const CATEGORY_LABELS: Record&lt;string, string&gt; = {
   PAYMENT_ISSUE: 'Payment Issue',
@@ -24223,7 +24698,7 @@ export async function POST(request: NextRequest) {
                     &lt;hr style="border:none;border-top:1px solid #f3f4f6;margin:24px 0;" /&gt;
                     &lt;p style="font-size:13px;color:#9ca3af;margin:0;"&gt;
                       If your issue is urgent, you can also reach us on WhatsApp.&lt;br/&gt;
-                      Please do not reply to this email — use &lt;strong&gt;support@BATAMART-mart.com&lt;/strong&gt; to follow up.
+                      Please do not reply to this email — use &lt;strong&gt;support@BATAMART.com&lt;/strong&gt; to follow up.
                     &lt;/p&gt;
                   &lt;/td&gt;
                 &lt;/tr&gt;
@@ -24250,8 +24725,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to send message. Please try again.' }, { status: 500 })
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>app/api/test-db-speed/route.ts</div><pre>// app/api/test-db-speed/route.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/test-db-speed/route.ts</div>
+    <pre>// app/api/test-db-speed/route.ts
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
@@ -24311,8 +24789,11 @@ export async function GET() {
       error: error instanceof Error ? error.message : String(error)
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/universities/route.ts</div><pre>// app/api/universities/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/universities/route.ts</div>
+    <pre>// app/api/universities/route.ts
 // Public route — no auth needed. Returns all active universities for signup dropdown.
 
 import { NextResponse } from 'next/server'
@@ -24341,8 +24822,11 @@ export async function GET() {
     console.error('Fetch universities error:', error)
     return NextResponse.json({ error: 'Failed to fetch universities' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/upload/route.ts</div><pre>// app/api/upload/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/upload/route.ts</div>
+    <pre>// app/api/upload/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -24448,8 +24932,11 @@ export async function POST(request: NextRequest) {
     console.error('Upload error:', error)
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/wallet/route.ts</div><pre>// app/api/wallet/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/wallet/route.ts</div>
+    <pre>// app/api/wallet/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -24519,8 +25006,11 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/wallet/reset-pin/route.ts</div><pre>// app/api/wallet/reset-pin/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/wallet/reset-pin/route.ts</div>
+    <pre>// app/api/wallet/reset-pin/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest, createOTP, sendEmailOTP } from '@/lib/auth/auth'
@@ -24572,8 +25062,11 @@ export async function POST(request: NextRequest) {
     console.error('[reset-pin]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/wallet/set-pin/route.ts</div><pre>// app/api/wallet/set-pin/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/wallet/set-pin/route.ts</div>
+    <pre>// app/api/wallet/set-pin/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest, verifyOTP } from '@/lib/auth/auth'
@@ -24712,8 +25205,11 @@ export async function POST(request: NextRequest) {
     console.error('[set-pin]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/wallet/transactions/route.ts</div><pre>// app/api/wallet/transactions/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/wallet/transactions/route.ts</div>
+    <pre>// app/api/wallet/transactions/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -24761,8 +25257,11 @@ export async function GET(request: NextRequest) {
       error: 'Failed to fetch transactions' 
     }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/wallet/verify-pin/route.ts</div><pre>// app/api/wallet/verify-pin/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/wallet/verify-pin/route.ts</div>
+    <pre>// app/api/wallet/verify-pin/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -24859,8 +25358,11 @@ export async function POST(request: NextRequest) {
     console.error('[verify-pin]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>app/api/wallet/withdraw/route.ts</div><pre>// app/api/wallet/withdraw/route.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>app/api/wallet/withdraw/route.ts</div>
+    <pre>// app/api/wallet/withdraw/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -25049,8 +25551,11 @@ export async function POST(request: NextRequest) {
     console.error('Withdrawal error:', error)
     return NextResponse.json({ error: 'Failed to process withdrawal' }, { status: 500 })
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/use-loading.ts</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/use-loading.ts</div>
+    <pre>'use client';
 
 import { create } from 'zustand';
 
@@ -25135,8 +25640,11 @@ export function useMultipleLoading() {
     isAnyLoading,
     areAllLoading,
   };
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/use-notifications.ts</div><pre>import { create } from 'zustand';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/use-notifications.ts</div>
+    <pre>import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface Notification {
@@ -25239,8 +25747,11 @@ export const useNotifications = create&lt;NotificationStore&gt;()(
       }),
     }
   )
-);</pre></div>
-<div class='file-block'><div class='file-header'>hooks/use-responsive.ts</div><pre>'use client';
+);</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/use-responsive.ts</div>
+    <pre>'use client';
 
 import { useState, useEffect } from 'react';
 
@@ -25361,8 +25872,11 @@ export function useOnScreen(ref: React.RefObject&lt;HTMLElement&gt;, rootMargin 
   }, [ref, rootMargin]);
 
   return isVisible;
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/useNotificationNudge.ts</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/useNotificationNudge.ts</div>
+    <pre>'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 
@@ -25496,8 +26010,11 @@ export function useNotificationNudge() {
     markGranted,
     nudgeState,
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/useReviews.ts</div><pre>'use client';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/useReviews.ts</div>
+    <pre>'use client';
 
 import { useState, useCallback } from 'react';
 
@@ -25613,8 +26130,11 @@ export function useReviews() {
     error,
     clearError: () =&gt; setError(null),
   };
-}</pre></div>
-<div class='file-block'><div class='file-header'>hooks/Usesuspensionguard.ts</div><pre>'use client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>hooks/Usesuspensionguard.ts</div>
+    <pre>'use client'
 
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -25680,8 +26200,11 @@ export function useSuspensionGuard() {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [router])
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/auth-client.ts</div><pre>// lib/auth-client.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/auth-client.ts</div>
+    <pre>// lib/auth-client.ts
 // ── FIX #3 + FIX #6: Centralised fetch wrapper that:
 //   - Always reads the token fresh from localStorage (not a stale closure)
 //   - Intercepts 401 responses globally and redirects to /login
@@ -25769,8 +26292,11 @@ export function getToken(): string | null {
 /** Check if a user is currently logged in (client side only) */
 export function isLoggedIn(): boolean {
   return !!localStorage.getItem('token')
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/cart-store.ts</div><pre>// lib/cart-store.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/cart-store.ts</div>
+    <pre>// lib/cart-store.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -25870,8 +26396,11 @@ export const useCartStore = create&lt;CartState&gt;()(
       name: 'BATAMART-cart-storage',
     }
   )
-);</pre></div>
-<div class='file-block'><div class='file-header'>lib/notification.ts</div><pre>// lib/notification.ts
+);</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/notification.ts</div>
+    <pre>// lib/notification.ts
 import { prisma } from '@/lib/prisma'
 import { NotificationType } from '@prisma/client'
 import {
@@ -26435,8 +26964,11 @@ export async function notifyWithdrawalProcessed(
 
   // ✅ PUSH notification
   await pushWithdrawalProcessed(userId, amountFormatted)
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/prisma.ts</div><pre>import { PrismaClient } from '@prisma/client'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/prisma.ts</div>
+    <pre>import { PrismaClient } from '@prisma/client'
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient }
 
@@ -26449,8 +26981,11 @@ export const prisma =
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export default prisma
-</pre></div>
-<div class='file-block'><div class='file-header'>lib/utils.ts</div><pre>import { type ClassValue, clsx } from 'clsx'
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/utils.ts</div>
+    <pre>import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 // Merge Tailwind classes
@@ -26568,8 +27103,11 @@ export function getInitials(name: string): string {
 export function sleep(ms: number): Promise&lt;void&gt; {
   return new Promise(resolve =&gt; setTimeout(resolve, ms))
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>lib/auth/adminLogout.ts</div><pre>// lib/auth/adminLogout.ts
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/auth/adminLogout.ts</div>
+    <pre>// lib/auth/adminLogout.ts
 // Call this function whenever you want to log out of admin
 // e.g: import { adminLogout } from '@/lib/auth/adminLogout'
 //      &lt;button onClick={adminLogout}&gt;Logout&lt;/button&gt;
@@ -26585,8 +27123,11 @@ export function adminLogout() {
   
   // Redirect to login
   window.location.href = '/admin-login'
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/auth/auth.ts</div><pre>// lib/auth/auth.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/auth/auth.ts</div>
+    <pre>// lib/auth/auth.ts
 
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
@@ -26800,8 +27341,11 @@ export const getUserFromRequest = async (request: Request) =&gt; {
   }
 
   return user
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/auth/index.ts</div><pre>import { cookies } from 'next/headers'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/auth/index.ts</div>
+    <pre>import { cookies } from 'next/headers'
 import jwt from 'jsonwebtoken'
 
 // ─── Same JWT_SECRET as lib/auth/auth.ts ─────────────────────────────────────
@@ -26852,14 +27396,20 @@ export async function requireAuth(): Promise&lt;AuthSession&gt; {
   const session = await getAuthSession()
   if (!session) throw new Error('Unauthorized')
   return session
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/auth/utils.ts</div><pre>import { type ClassValue, clsx } from 'clsx'
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/auth/utils.ts</div>
+    <pre>import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/email/emailTemplates.ts</div><pre>// lib/email/emailTemplates.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/email/emailTemplates.ts</div>
+    <pre>// lib/email/emailTemplates.ts
 // All email templates for BATAMART notifications
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app'
@@ -27079,8 +27629,11 @@ export function newReviewEmail(productName: string) {
       ${ctaButton('View Review', `${APP_URL}/reviews`)}
     `)
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/email/sendEmail.ts</div><pre>// lib/email/sendEmail.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/email/sendEmail.ts</div>
+    <pre>// lib/email/sendEmail.ts
 // Server-side only — never import this in client components
 
 import { Resend } from 'resend'
@@ -27117,8 +27670,11 @@ export async function sendEmail({ to, subject, html }: EmailPayload) {
   } catch (error) {
     console.error('Send email error:', error)
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/push/sendPushNotification.ts</div><pre>// lib/push/sendPushNotification.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/push/sendPushNotification.ts</div>
+    <pre>// lib/push/sendPushNotification.ts
 import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email/sendEmail'
@@ -27427,8 +27983,11 @@ export async function notifyAvailableRiders(orderNumber: string): Promise&lt;voi
   } catch (error) {
     console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/referral/generateReferralCode.ts</div><pre>// lib/referral/generateReferralCode.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/referral/generateReferralCode.ts</div>
+    <pre>// lib/referral/generateReferralCode.ts
 // Utility to generate unique BATAMART-XXXXXX referral codes
 
 import { prisma } from '@/lib/prisma'
@@ -27458,8 +28017,11 @@ export async function generateUniqueReferralCode(): Promise&lt;string&gt; {
 
   // Fallback: use timestamp-based code (virtually no collision risk)
   return `BATAMART-${Date.now().toString(36).toUpperCase().slice(-6)}`
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/referral/processReferralReward.ts</div><pre>// lib/referral/processReferralReward.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/referral/processReferralReward.ts</div>
+    <pre>// lib/referral/processReferralReward.ts
 // Called inside the confirm-delivery transaction when an order completes.
 // Returns silently on any error so it never blocks the main order flow.
 
@@ -27563,8 +28125,11 @@ export async function processReferralReward(
       },
     },
   })
-}</pre></div>
-<div class='file-block'><div class='file-header'>lib/utils/seller-stats.ts</div><pre>import prisma from '@/lib/prisma';
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>lib/utils/seller-stats.ts</div>
+    <pre>import prisma from '@/lib/prisma';
 import { TrustLevel, ReviewType } from '@prisma/client';
 
 /**
@@ -27669,8 +28234,11 @@ export async function updateSellerStats(sellerId: string) {
       error: errorMessage
     };
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>prisma/seed-universities.ts</div><pre>// prisma/seed-universities.ts
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>prisma/seed-universities.ts</div>
+    <pre>// prisma/seed-universities.ts
 // Run: npx tsx prisma/seed-universities.ts
 // This seeds the University table with UNIZIK data.
 // When you add more universities later, just add entries to the UNIVERSITIES array.
@@ -27739,8 +28307,11 @@ async function main() {
 
 main()
   .catch((e) =&gt; { console.error(e); process.exit(1) })
-  .finally(() =&gt; prisma.$disconnect())</pre></div>
-<div class='file-block'><div class='file-header'>prisma/seed.ts</div><pre>// prisma/seed.ts
+  .finally(() =&gt; prisma.$disconnect())</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>prisma/seed.ts</div>
+    <pre>// prisma/seed.ts
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
@@ -27830,8 +28401,11 @@ main()
   })
   .finally(async () =&gt; {
     await prisma.$disconnect()
-  })</pre></div>
-<div class='file-block'><div class='file-header'>prisma/schema.prisma</div><pre>// prisma/schema.prisma
+  })</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>prisma/schema.prisma</div>
+    <pre>// prisma/schema.prisma
 // ============================================================
 // COMPLETE PRISMA SCHEMA — BATAMART
 // ============================================================
@@ -28654,8 +29228,11 @@ model ReferralReward {
   @@index([referredUserId])
   @@index([createdAt])
   @@schema("public")
-}</pre></div>
-<div class='file-block'><div class='file-header'>styles/cart-animations.css</div><pre>/* Add these to your global CSS file (globals.css or similar) */
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>styles/cart-animations.css</div>
+    <pre>/* Add these to your global CSS file (globals.css or similar) */
 
 @keyframes slide-in {
   from {
@@ -28670,8 +29247,11 @@ model ReferralReward {
 
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
-}</pre></div>
-<div class='file-block'><div class='file-header'>styles/globals.css</div><pre>@tailwind base;
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>styles/globals.css</div>
+    <pre>@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -28866,8 +29446,11 @@ nav[class*="fixed"][class*="bottom-0"] {
     -webkit-transform: translateZ(0);
     will-change: transform;
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>styles/mobile.css</div><pre>/* Mobile-first responsive utilities */
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>styles/mobile.css</div>
+    <pre>/* Mobile-first responsive utilities */
 
 /* Safe area insets for iOS */
 .safe-area-inset-top {
@@ -29092,15 +29675,21 @@ body {
     background: white;
     color: black;
   }
-}</pre></div>
-<div class='file-block'><div class='file-header'>.eslintrc.json</div><pre>{
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>.eslintrc.json</div>
+    <pre>{
   "extends": [
     "next/core-web-vitals",
     "next/typescript"
   ]
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>package.json</div><pre>{
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>package.json</div>
+    <pre>{
   "name": "tradezy-marketplace",
   "version": "1.0.0",
   "private": true,
@@ -29155,8 +29744,11 @@ body {
     "typescript": "^5.9.3"
   }
 }
-</pre></div>
-<div class='file-block'><div class='file-header'>tsconfig.json</div><pre>{
+</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>tsconfig.json</div>
+    <pre>{
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
@@ -29188,8 +29780,11 @@ body {
     ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
-}</pre></div>
-<div class='file-block'><div class='file-header'>vercel.json</div><pre>{
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>vercel.json</div>
+    <pre>{
   "framework": "nextjs",
   "headers": [
     {
@@ -29249,8 +29844,11 @@ body {
       ]
     }
   ]
-}</pre></div>
-<div class='file-block'><div class='file-header'>public/manifest.json</div><pre>{
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>public/manifest.json</div>
+    <pre>{
   "name": "BATAMART",
   "short_name": "BataMart",
   "description": "Student-to-student marketplace at UNIZIK",
@@ -29271,8 +29869,24 @@ body {
       "type": "image/png"
     }
   ]
-}</pre></div>
-<div class='file-block'><div class='file-header'>public/models/face_expression_model-weights_manifest.json</div><pre>[{"weights":[{"name":"dense0/conv0/filters","shape":[3,3,3,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0057930146946626555,"min":-0.7125408074435067}},{"name":"dense0/conv0/bias","shape":[32],"dtype":"float32"},{"name":"dense0/conv1/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006473719839956246,"min":-0.6408982641556684}},{"name":"dense0/conv1/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010509579321917366,"min":-1.408283629136927}},{"name":"dense0/conv1/bias","shape":[32],"dtype":"float32"},{"name":"dense0/conv2/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005666389652326995,"min":-0.7252978754978554}},{"name":"dense0/conv2/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010316079270605948,"min":-1.1760330368490781}},{"name":"dense0/conv2/bias","shape":[32],"dtype":"float32"},{"name":"dense0/conv3/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0063220320963392074,"min":-0.853474333005793}},{"name":"dense0/conv3/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010322785377502442,"min":-1.4658355236053466}},{"name":"dense0/conv3/bias","shape":[32],"dtype":"float32"},{"name":"dense1/conv0/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0042531527724920535,"min":-0.5741756242864272}},{"name":"dense1/conv0/pointwise_filter","shape":[1,1,32,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010653339647779278,"min":-1.1825207009035}},{"name":"dense1/conv0/bias","shape":[64],"dtype":"float32"},{"name":"dense1/conv1/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005166931012097527,"min":-0.6355325144879957}},{"name":"dense1/conv1/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011478300188101974,"min":-1.3888743227603388}},{"name":"dense1/conv1/bias","shape":[64],"dtype":"float32"},{"name":"dense1/conv2/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006144821410085641,"min":-0.8479853545918185}},{"name":"dense1/conv2/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010541967317169788,"min":-1.3809977185492421}},{"name":"dense1/conv2/bias","shape":[64],"dtype":"float32"},{"name":"dense1/conv3/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005769844849904378,"min":-0.686611537138621}},{"name":"dense1/conv3/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010939095534530341,"min":-1.2689350820055196}},{"name":"dense1/conv3/bias","shape":[64],"dtype":"float32"},{"name":"dense2/conv0/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0037769308277204924,"min":-0.40790852939381317}},{"name":"dense2/conv0/pointwise_filter","shape":[1,1,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01188667194516051,"min":-1.4382873053644218}},{"name":"dense2/conv0/bias","shape":[128],"dtype":"float32"},{"name":"dense2/conv1/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006497045825509464,"min":-0.8381189114907208}},{"name":"dense2/conv1/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011632198913424622,"min":-1.3377028750438316}},{"name":"dense2/conv1/bias","shape":[128],"dtype":"float32"},{"name":"dense2/conv2/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005947182225246056,"min":-0.7969224181829715}},{"name":"dense2/conv2/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011436844339557722,"min":-1.4524792311238306}},{"name":"dense2/conv2/bias","shape":[128],"dtype":"float32"},{"name":"dense2/conv3/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006665432686899222,"min":-0.8998334127313949}},{"name":"dense2/conv3/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01283421422920975,"min":-1.642779421338848}},{"name":"dense2/conv3/bias","shape":[128],"dtype":"float32"},{"name":"dense3/conv0/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004711699953266218,"min":-0.6737730933170692}},{"name":"dense3/conv0/pointwise_filter","shape":[1,1,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010955964817720302,"min":-1.3914075318504784}},{"name":"dense3/conv0/bias","shape":[256],"dtype":"float32"},{"name":"dense3/conv1/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00554193468654857,"min":-0.7149095745647656}},{"name":"dense3/conv1/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.016790372250126858,"min":-2.484975093018775}},{"name":"dense3/conv1/bias","shape":[256],"dtype":"float32"},{"name":"dense3/conv2/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006361540626077091,"min":-0.8142772001378676}},{"name":"dense3/conv2/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01777329678628959,"min":-1.7062364914838006}},{"name":"dense3/conv2/bias","shape":[256],"dtype":"float32"},{"name":"dense3/conv3/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006900275922289082,"min":-0.8625344902861353}},{"name":"dense3/conv3/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015449936717164282,"min":-1.9003422162112067}},{"name":"dense3/conv3/bias","shape":[256],"dtype":"float32"},{"name":"fc/weights","shape":[256,7],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004834276554631252,"min":-0.7203072066400565}},{"name":"fc/bias","shape":[7],"dtype":"float32"}],"paths":["face_expression_model-shard1"]}]</pre></div>
-<div class='file-block'><div class='file-header'>public/models/face_landmark_68_model-weights_manifest.json</div><pre>[{"weights":[{"name":"dense0/conv0/filters","shape":[3,3,3,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004853619781194949,"min":-0.5872879935245888}},{"name":"dense0/conv0/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004396426443960153,"min":-0.7298067896973853}},{"name":"dense0/conv1/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00635151559231328,"min":-0.5589333721235686}},{"name":"dense0/conv1/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009354315552057004,"min":-1.2628325995276957}},{"name":"dense0/conv1/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0029380727048013726,"min":-0.5846764682554731}},{"name":"dense0/conv2/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0049374802439820535,"min":-0.6171850304977566}},{"name":"dense0/conv2/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009941946758943446,"min":-1.3421628124573652}},{"name":"dense0/conv2/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0030300481062309416,"min":-0.5272283704841838}},{"name":"dense0/conv3/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005672684837790097,"min":-0.7431217137505026}},{"name":"dense0/conv3/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010712201455060173,"min":-1.5639814124387852}},{"name":"dense0/conv3/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0030966934035806097,"min":-0.3839899820439956}},{"name":"dense1/conv0/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0039155554537679636,"min":-0.48161332081345953}},{"name":"dense1/conv0/pointwise_filter","shape":[1,1,32,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01023082966898002,"min":-1.094698774580862}},{"name":"dense1/conv0/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0027264176630506327,"min":-0.3871513081531898}},{"name":"dense1/conv1/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004583378632863362,"min":-0.5454220573107401}},{"name":"dense1/conv1/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00915846403907327,"min":-1.117332612766939}},{"name":"dense1/conv1/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003091680419211294,"min":-0.5966943209077797}},{"name":"dense1/conv2/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005407439727409214,"min":-0.708374604290607}},{"name":"dense1/conv2/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00946493943532308,"min":-1.2399070660273235}},{"name":"dense1/conv2/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004409168514550901,"min":-0.9788354102303}},{"name":"dense1/conv3/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004478132958505668,"min":-0.6493292789833219}},{"name":"dense1/conv3/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011063695888893277,"min":-1.2501976354449402}},{"name":"dense1/conv3/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003909627596537272,"min":-0.6646366914113363}},{"name":"dense2/conv0/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003213915404151468,"min":-0.3374611174359041}},{"name":"dense2/conv0/pointwise_filter","shape":[1,1,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010917326048308728,"min":-1.4520043644250609}},{"name":"dense2/conv0/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002800439152063108,"min":-0.38085972468058266}},{"name":"dense2/conv1/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0050568851770139206,"min":-0.6927932692509071}},{"name":"dense2/conv1/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01074961213504567,"min":-1.3222022926106174}},{"name":"dense2/conv1/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0030654204242369708,"min":-0.5487102559384177}},{"name":"dense2/conv2/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00591809165244009,"min":-0.917304206128214}},{"name":"dense2/conv2/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01092823346455892,"min":-1.366029183069865}},{"name":"dense2/conv2/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002681120470458386,"min":-0.36463238398234055}},{"name":"dense2/conv3/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0048311497650894465,"min":-0.5797379718107336}},{"name":"dense2/conv3/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011227761062921263,"min":-1.4483811771168429}},{"name":"dense2/conv3/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0034643323982463162,"min":-0.3360402426298927}},{"name":"dense3/conv0/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003394978887894574,"min":-0.49227193874471326}},{"name":"dense3/conv0/pointwise_filter","shape":[1,1,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010051267287310432,"min":-1.2765109454884247}},{"name":"dense3/conv0/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003142924752889895,"min":-0.4588670139219247}},{"name":"dense3/conv1/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00448304671867221,"min":-0.5872791201460595}},{"name":"dense3/conv1/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.016063522357566685,"min":-2.3613377865623026}},{"name":"dense3/conv1/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00287135781026354,"min":-0.47664539650374765}},{"name":"dense3/conv2/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006002906724518421,"min":-0.7923836876364315}},{"name":"dense3/conv2/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.017087187019048954,"min":-1.6061955797906016}},{"name":"dense3/conv2/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003124481205846749,"min":-0.46242321846531886}},{"name":"dense3/conv3/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006576311588287353,"min":-1.0193282961845398}},{"name":"dense3/conv3/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015590153955945782,"min":-1.99553970636106}},{"name":"dense3/conv3/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004453541601405424,"min":-0.6546706154065973}},{"name":"fc/weights","shape":[256,136],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010417488509533453,"min":-1.500118345372817}},{"name":"fc/bias","shape":[136],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0025084222648658005,"min":0.07683877646923065}}],"paths":["face_landmark_68_model-shard1"]}]</pre></div>
-<div class='file-block'><div class='file-header'>public/models/face_recognition_model-weights_manifest.json</div><pre>[{"weights":[{"name":"conv32_down/conv/filters","shape":[7,7,3,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0005260649557207145,"min":-0.07101876902229645}},{"name":"conv32_down/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":8.471445956577858e-7,"min":-0.00014740315964445472}},{"name":"conv32_down/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.06814416062598135,"min":5.788674831390381}},{"name":"conv32_down/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008471635042452345,"min":-0.931879854669758}},{"name":"conv32_1/conv1/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0007328585666768691,"min":-0.0974701893680236}},{"name":"conv32_1/conv1/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.5952091238361e-8,"min":-0.000001978059313556764}},{"name":"conv32_1/conv1/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.02146628510718252,"min":3.1103382110595703}},{"name":"conv32_1/conv1/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0194976619645661,"min":-2.3787147596770644}},{"name":"conv32_1/conv2/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0004114975824075587,"min":-0.05267169054816751}},{"name":"conv32_1/conv2/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.600177166424806e-9,"min":-5.70421968636676e-7}},{"name":"conv32_1/conv2/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03400764932819441,"min":2.1677730083465576}},{"name":"conv32_1/conv2/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010974494616190593,"min":-1.240117891629537}},{"name":"conv32_2/conv1/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0005358753251094444,"min":-0.0760942961655411}},{"name":"conv32_2/conv1/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":5.9886454383719385e-9,"min":-7.366033889197485e-7}},{"name":"conv32_2/conv1/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.014633869657329485,"min":2.769575357437134}},{"name":"conv32_2/conv1/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.022131107367721257,"min":-2.5229462399202234}},{"name":"conv32_2/conv2/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00030145110452876373,"min":-0.03949009469326805}},{"name":"conv32_2/conv2/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":6.8779549306497095e-9,"min":-9.010120959151119e-7}},{"name":"conv32_2/conv2/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03929369870354148,"min":4.8010945320129395}},{"name":"conv32_2/conv2/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010553357180427103,"min":-1.2452961472903983}},{"name":"conv32_3/conv1/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0003133527642371608,"min":-0.040735859350830905}},{"name":"conv32_3/conv1/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.1064200719547974e-9,"min":-3.0387508532465503e-7}},{"name":"conv32_3/conv1/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009252088210161994,"min":2.333256721496582}},{"name":"conv32_3/conv1/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007104101251153385,"min":-0.34810096130651585}},{"name":"conv32_3/conv2/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00029995629892629733,"min":-0.031195455088334923}},{"name":"conv32_3/conv2/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":5.62726418316814e-9,"min":-6.921534945296811e-7}},{"name":"conv32_3/conv2/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0467432975769043,"min":5.362040996551514}},{"name":"conv32_3/conv2/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010314425300149357,"min":-1.268674311918371}},{"name":"conv64_down/conv1/conv/filters","shape":[3,3,32,64],"dtype":"float32"},{"name":"conv64_down/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":8.373908033218849e-10,"min":-1.172347124650639e-7}},{"name":"conv64_down/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0066875364266189875,"min":2.5088400840759277}},{"name":"conv64_down/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01691421620986041,"min":-2.0973628100226906}},{"name":"conv64_down/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_down/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.3252014483766877e-9,"min":-2.673981665633191e-7}},{"name":"conv64_down/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.032557439804077146,"min":2.6351239681243896}},{"name":"conv64_down/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015429047509735706,"min":-1.5429047509735707}},{"name":"conv64_1/conv1/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_1/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.1319172039756998e-9,"min":-1.4941307092479238e-7}},{"name":"conv64_1/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007802607031429515,"min":3.401733160018921}},{"name":"conv64_1/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01425027146058924,"min":-0.6982633015688727}},{"name":"conv64_1/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_1/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.5635019893325435e-9,"min":-2.717312108692496e-7}},{"name":"conv64_1/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04062801716374416,"min":3.542381525039673}},{"name":"conv64_1/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007973166306813557,"min":-0.7415044665336609}},{"name":"conv64_2/conv1/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_2/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.2535732661062331e-9,"min":-1.8302169685151004e-7}},{"name":"conv64_2/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005631206549850164,"min":2.9051668643951416}},{"name":"conv64_2/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01859012585060269,"min":-2.3795361088771445}},{"name":"conv64_2/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_2/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.486726369919351e-9,"min":-3.5311514452854786e-7}},{"name":"conv64_2/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03740917467603497,"min":5.571568965911865}},{"name":"conv64_2/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006418555858088475,"min":-0.5263215803632549}},{"name":"conv64_3/conv1/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_3/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":7.432564576875473e-10,"min":-8.47312361763804e-8}},{"name":"conv64_3/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006400122362024644,"min":2.268010377883911}},{"name":"conv64_3/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010945847922680425,"min":-1.3353934465670119}},{"name":"conv64_3/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_3/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.278228722014533e-9,"min":-3.212302498040492e-7}},{"name":"conv64_3/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.029840927498013366,"min":7.038398265838623}},{"name":"conv64_3/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010651412197187834,"min":-1.161003929493474}},{"name":"conv128_down/conv1/conv/filters","shape":[3,3,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00020040544662989823,"min":-0.022245004575918704}},{"name":"conv128_down/conv1/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.3550543563576545e-10,"min":-4.311503812794078e-8}},{"name":"conv128_down/conv1/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007448580685783835,"min":2.830846071243286}},{"name":"conv128_down/conv1/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01211262824488621,"min":-1.6957679542840696}},{"name":"conv128_down/conv2/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00022380277514457702,"min":-0.02484210804104805}},{"name":"conv128_down/conv2/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":9.031058637304466e-10,"min":-1.1650065642122761e-7}},{"name":"conv128_down/conv2/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.027663578706629135,"min":3.1111555099487305}},{"name":"conv128_down/conv2/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008878476946961646,"min":-1.029903325847551}},{"name":"conv128_1/conv1/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00022380667574265425,"min":-0.032899581334170175}},{"name":"conv128_1/conv1/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.4147297756478345e-10,"min":-5.253528433020923e-8}},{"name":"conv128_1/conv1/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.013599334978589825,"min":3.634530782699585}},{"name":"conv128_1/conv1/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.014059314073300829,"min":-1.4059314073300828}},{"name":"conv128_1/conv2/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00021715293474057143,"min":-0.02909849325523657}},{"name":"conv128_1/conv2/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":9.887046963276768e-10,"min":-1.1370104007768284e-7}},{"name":"conv128_1/conv2/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.029993299409454943,"min":3.630716562271118}},{"name":"conv128_1/conv2/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00782704236460667,"min":-0.7200878975438136}},{"name":"conv128_2/conv1/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00017718105923895743,"min":-0.022324813464108636}},{"name":"conv128_2/conv1/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":3.567012027797675e-10,"min":-5.243507680862582e-8}},{"name":"conv128_2/conv1/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007940645778880399,"min":4.927767753601074}},{"name":"conv128_2/conv1/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015933452867994122,"min":-1.5614783810634238}},{"name":"conv128_2/conv2/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0001451439717236687,"min":-0.01712698866339291}},{"name":"conv128_2/conv2/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.0383988570966347e-9,"min":-1.2356946399449953e-7}},{"name":"conv128_2/conv2/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.02892604528688917,"min":4.750600814819336}},{"name":"conv128_2/conv2/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00797275748907351,"min":-0.7414664464838364}},{"name":"conv256_down/conv1/conv/filters","shape":[3,3,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0002698827827093648,"min":-0.03994265184098599}},{"name":"conv256_down/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":5.036909834755123e-10,"min":-6.396875490139006e-8}},{"name":"conv256_down/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.014870181738161573,"min":4.269900798797607}},{"name":"conv256_down/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.022031106200872685,"min":-3.1063859743230484}},{"name":"conv256_down/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00046430734150549946,"min":-0.03946612402796745}},{"name":"conv256_down/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":6.693064577513153e-10,"min":-7.630093618364995e-8}},{"name":"conv256_down/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03475512242784687,"min":3.608360528945923}},{"name":"conv256_down/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01290142021927179,"min":-1.1482263995151893}},{"name":"conv256_1/conv1/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00037147209924810076,"min":-0.04234781931428348}},{"name":"conv256_1/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":3.2105515457510146e-10,"min":-3.467395669411096e-8}},{"name":"conv256_1/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.043242172166412955,"min":5.28542947769165}},{"name":"conv256_1/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01643658619300992,"min":-1.3149268954407936}},{"name":"conv256_1/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0003289232651392619,"min":-0.041773254672686264}},{"name":"conv256_1/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":9.13591691187321e-10,"min":-1.2333487831028833e-7}},{"name":"conv256_1/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0573908618852204,"min":4.360693454742432}},{"name":"conv256_1/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0164216583850337,"min":-1.3958409627278647}},{"name":"conv256_2/conv1/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00010476927912118389,"min":-0.015610622589056398}},{"name":"conv256_2/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.418552539068639e-10,"min":-2.539480166022071e-8}},{"name":"conv256_2/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.06024209564807368,"min":6.598613739013672}},{"name":"conv256_2/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01578534350675695,"min":-1.1049740454729864}},{"name":"conv256_2/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00005543030908002573,"min":-0.007427661416723448}},{"name":"conv256_2/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.0822061852320308e-9,"min":-1.515088659324843e-7}},{"name":"conv256_2/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04302893993901272,"min":2.2855491638183594}},{"name":"conv256_2/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006792667566561232,"min":-0.8083274404207865}},{"name":"conv256_down_out/conv1/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.000568966465253456,"min":-0.05632768006009214}},{"name":"conv256_down_out/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.5347887884881677e-10,"min":-6.530095855422961e-8}},{"name":"conv256_down_out/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.017565592597512638,"min":4.594101905822754}},{"name":"conv256_down_out/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04850864223405427,"min":-6.306123490427055}},{"name":"conv256_down_out/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0003739110687199761,"min":-0.06954745878191555}},{"name":"conv256_down_out/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.2668428328152895e-9,"min":-2.2549802424112154e-7}},{"name":"conv256_down_out/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04351314469879749,"min":4.31956672668457}},{"name":"conv256_down_out/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.021499746921015722,"min":-1.2039858275768804}},{"name":"fc","shape":[256,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.000357687911566566,"min":-0.04578405268052045}}],"paths":["face_recognition_model-shard1","face_recognition_model-shard2"]}]</pre></div>
-<div class='file-block'><div class='file-header'>public/models/tiny_face_detector_model-weights_manifest.json</div><pre>[{"weights":[{"name":"conv0/filters","shape":[3,3,3,16],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009007044399485869,"min":-1.2069439495311063}},{"name":"conv0/bias","shape":[16],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005263455241334205,"min":-0.9211046672334858}},{"name":"conv1/depthwise_filter","shape":[3,3,16,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004001977630690033,"min":-0.5042491814669441}},{"name":"conv1/pointwise_filter","shape":[1,1,16,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.013836609615999109,"min":-1.411334180831909}},{"name":"conv1/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0015159862590771096,"min":-0.30926119685173037}},{"name":"conv2/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002666276225856706,"min":-0.317286870876948}},{"name":"conv2/pointwise_filter","shape":[1,1,32,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015265831292844286,"min":-1.6792414422128714}},{"name":"conv2/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0020280554598453,"min":-0.37113414915168985}},{"name":"conv3/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006100742489683862,"min":-0.8907084034938438}},{"name":"conv3/pointwise_filter","shape":[1,1,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.016276211832083907,"min":-2.0508026908425725}},{"name":"conv3/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003394414279975143,"min":-0.7637432129944072}},{"name":"conv4/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006716050119961009,"min":-0.8059260143953211}},{"name":"conv4/pointwise_filter","shape":[1,1,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.021875603993733724,"min":-2.8875797271728514}},{"name":"conv4/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0041141652009066415,"min":-0.8187188749804216}},{"name":"conv5/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008423839597141042,"min":-0.9013508368940915}},{"name":"conv5/pointwise_filter","shape":[1,1,256,512],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.030007277283014035,"min":-3.8709387695088107}},{"name":"conv5/bias","shape":[512],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008402082966823203,"min":-1.4871686851277068}},{"name":"conv8/filters","shape":[1,1,512,25],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.028336129469030042,"min":-4.675461362389957}},{"name":"conv8/bias","shape":[25],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002268134028303857,"min":-0.41053225912299807}}],"paths":["tiny_face_detector_model-shard1"]}]</pre></div></body></html>
+}</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>public/models/face_expression_model-weights_manifest.json</div>
+    <pre>[{"weights":[{"name":"dense0/conv0/filters","shape":[3,3,3,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0057930146946626555,"min":-0.7125408074435067}},{"name":"dense0/conv0/bias","shape":[32],"dtype":"float32"},{"name":"dense0/conv1/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006473719839956246,"min":-0.6408982641556684}},{"name":"dense0/conv1/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010509579321917366,"min":-1.408283629136927}},{"name":"dense0/conv1/bias","shape":[32],"dtype":"float32"},{"name":"dense0/conv2/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005666389652326995,"min":-0.7252978754978554}},{"name":"dense0/conv2/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010316079270605948,"min":-1.1760330368490781}},{"name":"dense0/conv2/bias","shape":[32],"dtype":"float32"},{"name":"dense0/conv3/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0063220320963392074,"min":-0.853474333005793}},{"name":"dense0/conv3/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010322785377502442,"min":-1.4658355236053466}},{"name":"dense0/conv3/bias","shape":[32],"dtype":"float32"},{"name":"dense1/conv0/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0042531527724920535,"min":-0.5741756242864272}},{"name":"dense1/conv0/pointwise_filter","shape":[1,1,32,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010653339647779278,"min":-1.1825207009035}},{"name":"dense1/conv0/bias","shape":[64],"dtype":"float32"},{"name":"dense1/conv1/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005166931012097527,"min":-0.6355325144879957}},{"name":"dense1/conv1/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011478300188101974,"min":-1.3888743227603388}},{"name":"dense1/conv1/bias","shape":[64],"dtype":"float32"},{"name":"dense1/conv2/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006144821410085641,"min":-0.8479853545918185}},{"name":"dense1/conv2/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010541967317169788,"min":-1.3809977185492421}},{"name":"dense1/conv2/bias","shape":[64],"dtype":"float32"},{"name":"dense1/conv3/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005769844849904378,"min":-0.686611537138621}},{"name":"dense1/conv3/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010939095534530341,"min":-1.2689350820055196}},{"name":"dense1/conv3/bias","shape":[64],"dtype":"float32"},{"name":"dense2/conv0/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0037769308277204924,"min":-0.40790852939381317}},{"name":"dense2/conv0/pointwise_filter","shape":[1,1,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01188667194516051,"min":-1.4382873053644218}},{"name":"dense2/conv0/bias","shape":[128],"dtype":"float32"},{"name":"dense2/conv1/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006497045825509464,"min":-0.8381189114907208}},{"name":"dense2/conv1/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011632198913424622,"min":-1.3377028750438316}},{"name":"dense2/conv1/bias","shape":[128],"dtype":"float32"},{"name":"dense2/conv2/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005947182225246056,"min":-0.7969224181829715}},{"name":"dense2/conv2/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011436844339557722,"min":-1.4524792311238306}},{"name":"dense2/conv2/bias","shape":[128],"dtype":"float32"},{"name":"dense2/conv3/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006665432686899222,"min":-0.8998334127313949}},{"name":"dense2/conv3/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01283421422920975,"min":-1.642779421338848}},{"name":"dense2/conv3/bias","shape":[128],"dtype":"float32"},{"name":"dense3/conv0/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004711699953266218,"min":-0.6737730933170692}},{"name":"dense3/conv0/pointwise_filter","shape":[1,1,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010955964817720302,"min":-1.3914075318504784}},{"name":"dense3/conv0/bias","shape":[256],"dtype":"float32"},{"name":"dense3/conv1/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00554193468654857,"min":-0.7149095745647656}},{"name":"dense3/conv1/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.016790372250126858,"min":-2.484975093018775}},{"name":"dense3/conv1/bias","shape":[256],"dtype":"float32"},{"name":"dense3/conv2/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006361540626077091,"min":-0.8142772001378676}},{"name":"dense3/conv2/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01777329678628959,"min":-1.7062364914838006}},{"name":"dense3/conv2/bias","shape":[256],"dtype":"float32"},{"name":"dense3/conv3/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006900275922289082,"min":-0.8625344902861353}},{"name":"dense3/conv3/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015449936717164282,"min":-1.9003422162112067}},{"name":"dense3/conv3/bias","shape":[256],"dtype":"float32"},{"name":"fc/weights","shape":[256,7],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004834276554631252,"min":-0.7203072066400565}},{"name":"fc/bias","shape":[7],"dtype":"float32"}],"paths":["face_expression_model-shard1"]}]</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>public/models/face_landmark_68_model-weights_manifest.json</div>
+    <pre>[{"weights":[{"name":"dense0/conv0/filters","shape":[3,3,3,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004853619781194949,"min":-0.5872879935245888}},{"name":"dense0/conv0/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004396426443960153,"min":-0.7298067896973853}},{"name":"dense0/conv1/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00635151559231328,"min":-0.5589333721235686}},{"name":"dense0/conv1/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009354315552057004,"min":-1.2628325995276957}},{"name":"dense0/conv1/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0029380727048013726,"min":-0.5846764682554731}},{"name":"dense0/conv2/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0049374802439820535,"min":-0.6171850304977566}},{"name":"dense0/conv2/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009941946758943446,"min":-1.3421628124573652}},{"name":"dense0/conv2/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0030300481062309416,"min":-0.5272283704841838}},{"name":"dense0/conv3/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005672684837790097,"min":-0.7431217137505026}},{"name":"dense0/conv3/pointwise_filter","shape":[1,1,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010712201455060173,"min":-1.5639814124387852}},{"name":"dense0/conv3/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0030966934035806097,"min":-0.3839899820439956}},{"name":"dense1/conv0/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0039155554537679636,"min":-0.48161332081345953}},{"name":"dense1/conv0/pointwise_filter","shape":[1,1,32,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01023082966898002,"min":-1.094698774580862}},{"name":"dense1/conv0/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0027264176630506327,"min":-0.3871513081531898}},{"name":"dense1/conv1/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004583378632863362,"min":-0.5454220573107401}},{"name":"dense1/conv1/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00915846403907327,"min":-1.117332612766939}},{"name":"dense1/conv1/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003091680419211294,"min":-0.5966943209077797}},{"name":"dense1/conv2/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005407439727409214,"min":-0.708374604290607}},{"name":"dense1/conv2/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00946493943532308,"min":-1.2399070660273235}},{"name":"dense1/conv2/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004409168514550901,"min":-0.9788354102303}},{"name":"dense1/conv3/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004478132958505668,"min":-0.6493292789833219}},{"name":"dense1/conv3/pointwise_filter","shape":[1,1,64,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011063695888893277,"min":-1.2501976354449402}},{"name":"dense1/conv3/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003909627596537272,"min":-0.6646366914113363}},{"name":"dense2/conv0/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003213915404151468,"min":-0.3374611174359041}},{"name":"dense2/conv0/pointwise_filter","shape":[1,1,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010917326048308728,"min":-1.4520043644250609}},{"name":"dense2/conv0/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002800439152063108,"min":-0.38085972468058266}},{"name":"dense2/conv1/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0050568851770139206,"min":-0.6927932692509071}},{"name":"dense2/conv1/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01074961213504567,"min":-1.3222022926106174}},{"name":"dense2/conv1/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0030654204242369708,"min":-0.5487102559384177}},{"name":"dense2/conv2/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00591809165244009,"min":-0.917304206128214}},{"name":"dense2/conv2/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01092823346455892,"min":-1.366029183069865}},{"name":"dense2/conv2/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002681120470458386,"min":-0.36463238398234055}},{"name":"dense2/conv3/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0048311497650894465,"min":-0.5797379718107336}},{"name":"dense2/conv3/pointwise_filter","shape":[1,1,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.011227761062921263,"min":-1.4483811771168429}},{"name":"dense2/conv3/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0034643323982463162,"min":-0.3360402426298927}},{"name":"dense3/conv0/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003394978887894574,"min":-0.49227193874471326}},{"name":"dense3/conv0/pointwise_filter","shape":[1,1,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010051267287310432,"min":-1.2765109454884247}},{"name":"dense3/conv0/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003142924752889895,"min":-0.4588670139219247}},{"name":"dense3/conv1/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00448304671867221,"min":-0.5872791201460595}},{"name":"dense3/conv1/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.016063522357566685,"min":-2.3613377865623026}},{"name":"dense3/conv1/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00287135781026354,"min":-0.47664539650374765}},{"name":"dense3/conv2/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006002906724518421,"min":-0.7923836876364315}},{"name":"dense3/conv2/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.017087187019048954,"min":-1.6061955797906016}},{"name":"dense3/conv2/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003124481205846749,"min":-0.46242321846531886}},{"name":"dense3/conv3/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006576311588287353,"min":-1.0193282961845398}},{"name":"dense3/conv3/pointwise_filter","shape":[1,1,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015590153955945782,"min":-1.99553970636106}},{"name":"dense3/conv3/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004453541601405424,"min":-0.6546706154065973}},{"name":"fc/weights","shape":[256,136],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010417488509533453,"min":-1.500118345372817}},{"name":"fc/bias","shape":[136],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0025084222648658005,"min":0.07683877646923065}}],"paths":["face_landmark_68_model-shard1"]}]</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>public/models/face_recognition_model-weights_manifest.json</div>
+    <pre>[{"weights":[{"name":"conv32_down/conv/filters","shape":[7,7,3,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0005260649557207145,"min":-0.07101876902229645}},{"name":"conv32_down/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":8.471445956577858e-7,"min":-0.00014740315964445472}},{"name":"conv32_down/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.06814416062598135,"min":5.788674831390381}},{"name":"conv32_down/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008471635042452345,"min":-0.931879854669758}},{"name":"conv32_1/conv1/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0007328585666768691,"min":-0.0974701893680236}},{"name":"conv32_1/conv1/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.5952091238361e-8,"min":-0.000001978059313556764}},{"name":"conv32_1/conv1/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.02146628510718252,"min":3.1103382110595703}},{"name":"conv32_1/conv1/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0194976619645661,"min":-2.3787147596770644}},{"name":"conv32_1/conv2/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0004114975824075587,"min":-0.05267169054816751}},{"name":"conv32_1/conv2/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.600177166424806e-9,"min":-5.70421968636676e-7}},{"name":"conv32_1/conv2/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03400764932819441,"min":2.1677730083465576}},{"name":"conv32_1/conv2/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010974494616190593,"min":-1.240117891629537}},{"name":"conv32_2/conv1/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0005358753251094444,"min":-0.0760942961655411}},{"name":"conv32_2/conv1/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":5.9886454383719385e-9,"min":-7.366033889197485e-7}},{"name":"conv32_2/conv1/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.014633869657329485,"min":2.769575357437134}},{"name":"conv32_2/conv1/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.022131107367721257,"min":-2.5229462399202234}},{"name":"conv32_2/conv2/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00030145110452876373,"min":-0.03949009469326805}},{"name":"conv32_2/conv2/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":6.8779549306497095e-9,"min":-9.010120959151119e-7}},{"name":"conv32_2/conv2/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03929369870354148,"min":4.8010945320129395}},{"name":"conv32_2/conv2/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010553357180427103,"min":-1.2452961472903983}},{"name":"conv32_3/conv1/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0003133527642371608,"min":-0.040735859350830905}},{"name":"conv32_3/conv1/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.1064200719547974e-9,"min":-3.0387508532465503e-7}},{"name":"conv32_3/conv1/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009252088210161994,"min":2.333256721496582}},{"name":"conv32_3/conv1/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007104101251153385,"min":-0.34810096130651585}},{"name":"conv32_3/conv2/conv/filters","shape":[3,3,32,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00029995629892629733,"min":-0.031195455088334923}},{"name":"conv32_3/conv2/conv/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":5.62726418316814e-9,"min":-6.921534945296811e-7}},{"name":"conv32_3/conv2/scale/weights","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0467432975769043,"min":5.362040996551514}},{"name":"conv32_3/conv2/scale/biases","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010314425300149357,"min":-1.268674311918371}},{"name":"conv64_down/conv1/conv/filters","shape":[3,3,32,64],"dtype":"float32"},{"name":"conv64_down/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":8.373908033218849e-10,"min":-1.172347124650639e-7}},{"name":"conv64_down/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0066875364266189875,"min":2.5088400840759277}},{"name":"conv64_down/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01691421620986041,"min":-2.0973628100226906}},{"name":"conv64_down/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_down/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.3252014483766877e-9,"min":-2.673981665633191e-7}},{"name":"conv64_down/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.032557439804077146,"min":2.6351239681243896}},{"name":"conv64_down/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015429047509735706,"min":-1.5429047509735707}},{"name":"conv64_1/conv1/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_1/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.1319172039756998e-9,"min":-1.4941307092479238e-7}},{"name":"conv64_1/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007802607031429515,"min":3.401733160018921}},{"name":"conv64_1/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01425027146058924,"min":-0.6982633015688727}},{"name":"conv64_1/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_1/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.5635019893325435e-9,"min":-2.717312108692496e-7}},{"name":"conv64_1/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04062801716374416,"min":3.542381525039673}},{"name":"conv64_1/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007973166306813557,"min":-0.7415044665336609}},{"name":"conv64_2/conv1/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_2/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.2535732661062331e-9,"min":-1.8302169685151004e-7}},{"name":"conv64_2/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005631206549850164,"min":2.9051668643951416}},{"name":"conv64_2/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01859012585060269,"min":-2.3795361088771445}},{"name":"conv64_2/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_2/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.486726369919351e-9,"min":-3.5311514452854786e-7}},{"name":"conv64_2/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03740917467603497,"min":5.571568965911865}},{"name":"conv64_2/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006418555858088475,"min":-0.5263215803632549}},{"name":"conv64_3/conv1/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_3/conv1/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":7.432564576875473e-10,"min":-8.47312361763804e-8}},{"name":"conv64_3/conv1/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006400122362024644,"min":2.268010377883911}},{"name":"conv64_3/conv1/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010945847922680425,"min":-1.3353934465670119}},{"name":"conv64_3/conv2/conv/filters","shape":[3,3,64,64],"dtype":"float32"},{"name":"conv64_3/conv2/conv/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.278228722014533e-9,"min":-3.212302498040492e-7}},{"name":"conv64_3/conv2/scale/weights","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.029840927498013366,"min":7.038398265838623}},{"name":"conv64_3/conv2/scale/biases","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.010651412197187834,"min":-1.161003929493474}},{"name":"conv128_down/conv1/conv/filters","shape":[3,3,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00020040544662989823,"min":-0.022245004575918704}},{"name":"conv128_down/conv1/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.3550543563576545e-10,"min":-4.311503812794078e-8}},{"name":"conv128_down/conv1/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007448580685783835,"min":2.830846071243286}},{"name":"conv128_down/conv1/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01211262824488621,"min":-1.6957679542840696}},{"name":"conv128_down/conv2/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00022380277514457702,"min":-0.02484210804104805}},{"name":"conv128_down/conv2/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":9.031058637304466e-10,"min":-1.1650065642122761e-7}},{"name":"conv128_down/conv2/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.027663578706629135,"min":3.1111555099487305}},{"name":"conv128_down/conv2/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008878476946961646,"min":-1.029903325847551}},{"name":"conv128_1/conv1/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00022380667574265425,"min":-0.032899581334170175}},{"name":"conv128_1/conv1/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.4147297756478345e-10,"min":-5.253528433020923e-8}},{"name":"conv128_1/conv1/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.013599334978589825,"min":3.634530782699585}},{"name":"conv128_1/conv1/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.014059314073300829,"min":-1.4059314073300828}},{"name":"conv128_1/conv2/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00021715293474057143,"min":-0.02909849325523657}},{"name":"conv128_1/conv2/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":9.887046963276768e-10,"min":-1.1370104007768284e-7}},{"name":"conv128_1/conv2/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.029993299409454943,"min":3.630716562271118}},{"name":"conv128_1/conv2/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00782704236460667,"min":-0.7200878975438136}},{"name":"conv128_2/conv1/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00017718105923895743,"min":-0.022324813464108636}},{"name":"conv128_2/conv1/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":3.567012027797675e-10,"min":-5.243507680862582e-8}},{"name":"conv128_2/conv1/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.007940645778880399,"min":4.927767753601074}},{"name":"conv128_2/conv1/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015933452867994122,"min":-1.5614783810634238}},{"name":"conv128_2/conv2/conv/filters","shape":[3,3,128,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0001451439717236687,"min":-0.01712698866339291}},{"name":"conv128_2/conv2/conv/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.0383988570966347e-9,"min":-1.2356946399449953e-7}},{"name":"conv128_2/conv2/scale/weights","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.02892604528688917,"min":4.750600814819336}},{"name":"conv128_2/conv2/scale/biases","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00797275748907351,"min":-0.7414664464838364}},{"name":"conv256_down/conv1/conv/filters","shape":[3,3,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0002698827827093648,"min":-0.03994265184098599}},{"name":"conv256_down/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":5.036909834755123e-10,"min":-6.396875490139006e-8}},{"name":"conv256_down/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.014870181738161573,"min":4.269900798797607}},{"name":"conv256_down/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.022031106200872685,"min":-3.1063859743230484}},{"name":"conv256_down/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00046430734150549946,"min":-0.03946612402796745}},{"name":"conv256_down/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":6.693064577513153e-10,"min":-7.630093618364995e-8}},{"name":"conv256_down/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.03475512242784687,"min":3.608360528945923}},{"name":"conv256_down/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01290142021927179,"min":-1.1482263995151893}},{"name":"conv256_1/conv1/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00037147209924810076,"min":-0.04234781931428348}},{"name":"conv256_1/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":3.2105515457510146e-10,"min":-3.467395669411096e-8}},{"name":"conv256_1/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.043242172166412955,"min":5.28542947769165}},{"name":"conv256_1/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01643658619300992,"min":-1.3149268954407936}},{"name":"conv256_1/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0003289232651392619,"min":-0.041773254672686264}},{"name":"conv256_1/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":9.13591691187321e-10,"min":-1.2333487831028833e-7}},{"name":"conv256_1/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0573908618852204,"min":4.360693454742432}},{"name":"conv256_1/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0164216583850337,"min":-1.3958409627278647}},{"name":"conv256_2/conv1/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00010476927912118389,"min":-0.015610622589056398}},{"name":"conv256_2/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":2.418552539068639e-10,"min":-2.539480166022071e-8}},{"name":"conv256_2/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.06024209564807368,"min":6.598613739013672}},{"name":"conv256_2/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.01578534350675695,"min":-1.1049740454729864}},{"name":"conv256_2/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.00005543030908002573,"min":-0.007427661416723448}},{"name":"conv256_2/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.0822061852320308e-9,"min":-1.515088659324843e-7}},{"name":"conv256_2/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04302893993901272,"min":2.2855491638183594}},{"name":"conv256_2/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006792667566561232,"min":-0.8083274404207865}},{"name":"conv256_down_out/conv1/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.000568966465253456,"min":-0.05632768006009214}},{"name":"conv256_down_out/conv1/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":4.5347887884881677e-10,"min":-6.530095855422961e-8}},{"name":"conv256_down_out/conv1/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.017565592597512638,"min":4.594101905822754}},{"name":"conv256_down_out/conv1/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04850864223405427,"min":-6.306123490427055}},{"name":"conv256_down_out/conv2/conv/filters","shape":[3,3,256,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0003739110687199761,"min":-0.06954745878191555}},{"name":"conv256_down_out/conv2/conv/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":1.2668428328152895e-9,"min":-2.2549802424112154e-7}},{"name":"conv256_down_out/conv2/scale/weights","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.04351314469879749,"min":4.31956672668457}},{"name":"conv256_down_out/conv2/scale/biases","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.021499746921015722,"min":-1.2039858275768804}},{"name":"fc","shape":[256,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.000357687911566566,"min":-0.04578405268052045}}],"paths":["face_recognition_model-shard1","face_recognition_model-shard2"]}]</pre>
+  </div>
+  <div class='file-block'>
+    <div class='file-header'>public/models/tiny_face_detector_model-weights_manifest.json</div>
+    <pre>[{"weights":[{"name":"conv0/filters","shape":[3,3,3,16],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.009007044399485869,"min":-1.2069439495311063}},{"name":"conv0/bias","shape":[16],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.005263455241334205,"min":-0.9211046672334858}},{"name":"conv1/depthwise_filter","shape":[3,3,16,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.004001977630690033,"min":-0.5042491814669441}},{"name":"conv1/pointwise_filter","shape":[1,1,16,32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.013836609615999109,"min":-1.411334180831909}},{"name":"conv1/bias","shape":[32],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0015159862590771096,"min":-0.30926119685173037}},{"name":"conv2/depthwise_filter","shape":[3,3,32,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002666276225856706,"min":-0.317286870876948}},{"name":"conv2/pointwise_filter","shape":[1,1,32,64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.015265831292844286,"min":-1.6792414422128714}},{"name":"conv2/bias","shape":[64],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0020280554598453,"min":-0.37113414915168985}},{"name":"conv3/depthwise_filter","shape":[3,3,64,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006100742489683862,"min":-0.8907084034938438}},{"name":"conv3/pointwise_filter","shape":[1,1,64,128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.016276211832083907,"min":-2.0508026908425725}},{"name":"conv3/bias","shape":[128],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.003394414279975143,"min":-0.7637432129944072}},{"name":"conv4/depthwise_filter","shape":[3,3,128,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.006716050119961009,"min":-0.8059260143953211}},{"name":"conv4/pointwise_filter","shape":[1,1,128,256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.021875603993733724,"min":-2.8875797271728514}},{"name":"conv4/bias","shape":[256],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.0041141652009066415,"min":-0.8187188749804216}},{"name":"conv5/depthwise_filter","shape":[3,3,256,1],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008423839597141042,"min":-0.9013508368940915}},{"name":"conv5/pointwise_filter","shape":[1,1,256,512],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.030007277283014035,"min":-3.8709387695088107}},{"name":"conv5/bias","shape":[512],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.008402082966823203,"min":-1.4871686851277068}},{"name":"conv8/filters","shape":[1,1,512,25],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.028336129469030042,"min":-4.675461362389957}},{"name":"conv8/bias","shape":[25],"dtype":"float32","quantization":{"dtype":"uint8","scale":0.002268134028303857,"min":-0.41053225912299807}}],"paths":["tiny_face_detector_model-shard1"]}]</pre>
+  </div>
+</body>
+
+</html>

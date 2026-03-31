@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { sendEmail } from '@/lib/email/sendEmail'
 
-const ADMIN_EMAIL = 'support@BATAMART-mart.com'
+const ADMIN_EMAIL = 'support@BATAMART.com'
 
 const CATEGORY_LABELS: Record<string, string> = {
   PAYMENT_ISSUE: 'Payment Issue',
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
                     <hr style="border:none;border-top:1px solid #f3f4f6;margin:24px 0;" />
                     <p style="font-size:13px;color:#9ca3af;margin:0;">
                       If your issue is urgent, you can also reach us on WhatsApp.<br/>
-                      Please do not reply to this email — use <strong>support@BATAMART-mart.com</strong> to follow up.
+                      Please do not reply to this email — use <strong>support@BATAMART.com</strong> to follow up.
                     </p>
                   </td>
                 </tr>

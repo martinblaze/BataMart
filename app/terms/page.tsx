@@ -343,10 +343,10 @@ export default function TermsPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="mailto:support@BATAMART-mart.com"
+              href="mailto:support@BATAMART.com"
               className="bg-white text-BATAMART-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl"
             >
-              Email: support@BATAMART-mart.com
+              Email: support@BATAMART.com
             </a>
             <Link
               href="/contact"

@@ -234,8 +234,8 @@ export default function SellerTermsPage() {
 
         <p className="text-center text-xs text-gray-400 mt-6 pb-8">
           Questions? Contact us at{' '}
-          <a href="mailto:support@BATAMART-mart.com" className="hover:text-BATAMART-primary underline">
-            support@BATAMART-mart.com
+          <a href="mailto:support@BATAMART.com" className="hover:text-BATAMART-primary underline">
+            support@BATAMART.com
           </a>
         </p>
 

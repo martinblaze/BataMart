@@ -141,7 +141,7 @@ export default function ContactPage() {
             <p className="text-gray-600">Choose your preferred way to reach us</p>
           </div>
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <a href="mailto:support@BATAMART-mart.com"
+            <a href="mailto:support@BATAMART.com"
               className="bg-white p-8 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300 group">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                 <Mail className="w-8 h-8 text-white" />
@@ -149,7 +149,7 @@ export default function ContactPage() {
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Email Support</h3>
               <p className="text-gray-600 mb-4">Get help via email</p>
               <div className="flex items-center justify-between">
-                <span className="text-BATAMART-primary font-semibold text-lg">support@BATAMART-mart.com</span>
+                <span className="text-BATAMART-primary font-semibold text-lg">support@BATAMART.com</span>
                 <span className="text-BATAMART-primary group-hover:translate-x-2 transition-transform duration-300">→</span>
               </div>
             </a>
@@ -356,7 +356,7 @@ export default function ContactPage() {
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Still Have Questions?</h2>
           <p className="text-xl mb-8 text-white/90">Don't hesitate to reach out. We're always happy to help students!</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="mailto:support@BATAMART-mart.com"
+            <a href="mailto:support@BATAMART.com"
               className="bg-white text-BATAMART-primary hover:bg-gray-100 px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg inline-flex items-center justify-center gap-2">
               <Mail className="w-5 h-5" /> Email Us
             </a>
