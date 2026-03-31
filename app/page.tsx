@@ -241,7 +241,6 @@ export default function HomePage() {
     { name: 'Books', icon: '📚', count: '650 items', accent: '#0d9488', bg: 'bg-teal-100', text: 'text-teal-600' },
   ]
 
-  const locations = ['Aroma', 'Tempsite', 'Express Gate', 'Ifite', 'Amansea', 'Bus Stand', 'School Hostel']
 
   return (
     <>
@@ -586,16 +585,6 @@ export default function HomePage() {
 
             <Reveal delay={100}>
               <div className="flex flex-wrap justify-center gap-3">
-                {locations.map((loc, i) => (
-                  <div
-                    key={loc}
-                    className="location-pill flex items-center gap-2 bg-purple-50 border border-purple-200/60 px-5 py-2.5 rounded-full text-sm text-purple-700 font-medium"
-                    style={{ animationDelay: `${i * 80}ms` }}
-                  >
-                    <span className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
-                    {loc}
-                  </div>
-                ))}
               </div>
             </Reveal>
 
