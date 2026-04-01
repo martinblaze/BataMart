@@ -615,9 +615,9 @@ function SignupForm() {
             />
             <label htmlFor="terms" className="text-sm text-gray-700">
               I agree to the{' '}
-              <Link href="/terms" className="text-blue-600 font-semibold">Terms of Service</Link>
+              <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold">Terms of Service</Link>
               {' '}and{' '}
-              <Link href="/privacy" className="text-blue-600 font-semibold">Privacy Policy</Link>
+              <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold">Privacy Policy</Link>
             </label>
           </div>
 
