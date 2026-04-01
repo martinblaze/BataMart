@@ -675,21 +675,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── RIDER CTA ── */}
-        <Reveal>
-          <div className="relative bg-gradient-to-r from-purple-50 to-indigo-50 border-y border-purple-100 py-5 px-4 text-center">
-            <Link
-              href="/rider-signup"
-              className="inline-flex items-center gap-3 text-purple-700 hover:text-purple-900 transition-colors group"
-            >
-              <span className="text-xl">🛵</span>
-              <span className="BATAMART-display font-semibold tracking-wide">Become a Rider</span>
-              <span className="text-gray-400 text-sm">— Earn ₦560 per delivery</span>
-              <span className="text-purple-400 group-hover:translate-x-1 transition-transform">→</span>
-            </Link>
-          </div>
-        </Reveal>
-
         {/* ── FOOTER ── */}
         <footer className="relative bg-gray-50 border-t border-gray-200 py-16 px-4">
           <div className="max-w-6xl mx-auto">
@@ -714,7 +699,6 @@ export default function HomePage() {
                   links: [
                     { name: 'Marketplace', href: '/marketplace' },
                     { name: 'Sell on BATAMART', href: '/sell' },
-                    { name: 'Become a Rider', href: '/rider-signup' },
                   ],
                 },
                 {

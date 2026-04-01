@@ -190,8 +190,6 @@ function RiderBottomNav({ onLogout }: { onLogout: () => void }) {
           background: '#0f172a',
           borderColor: '#1e293b',
           boxShadow: '0 -4px 24px rgba(0,0,0,0.4)',
-          // iOS PWA fix — translate3d forces GPU compositing layer
-          // which prevents the nav from moving when keyboard dismisses
           transform: 'translate3d(0,0,0)',
           WebkitTransform: 'translate3d(0,0,0)',
           willChange: 'transform',
@@ -361,20 +359,19 @@ function AppBottomNav({
   isSellerMode,
   userName,
   onLogout,
+  onToggleMode,
 }: {
   isLoggedIn: boolean
   userRole: string
   isSellerMode: boolean
   userName: string
   onLogout: () => void
+  onToggleMode: () => void
 }) {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
 
   // ── iOS PWA keyboard fix ──────────────────────────────────────────────────
-  // On iOS, when the keyboard dismisses, the visual viewport resizes and
-  // breaks fixed positioning. We detect focus/blur on inputs and force a
-  // repaint of the nav after the keyboard animation completes.
   useEffect(() => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
     if (!isIOS) return
@@ -386,16 +383,13 @@ function AppBottomNav({
     }
 
     const onFocusOut = () => {
-      // Wait for iOS keyboard close animation (~300ms)
       setTimeout(() => {
-        // Restore scroll position — prevents content jumping under top nav
         window.scrollTo({ top: lastScrollY, behavior: 'instant' })
-        // Force nav repaint by toggling display — fixes floating bottom nav
         const navs = document.querySelectorAll('nav')
         navs.forEach(nav => {
           nav.style.display = 'none'
           // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-          nav.offsetHeight // trigger reflow
+          nav.offsetHeight
           nav.style.display = ''
         })
       }, 300)
@@ -466,8 +460,6 @@ function AppBottomNav({
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
         style={{
           boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
-          // translate3d instead of translateZ — more reliable on iOS Safari
-          // for keeping fixed elements anchored during viewport resize
           transform: 'translate3d(0,0,0)',
           WebkitTransform: 'translate3d(0,0,0)',
           willChange: 'transform',
@@ -598,7 +590,7 @@ function AppBottomNav({
                 <div className="px-4 py-2">
                   {[
                     { href: '/myprofile?app=true', icon: User, label: 'My Account' },
-                    { href: '/my-shop?app=true', icon: Store, label: isSeller && isSellerMode ? 'My Shop' : 'My Items' },
+                    { href: '/my-shop?app=true', icon: Store, label: (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode ? 'My Shop' : 'My Items' },
                     { href: '/dispute/select-order?app=true', icon: AlertTriangle, label: 'Disputes', hide: userRole === 'RIDER' },
                   ]
                     .filter(item => !item.hide)
@@ -615,7 +607,33 @@ function AppBottomNav({
                     ))}
                 </div>
 
-                <div className="px-6 pt-2">
+                {/* ── Bottom actions: mode toggle + logout ───────────── */}
+                <div className="px-6 pt-2 space-y-3">
+                  {/* Buyer / Seller toggle — only for sellers and admins */}
+                  {(userRole === 'SELLER' || userRole === 'ADMIN') && (
+                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Mode</p>
+                        <p className="text-xs text-gray-400">{isSellerMode ? 'You are selling' : 'You are buying'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Buying</span>
+                        <button
+                          onClick={() => { onToggleMode() }}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                          style={{ background: isSellerMode ? 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' : '#d1d5db' }}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                              isSellerMode ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-xs text-gray-500">Selling</span>
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     onClick={() => { setProfileOpen(false); onLogout() }}
                     className="flex items-center justify-center w-full gap-2 bg-red-50 text-red-600 font-semibold py-3 rounded-xl"
@@ -657,9 +675,9 @@ export function Navbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const isAppParam  = searchParams.get('app')     === 'true'
-  const isAndroid   = searchParams.get('android') === 'true'
-  const isRiderParam = searchParams.get('rider')  === 'true'
+  const isAppParam   = searchParams.get('app')     === 'true'
+  const isAndroid    = searchParams.get('android') === 'true'
+  const isRiderParam = searchParams.get('rider')   === 'true'
 
   const [isStandalone, setIsStandalone] = useState(false)
   useEffect(() => {
@@ -713,7 +731,6 @@ export function Navbar() {
   const cartCount = getTotalItems()
 
   useEffect(() => {
-    // ── Disable scroll-hide on iOS PWA — it fights the keyboard fix ──────
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
     if (isIOS && isApp) return
 
@@ -835,6 +852,7 @@ export function Navbar() {
           isSellerMode={isSellerMode}
           userName={userName}
           onLogout={handleLogout}
+          onToggleMode={toggleRoleMode}
         />
       </>
     )
