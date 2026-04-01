@@ -14,37 +14,86 @@ interface University {
   deliveryAreas: string[]
 }
 
+// ── Shared UI helpers — defined OUTSIDE SignupForm so they don't remount ──
+const bgStyle  = { background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }
+const btnStyle = { background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }
+
+const PageShell = ({
+  children,
+  selectedUniversity,
+}: {
+  children: React.ReactNode
+  selectedUniversity: University | null
+}) => (
+  <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" style={bgStyle}>
+    <div className="w-full max-w-md">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-black text-white tracking-tight">BATAMART</h1>
+        <p className="text-blue-300 text-sm mt-1">Campus Marketplace</p>
+        {selectedUniversity && (
+          <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30">
+            <MapPin className="w-3.5 h-3.5 text-blue-300" />
+            <span className="text-blue-300 text-xs font-semibold">
+              {selectedUniversity.shortName} — {selectedUniversity.location}
+            </span>
+          </div>
+        )}
+      </div>
+      {children}
+    </div>
+  </div>
+)
+
+const ErrorBox = ({ error }: { error: string }) =>
+  error ? (
+    <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600">
+      {error}
+    </div>
+  ) : null
+
+const StepDots = ({ current }: { current: number }) => (
+  <div className="flex justify-center gap-1.5 mb-6">
+    {[1, 2, 3, 4].map(s => (
+      <div
+        key={s}
+        className={`h-1.5 rounded-full transition-all ${
+          s < current  ? 'w-6 bg-blue-500' :
+          s === current ? 'w-6 bg-blue-400' :
+          'w-3 bg-gray-200'
+        }`}
+      />
+    ))}
+  </div>
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function SignupForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
-  // Steps: 0=campus, 1=details, 2=OTP, 3=location, 4=password
-  const [step, setStep]                         = useState(0)
-  const [universities, setUniversities]         = useState<University[]>([])
+  const [step, setStep]                             = useState(0)
+  const [universities, setUniversities]             = useState<University[]>([])
   const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null)
-  const [uniLoading, setUniLoading]             = useState(true)
+  const [uniLoading, setUniLoading]                 = useState(true)
 
-  // Step 1 fields
   const [email, setEmail]           = useState('')
   const [name, setName]             = useState('')
   const [phone, setPhone]           = useState('')
   const [wantToSell, setWantToSell] = useState(false)
 
-  // Step 2 fields
   const [otp, setOtp]                         = useState(['', '', '', '', '', ''])
   const [otpSessionToken, setOtpSessionToken] = useState('')
 
-  // Step 3 — Delivery location fields
   const [selectedArea, setSelectedArea]   = useState('')
   const [hostelName, setHostelName]       = useState('')
   const [roomNumber, setRoomNumber]       = useState('')
   const [deliveryPhone, setDeliveryPhone] = useState('')
 
-  // Step 4 fields
-  const [password, setPassword]           = useState('')
+  const [password, setPassword]               = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [referralCode, setReferralCode]   = useState('')
+  const [agreedToTerms, setAgreedToTerms]     = useState(false)
+  const [referralCode, setReferralCode]       = useState('')
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
@@ -54,7 +103,6 @@ function SignupForm() {
     if (ref) setReferralCode(ref.trim().toUpperCase())
   }, [searchParams])
 
-  // Pre-fill delivery phone with signup phone when moving to step 3
   useEffect(() => {
     if (step === 3 && phone && !deliveryPhone) {
       setDeliveryPhone(phone)
@@ -64,9 +112,7 @@ function SignupForm() {
   useEffect(() => {
     fetch('/api/universities')
       .then(r => r.json())
-      .then(data => {
-        setUniversities(data.universities ?? [])
-      })
+      .then(data => setUniversities(data.universities ?? []))
       .catch(() => {})
       .finally(() => setUniLoading(false))
   }, [])
@@ -88,7 +134,6 @@ function SignupForm() {
     e.preventDefault()
     const phoneError = validatePhone(phone)
     if (phoneError) { setError(phoneError); return }
-
     setLoading(true)
     setError('')
     try {
@@ -98,11 +143,8 @@ function SignupForm() {
         body:    JSON.stringify({ email }),
       })
       const data = await response.json()
-      if (response.ok) {
-        setStep(2)
-      } else {
-        setError(data.error || 'Failed to send OTP')
-      }
+      if (response.ok) { setStep(2) }
+      else { setError(data.error || 'Failed to send OTP') }
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -129,7 +171,6 @@ function SignupForm() {
   const handleVerifyOTP = async () => {
     const code = otp.join('')
     if (code.length !== 6) { setError('Please enter the complete 6-digit code'); return }
-
     setLoading(true)
     setError('')
     try {
@@ -141,7 +182,7 @@ function SignupForm() {
       const data = await response.json()
       if (response.ok && data.otpSessionToken) {
         setOtpSessionToken(data.otpSessionToken)
-        setStep(3) // Go to location step
+        setStep(3)
       } else {
         setError(data.error || 'Invalid OTP')
       }
@@ -154,9 +195,9 @@ function SignupForm() {
 
   const handleLocationContinue = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedArea) { setError('Please select your delivery area'); return }
-    if (!hostelName.trim()) { setError('Please enter your lodge or landmark name'); return }
-    if (!roomNumber.trim()) { setError('Please enter your room number'); return }
+    if (!selectedArea)        { setError('Please select your delivery area'); return }
+    if (!hostelName.trim())   { setError('Please enter your lodge or landmark name'); return }
+    if (!roomNumber.trim())   { setError('Please enter your room number'); return }
     const phoneErr = validatePhone(deliveryPhone)
     if (phoneErr) { setError(phoneErr); return }
     setError('')
@@ -169,7 +210,6 @@ function SignupForm() {
     const pwdError = validatePassword(password)
     if (pwdError) { setError(pwdError); return }
     if (password !== confirmPassword) { setError('Passwords do not match'); return }
-
     setLoading(true)
     setError('')
     try {
@@ -177,18 +217,13 @@ function SignupForm() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
-          name,
-          phone,
-          password,
-          otpSessionToken,
+          email, name, phone, password, otpSessionToken,
           role:         wantToSell ? 'SELLER' : 'BUYER',
           referralCode: referralCode || undefined,
           universityId: selectedUniversity!.id,
-          // Delivery location fields
           hostelName:   hostelName.trim(),
           roomNumber:   roomNumber.trim(),
-          landmark:     selectedArea, // area saved as landmark
+          landmark:     selectedArea,
         }),
       })
       const data = await response.json()
@@ -208,62 +243,15 @@ function SignupForm() {
     }
   }
 
-  // ── Shared UI helpers ──────────────────────────────────────────────────────
-  const bgStyle = { background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }
-  const btnStyle = { background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }
-
-  const PageShell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" style={bgStyle}>
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-white tracking-tight">BATAMART</h1>
-          <p className="text-blue-300 text-sm mt-1">Campus Marketplace</p>
-          {selectedUniversity && (
-            <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30">
-              <MapPin className="w-3.5 h-3.5 text-blue-300" />
-              <span className="text-blue-300 text-xs font-semibold">
-                {selectedUniversity.shortName} — {selectedUniversity.location}
-              </span>
-            </div>
-          )}
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-
-  const ErrorBox = () => error ? (
-    <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600">
-      {error}
-    </div>
-  ) : null
-
-  // ── Step progress indicator ────────────────────────────────────────────────
-  const StepDots = ({ current }: { current: number }) => (
-    <div className="flex justify-center gap-1.5 mb-6">
-      {[1, 2, 3, 4].map(s => (
-        <div
-          key={s}
-          className={`h-1.5 rounded-full transition-all ${
-            s < current ? 'w-6 bg-blue-500' :
-            s === current ? 'w-6 bg-blue-400' :
-            'w-3 bg-gray-200'
-          }`}
-        />
-      ))}
-    </div>
-  )
-
   // ════════════════════════════════════════════════════════
   // STEP 0 — University selector
   // ════════════════════════════════════════════════════════
   if (step === 0) {
     return (
-      <PageShell>
+      <PageShell selectedUniversity={selectedUniversity}>
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <div className="text-center mb-6">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={btnStyle}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={btnStyle}>
               <MapPin className="w-7 h-7 text-white" />
             </div>
             <h2 className="text-xl font-black text-gray-900">Select Your Campus</h2>
@@ -309,11 +297,8 @@ function SignupForm() {
                   </div>
                 </button>
               ))}
-
               {universities.length === 0 && (
-                <p className="text-center text-gray-400 text-sm py-4">
-                  No campuses available yet.
-                </p>
+                <p className="text-center text-gray-400 text-sm py-4">No campuses available yet.</p>
               )}
             </div>
           )}
@@ -342,13 +327,13 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 1) {
     return (
-      <PageShell>
+      <PageShell selectedUniversity={selectedUniversity}>
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <StepDots current={1} />
           <h2 className="text-xl font-black text-gray-900 mb-1">Create account</h2>
           <p className="text-sm text-gray-500 mb-6">Join the {selectedUniversity?.shortName} marketplace</p>
 
-          <ErrorBox />
+          <ErrorBox error={error} />
 
           <form onSubmit={handleSendOTP} className="space-y-4">
             <div>
@@ -411,7 +396,6 @@ function SignupForm() {
           <button onClick={() => setStep(0)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600">
             ← Change campus
           </button>
-
           <p className="text-center text-sm text-gray-500 mt-4">
             Already have an account?{' '}
             <Link href="/login" className="font-semibold text-blue-600">Sign in</Link>
@@ -426,7 +410,7 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 2) {
     return (
-      <PageShell>
+      <PageShell selectedUniversity={selectedUniversity}>
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <StepDots current={2} />
           <h2 className="text-xl font-black text-gray-900 mb-1">Verify your email</h2>
@@ -434,7 +418,7 @@ function SignupForm() {
             Enter the 6-digit code sent to <strong>{email}</strong>
           </p>
 
-          <ErrorBox />
+          <ErrorBox error={error} />
 
           <div className="flex justify-center gap-2 mb-6">
             {otp.map((digit, i) => (
@@ -475,33 +459,26 @@ function SignupForm() {
   if (step === 3) {
     const areas: string[] = Array.isArray(selectedUniversity?.deliveryAreas)
       ? selectedUniversity!.deliveryAreas
-      : ['Aroma', 'Tempsite', 'Express Gate', 'Ifite', 'Amansea', 'Bus Stand', 'School Hostel']
+      : ['Aroma', 'Tempsite', 'Express Gate', 'Ifite', 'Bus Stand', 'School Hostel']
 
     return (
-      <PageShell>
+      <PageShell selectedUniversity={selectedUniversity}>
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <StepDots current={3} />
 
           <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
-              style={btnStyle}>
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3" style={btnStyle}>
               <MapPin className="w-6 h-6 text-white" />
             </div>
             <h2 className="text-xl font-black text-gray-900">Your Delivery Location</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              So riders can find you when you order
-            </p>
+            <p className="text-sm text-gray-500 mt-1">So riders can find you when you order</p>
           </div>
 
-          <ErrorBox />
+          <ErrorBox error={error} />
 
           <form onSubmit={handleLocationContinue} className="space-y-5">
-
-            {/* Area selector */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-2">
-                Select Your Area
-              </label>
+              <label className="block text-xs font-semibold text-gray-600 mb-2">Select Your Area</label>
               <div className="flex flex-wrap gap-2">
                 {areas.map(area => (
                   <button
@@ -521,11 +498,8 @@ function SignupForm() {
               </div>
             </div>
 
-            {/* Lodge / Landmark */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Lodge Name / Landmark
-              </label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Lodge Name / Landmark</label>
               <div className="relative">
                 <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -539,11 +513,8 @@ function SignupForm() {
               </div>
             </div>
 
-            {/* Room number */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Room Number
-              </label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Room Number</label>
               <div className="relative">
                 <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -557,11 +528,8 @@ function SignupForm() {
               </div>
             </div>
 
-            {/* Phone for delivery */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Phone for Delivery
-              </label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone for Delivery</label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -573,9 +541,7 @@ function SignupForm() {
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Riders will call this number when they arrive
-              </p>
+              <p className="text-xs text-gray-400 mt-1">Riders will call this number when they arrive</p>
             </div>
 
             <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
@@ -584,11 +550,7 @@ function SignupForm() {
               </p>
             </div>
 
-            <button
-              type="submit"
-              className="w-full py-4 rounded-2xl text-white font-bold text-base"
-              style={btnStyle}
-            >
+            <button type="submit" className="w-full py-4 rounded-2xl text-white font-bold text-base" style={btnStyle}>
               Continue →
             </button>
           </form>
@@ -605,13 +567,13 @@ function SignupForm() {
   // STEP 4 — Password + terms
   // ════════════════════════════════════════════════════════
   return (
-    <PageShell>
+    <PageShell selectedUniversity={selectedUniversity}>
       <div className="bg-white rounded-3xl p-8 shadow-2xl">
         <StepDots current={4} />
         <h2 className="text-xl font-black text-gray-900 mb-1">Set your password</h2>
         <p className="text-sm text-gray-500 mb-6">Almost done, {name}!</p>
 
-        <ErrorBox />
+        <ErrorBox error={error} />
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
