@@ -17,14 +17,11 @@ const UNIVERSITIES = [
     deliveryAreas: [
       'Aroma',
       'Tempsite',
-      'Town Campus',
-      'Bus Stand',
-      'Zik Avenue',
-      'Unizik Junction',
+      'Express Gate',
       'Ifite',
-      'Okpuno',
-      'Amawbia',
-      'Awka Town',
+      'Bus Stand',
+      'School Hostel',
+      'Amansea',
     ],
     hostels: [
       'Python Hall',
