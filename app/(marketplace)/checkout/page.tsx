@@ -179,12 +179,13 @@ export default function CheckoutPage() {
   )
 
   // ── FIX #4: Show server fee if available, else show a placeholder ──
-  const deliveryFee = serverDeliveryFee ?? 800
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const totalAmount = subtotal + deliveryFee
-  const platformFee = subtotal * 0.05 + 240
-  const riderAmount = 560
-  const sellerAmount = subtotal * 0.95
+  const deliveryFee   = serverDeliveryFee ?? 800
+  const subtotal      = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const totalAmount   = subtotal + deliveryFee
+  const platformFee   = subtotal * 0.05          // platform keeps full 5% — no delivery cut
+  const riderAmount   = 560
+  const referralCut   = 240                       // goes to referrer (if buyer was referred)
+  const sellerAmount  = subtotal * 0.95
   const hasNotes = Object.values(orderNotes).some(n => n.trim().length > 0)
 
   return (
@@ -431,13 +432,15 @@ export default function CheckoutPage() {
                 By paying, you agree to BATAMART's Terms of Service. Payment secured by Paystack.
               </p>
 
+              {/* ── Payment Breakdown ─────────────────────────────── */}
               <div className="mt-5 pt-4 border-t border-gray-50">
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Payment Breakdown</p>
                 <div className="space-y-2">
                   {[
-                    { label: 'Seller receives', value: formatPrice(sellerAmount), color: 'text-emerald-600' },
-                    { label: 'Rider receives', value: formatPrice(riderAmount), color: 'text-blue-600' },
-                    { label: 'Platform fee', value: formatPrice(platformFee), color: 'text-gray-500' },
+                    { label: 'Seller receives',   value: formatPrice(sellerAmount), color: 'text-emerald-600' },
+                    { label: 'Rider receives',    value: formatPrice(riderAmount),  color: 'text-blue-600'   },
+                    { label: 'Platform fee (5%)', value: formatPrice(platformFee),  color: 'text-gray-500'   },
+                    { label: 'Referral reward',   value: formatPrice(referralCut),  color: 'text-pink-500'   },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="flex justify-between text-xs">
                       <span className="text-gray-400 font-medium">{label}</span>

@@ -10,7 +10,7 @@ function appRedirect(path: string) {
   const base = process.env.NEXT_PUBLIC_APP_URL
   if (!base) {
     console.error('❌ CRITICAL: NEXT_PUBLIC_APP_URL is not set in environment variables!')
-    return NextResponse.redirect(`https://bata-mart.vercel.app${path}`)
+    return NextResponse.redirect(`https://batamart.com${path}`)
   }
   return NextResponse.redirect(`${base.replace(/\/$/, '')}${path}`)
 }
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   console.log('═'.repeat(70))
   console.log('📍 Reference:', reference)
   console.log('📍 Timestamp:', new Date().toISOString())
-  console.log('📍 APP_URL:',   process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
+  console.log('📍 APP_URL:', process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
 
   if (!reference) {
     console.error('❌ ERROR: No reference in URL')
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     console.log('\n🔄 STEP 2: Idempotency check')
 
     const existingPayment = await prisma.payment.findFirst({
-      where:   { transactionId: reference },
+      where: { transactionId: reference },
       include: { order: { select: { id: true, orderNumber: true } } },
     })
 
@@ -84,21 +84,21 @@ export async function GET(request: NextRequest) {
     console.log('\n📋 STEP 3: Extracting Metadata')
 
     type CartItem = {
-      productId:  string
-      name:       string
-      price:      number
-      quantity:   number
-      category:   string
-      sellerId:   string
+      productId: string
+      name: string
+      price: number
+      quantity: number
+      category: string
+      sellerId: string
       sellerName: string
       orderNote?: string
     }
 
     const meta = verifyData.data.metadata as {
-      userId:      string
-      cartItems:   CartItem[]
+      userId: string
+      cartItems: CartItem[]
       deliveryFee: number
-      fees:        ReturnType<typeof calculateFees>
+      fees: ReturnType<typeof calculateFees>
     }
 
     if (!meta?.userId || !Array.isArray(meta?.cartItems) || meta.cartItems.length === 0) {
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
     console.log('\n👤 STEP 4: Fetching Buyer')
 
     const buyer = await prisma.user.findUnique({
-      where:  { id: meta.userId },
+      where: { id: meta.userId },
       select: {
         id: true, name: true, email: true,
         hostelName: true, roomNumber: true,
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
-        where:  { id: item.productId },
+        where: { id: item.productId },
         select: { id: true, name: true, quantity: true, isActive: true },
       })
 
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
     console.log('\n💰 STEP 6: Creating Orders')
 
     const subtotal = meta.cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    const fees     = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
+    const fees = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
 
     let orders: Awaited<ReturnType<typeof createOrders>>
     try {
@@ -188,20 +188,20 @@ export async function GET(request: NextRequest) {
     console.log('\n🔔 STEP 7: Queueing Notifications')
 
     const sellerMap = new Map<string, {
-      orderId:     string
+      orderId: string
       orderNumber: string
-      orderNote?:  string
-      itemsList:   string
+      orderNote?: string
+      itemsList: string
     }>()
 
     for (const order of orders) {
       if (order.sellerId && !sellerMap.has(order.sellerId)) {
         const sellerItems = meta.cartItems.filter(i => i.sellerId === order.sellerId)
         sellerMap.set(order.sellerId, {
-          orderId:     order.id,
+          orderId: order.id,
           orderNumber: order.orderNumber,
-          orderNote:   sellerItems[0]?.orderNote,
-          itemsList:   sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', '),
+          orderNote: sellerItems[0]?.orderNote,
+          itemsList: sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', '),
         })
       }
     }
@@ -266,12 +266,12 @@ export async function GET(request: NextRequest) {
 // never crashes the verify route
 // ─────────────────────────────────────────────────────────────────────────────
 async function notifySellerOfNewOrder(
-  sellerId:    string,
-  orderId:     string,
+  sellerId: string,
+  orderId: string,
   orderNumber: string,
-  orderNote:   string | undefined,
-  buyerName:   string,
-  itemsList:   string,
+  orderNote: string | undefined,
+  buyerName: string,
+  itemsList: string,
 ) {
   const hasNote = Boolean(orderNote?.trim())
 
@@ -284,9 +284,9 @@ async function notifySellerOfNewOrder(
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-        where:  { id: sellerId },
-        select: { email: true },
-      }).catch(() => null)
+      where: { id: sellerId },
+      select: { email: true },
+    }).catch(() => null)
     : null
 
   const tasks: Promise<any>[] = []
@@ -294,10 +294,10 @@ async function notifySellerOfNewOrder(
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId:   sellerId,
-        type:     'ORDER_PLACED',
-        title:    '🛒 New Order Received!',
-        message:  `You have a new order (#${orderNumber}) for ${itemsList}`,
+        userId: sellerId,
+        type: 'ORDER_PLACED',
+        title: '🛒 New Order Received!',
+        message: `You have a new order (#${orderNumber}) for ${itemsList}`,
         orderId,
         metadata: { orderNumber, buyerName, itemsList },
       })
@@ -306,10 +306,10 @@ async function notifySellerOfNewOrder(
     if (hasNote) {
       tasks.push(
         notifMod.createNotification({
-          userId:   sellerId,
-          type:     'ORDER_PLACED',
-          title:    '📝 Note from Buyer',
-          message:  `For order #${orderNumber}: "${orderNote}"`,
+          userId: sellerId,
+          type: 'ORDER_PLACED',
+          title: '📝 Note from Buyer',
+          message: `For order #${orderNumber}: "${orderNote}"`,
           orderId,
           metadata: { orderNumber, orderNote },
         })
@@ -322,10 +322,10 @@ async function notifySellerOfNewOrder(
   }
 
   if (hasNote && seller?.email && emailMod?.sendEmail) {
-    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to:      seller.email,
+        to: seller.email,
         subject: `🎉 New Order #${orderNumber} — BATAMART`,
         html: `
 <!DOCTYPE html>

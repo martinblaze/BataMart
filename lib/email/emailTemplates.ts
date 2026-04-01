@@ -1,7 +1,7 @@
 // lib/email/emailTemplates.ts
 // All email templates for BATAMART notifications
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com'
 
 // ─── Base layout wrapper ──────────────────────────────────────────────────────
 function baseTemplate(content: string) {

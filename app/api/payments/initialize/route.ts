@@ -12,15 +12,15 @@ export const dynamic = 'force-dynamic'
 // must always compute fees identically from the same function.
 // ============================================================
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
-  const PLATFORM_RATE        = 0.05
-  const RIDER_SHARE          = 560
+  const PLATFORM_RATE = 0.05
+  const RIDER_SHARE = 560
   const PLATFORM_DELIVERY_CUT = 240
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
-  const sellerShare             = subtotal - platformFeeFromProducts
-  const riderShare              = RIDER_SHARE
-  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
-  const totalAmount             = subtotal + deliveryFee
+  const sellerShare = subtotal - platformFeeFromProducts
+  const riderShare = RIDER_SHARE
+  const platformTotal = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
+  const totalAmount = subtotal + deliveryFee
 
   return {
     subtotal,
@@ -45,12 +45,12 @@ export async function POST(request: NextRequest) {
     const { productId, cartItems, deliveryFee = 800 } = body
 
     type CartItem = {
-      productId:  string
-      name:       string
-      price:      number
-      quantity:   number
-      category:   string
-      sellerId:   string
+      productId: string
+      name: string
+      price: number
+      quantity: number
+      category: string
+      sellerId: string
       sellerName: string
       orderNote?: string
     }
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       // Server always re-fetches price from DB — client-supplied price is IGNORED
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
-          where:   { id: item.productId },
+          where: { id: item.productId },
           include: { seller: true },
         })
         if (!product) {
@@ -75,19 +75,19 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Order note must be under 300 characters' }, { status: 400 })
         }
         items.push({
-          productId:  product.id,
-          name:       product.name,
-          price:      product.price, // ← always from DB, never from client
-          quantity:   item.quantity,
-          category:   product.category,
-          sellerId:   product.sellerId,
+          productId: product.id,
+          name: product.name,
+          price: product.price, // ← always from DB, never from client
+          quantity: item.quantity,
+          category: product.category,
+          sellerId: product.sellerId,
           sellerName: product.seller.name,
-          orderNote:  item.orderNote,
+          orderNote: item.orderNote,
         })
       }
     } else if (productId) {
       const product = await prisma.product.findUnique({
-        where:   { id: productId },
+        where: { id: productId },
         include: { seller: true },
       })
       if (!product) {
@@ -97,14 +97,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Product unavailable' }, { status: 400 })
       }
       items = [{
-        productId:  product.id,
-        name:       product.name,
-        price:      product.price,
-        quantity:   1,
-        category:   product.category,
-        sellerId:   product.sellerId,
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+        category: product.category,
+        sellerId: product.sellerId,
         sellerName: product.seller.name,
-        orderNote:  body.orderNote,
+        orderNote: body.orderNote,
       }]
     } else {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const fees     = calculateFees(subtotal, deliveryFee)
+    const fees = calculateFees(subtotal, deliveryFee)
 
     // APP_URL required
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const reference   = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
+    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
     const callbackUrl = `${APP_URL.replace(/\/$/, '')}/api/payments/verify`
 
     console.log('💳 Initializing Paystack — reference:', reference, '| callback:', callbackUrl)
@@ -142,13 +142,13 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email:        user.email || `${user.id}@batamart.app`,
-        amount:       fees.totalAmount * 100, // kobo
+        email: user.email || `${user.id}@batamart.app`,
+        amount: fees.totalAmount * 100, // kobo
         reference,
         callback_url: callbackUrl,
         metadata: {
-          userId:      user.id,
-          cartItems:   items,
+          userId: user.id,
+          cartItems: items,
           deliveryFee,
           fees,
         },
@@ -168,11 +168,11 @@ export async function POST(request: NextRequest) {
     console.log('✅ Paystack initialized — reference:', reference)
 
     return NextResponse.json({
-      success:           true,
+      success: true,
       authorization_url: paystackData.data.authorization_url,
-      reference:         paystackData.data.reference,
-      deliveryFee:       fees.deliveryFee,
-      totalAmount:       fees.totalAmount,
+      reference: paystackData.data.reference,
+      deliveryFee: fees.deliveryFee,
+      totalAmount: fees.totalAmount,
     })
   } catch (error) {
     console.error('Payment init error:', error)
@@ -189,23 +189,23 @@ export async function POST(request: NextRequest) {
 // ══════════════════════════════════════════════════════════════════════════════
 export async function createOrders(
   items: {
-    productId:  string
-    name:       string
-    price:      number
-    quantity:   number
-    category:   string
-    sellerId:   string
+    productId: string
+    name: string
+    price: number
+    quantity: number
+    category: string
+    sellerId: string
     sellerName: string
     orderNote?: string
   }[],
   user: {
-    id:          string
+    id: string
     hostelName?: string | null
     roomNumber?: string | null
-    phone?:      string | null
-    landmark?:   string | null
+    phone?: string | null
+    landmark?: string | null
   },
-  fees:             ReturnType<typeof calculateFees>,
+  fees: ReturnType<typeof calculateFees>,
   paymentReference: string
 ) {
   console.log('📝 createOrders called — reference:', paymentReference)
@@ -220,30 +220,30 @@ export async function createOrders(
   const createdOrders: Awaited<ReturnType<typeof prisma.order.create>>[] = []
 
   const notificationQueue: Array<{
-    orderId:     string
-    buyerId:     string
-    sellerId:    string
+    orderId: string
+    buyerId: string
+    sellerId: string
     orderNumber: string
-    itemsList:   string
+    itemsList: string
   }> = []
 
   const outOfStockAlerts: Array<{
-    sellerId:    string
-    productId:   string
+    sellerId: string
+    productId: string
     productName: string
   }> = []
 
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    const proportion    = fees.subtotal > 0 ? orderSubtotal / fees.subtotal : 1
-    const orderFees     = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
+    const proportion = fees.subtotal > 0 ? orderSubtotal / fees.subtotal : 1
+    const orderFees = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
 
     // FIX 1: Use crypto.randomUUID() instead of Date.now() + random suffix.
     // Date.now() has millisecond resolution — two sellers processing in the same
     // createOrders call can produce an identical timestamp, causing a unique
     // constraint violation on orderNumber. UUID is globally unique by design.
     const orderNumber = `BATAMART-${crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase()}`
-    const itemsList   = sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', ')
+    const itemsList = sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', ')
 
     console.log('🔨 Creating order:', orderNumber, 'for seller:', sellerId)
 
@@ -251,7 +251,7 @@ export async function createOrders(
       const order = await prisma.$transaction(async (tx) => {
         // FIX 2: Only fetch pendingBalance — availableBalance was dead data here.
         const seller = await tx.user.findUnique({
-          where:  { id: sellerId },
+          where: { id: sellerId },
           select: { pendingBalance: true },
         })
         if (!seller) throw new Error(`Seller not found: ${sellerId}`)
@@ -264,28 +264,28 @@ export async function createOrders(
         const newOrder = await tx.order.create({
           data: {
             orderNumber,
-            buyerId:            user.id,
+            buyerId: user.id,
             sellerId,
-            productId:          sellerItems[0].productId,
-            productPrice:       Number(orderSubtotal),
-            deliveryFee:        Number(orderFees.deliveryFee),
-            totalAmount:        Number(orderFees.totalAmount),
+            productId: sellerItems[0].productId,
+            productPrice: Number(orderSubtotal),
+            deliveryFee: Number(orderFees.deliveryFee),
+            totalAmount: Number(orderFees.totalAmount),
             platformCommission: Number(orderFees.platformTotal),
-            quantity:           Number(sellerItems.reduce((sum, i) => sum + i.quantity, 0)),
-            deliveryHostel:     String(user.hostelName ?? ''),
-            deliveryRoom:       String(user.roomNumber ?? ''),
-            deliveryPhone:      String(user.phone      ?? ''),
-            deliveryLandmark:   String(user.landmark   ?? ''),
-            isPaid:             true,
-            status:             'PENDING' as const,
+            quantity: Number(sellerItems.reduce((sum, i) => sum + i.quantity, 0)),
+            deliveryHostel: String(user.hostelName ?? ''),
+            deliveryRoom: String(user.roomNumber ?? ''),
+            deliveryPhone: String(user.phone ?? ''),
+            deliveryLandmark: String(user.landmark ?? ''),
+            isPaid: true,
+            status: 'PENDING' as const,
             orderNote,
             payment: {
               create: {
-                amount:        Number(orderFees.totalAmount),
-                method:        'CARD'      as const,
-                status:        'COMPLETED' as const,
+                amount: Number(orderFees.totalAmount),
+                method: 'CARD' as const,
+                status: 'COMPLETED' as const,
                 transactionId: paymentReference,
-                paidAt:        new Date(),
+                paidAt: new Date(),
               },
             },
           },
@@ -302,7 +302,7 @@ export async function createOrders(
         for (const item of sellerItems) {
           const updated = await tx.product.updateMany({
             where: {
-              id:       item.productId,
+              id: item.productId,
               quantity: { gte: Number(item.quantity) }, // only proceed if stock is still sufficient
             },
             data: { quantity: { decrement: Number(item.quantity) } },
@@ -316,51 +316,51 @@ export async function createOrders(
           // Check if stock just hit zero and deactivate if so.
           // We re-fetch only the fields we need — updateMany doesn't return rows.
           const afterUpdate = await tx.product.findUnique({
-            where:  { id: item.productId },
+            where: { id: item.productId },
             select: { id: true, name: true, quantity: true },
           })
 
           if (afterUpdate && afterUpdate.quantity <= 0) {
             await tx.product.update({
               where: { id: item.productId },
-              data:  { isActive: false },
+              data: { isActive: false },
             })
             outOfStockAlerts.push({
               sellerId,
-              productId:   afterUpdate.id,
+              productId: afterUpdate.id,
               productName: afterUpdate.name,
             })
           }
         }
 
         // Credit seller's pending (escrow) balance
-        const sellerShare          = Number(orderFees.sellerShare)
+        const sellerShare = Number(orderFees.sellerShare)
         const sellerPendingBalance = Number(seller.pendingBalance ?? 0)
 
         await tx.user.update({
           where: { id: sellerId },
-          data:  { pendingBalance: { increment: sellerShare } },
+          data: { pendingBalance: { increment: sellerShare } },
         })
 
         await tx.transaction.createMany({
           data: [
             {
-              userId:        sellerId,
-              type:          'ESCROW',
-              amount:        sellerShare,
-              description:   `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
-              reference:     `${orderNumber}-SELLER-ESCROW`,
+              userId: sellerId,
+              type: 'ESCROW',
+              amount: sellerShare,
+              description: `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
+              reference: `${orderNumber}-SELLER-ESCROW`,
               balanceBefore: sellerPendingBalance,
-              balanceAfter:  sellerPendingBalance + sellerShare,
+              balanceAfter: sellerPendingBalance + sellerShare,
             },
             {
-              userId:        user.id,
-              type:          'DEBIT',
-              amount:        Number(orderFees.totalAmount),
-              description:   `Payment for ${itemsList} (Order: ${orderNumber})`,
-              reference:     `${orderNumber}-BUYER-PAYMENT`,
+              userId: user.id,
+              type: 'DEBIT',
+              amount: Number(orderFees.totalAmount),
+              description: `Payment for ${itemsList} (Order: ${orderNumber})`,
+              reference: `${orderNumber}-BUYER-PAYMENT`,
               balanceBefore: 0,
-              balanceAfter:  0,
+              balanceAfter: 0,
             },
           ],
         })
@@ -370,8 +370,8 @@ export async function createOrders(
 
       createdOrders.push(order)
       notificationQueue.push({
-        orderId:     order.id,
-        buyerId:     user.id,
+        orderId: order.id,
+        buyerId: user.id,
         sellerId,
         orderNumber,
         itemsList,
@@ -396,7 +396,7 @@ export async function createOrders(
       outOfStockAlerts.map(alert =>
         notifySellerOutOfStock(alert.sellerId, alert.productId, alert.productName)
       )
-    ).catch(() => {})
+    ).catch(() => { })
   }
 
   console.log('🎉 All orders created:', createdOrders.length)
@@ -415,9 +415,9 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-        where:  { id: sellerId },
-        select: { email: true, name: true },
-      }).catch(() => null)
+      where: { id: sellerId },
+      select: { email: true, name: true },
+    }).catch(() => null)
     : null
 
   const tasks: Promise<any>[] = []
@@ -425,20 +425,20 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId:   sellerId,
-        type:     'ORDER_PLACED',
-        title:    '⚠️ Product Out of Stock',
-        message:  `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
+        userId: sellerId,
+        type: 'ORDER_PLACED',
+        title: '⚠️ Product Out of Stock',
+        message: `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
         metadata: { productId, productName },
       })
     )
   }
 
   if (seller?.email && emailMod?.sendEmail) {
-    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to:      seller.email,
+        to: seller.email,
         subject: `⚠️ "${productName}" is out of stock — BATAMART`,
         html: `
 <!DOCTYPE html>

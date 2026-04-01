@@ -4,14 +4,17 @@
 
 import { Prisma } from '@prisma/client'
 
-const PLATFORM_COMMISSION_RATE = 0.05   // 5%
-const REFERRER_REWARD_RATE     = 0.40   // 40% of commission
+// ── Referral reward = the full ₦240 delivery platform cut ─────────────────────
+// The platform keeps its 5% product commission entirely.
+// The ₦240 delivery cut goes 100% to the referrer (forever, every order).
+// Only paid if the order had a rider (delivery orders only).
+const REFERRAL_DELIVERY_REWARD = 240
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx => ...) block.
  *
- * Checks if the buyer was referred. If so, calculates and credits the
- * referrer's wallet and creates a ReferralReward record + notification.
+ * Checks if the buyer was referred. If so, credits the referrer ₦240
+ * (the delivery platform cut) for every completed delivery order — forever.
  *
  * The @unique constraint on ReferralReward.orderId guarantees idempotency.
  */
@@ -20,15 +23,19 @@ export async function processReferralReward(
   params: {
     orderId:     string
     orderNumber: string
-    orderAmount: number   // totalAmount
+    orderAmount: number
     buyerId:     string
+    hasRider:    boolean   // ← NEW: only pay if delivery order
   }
 ) {
-  const { orderId, orderNumber, orderAmount, buyerId } = params
+  const { orderId, orderNumber, buyerId, hasRider } = params
+
+  // Only pay referral reward on delivery orders
+  if (!hasRider) return
 
   // 1. Check if buyer was referred
   const buyer = await tx.user.findUnique({
-    where: { id: buyerId },
+    where:  { id: buyerId },
     select: { referredById: true },
   })
 
@@ -36,21 +43,16 @@ export async function processReferralReward(
 
   // 2. Guard: skip if reward already exists for this order
   const existing = await tx.referralReward.findUnique({
-    where: { orderId },
+    where:  { orderId },
     select: { id: true },
   })
-  if (existing) return   // idempotency guard (belt + suspenders alongside @unique)
+  if (existing) return   // idempotency guard
 
-  // 3. Calculate reward
-  const commission = orderAmount * PLATFORM_COMMISSION_RATE
-  const reward     = commission  * REFERRER_REWARD_RATE
-  // e.g. ₦10,000 → commission ₦500 → reward ₦50
+  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦240
 
-  if (reward <= 0) return
-
-  // 4. Fetch referrer's current balance
+  // 3. Fetch referrer's current balance
   const referrer = await tx.user.findUnique({
-    where: { id: buyer.referredById },
+    where:  { id: buyer.referredById },
     select: { id: true, availableBalance: true },
   })
   if (!referrer) return
@@ -58,48 +60,44 @@ export async function processReferralReward(
   const balanceBefore = referrer.availableBalance
   const balanceAfter  = balanceBefore + reward
 
-  // 5. Create ReferralReward record
+  // 4. Create ReferralReward record
   await tx.referralReward.create({
     data: {
-      referrerId:    referrer.id,
+      referrerId:     referrer.id,
       referredUserId: buyerId,
       orderId,
-      amount:        reward,
+      amount:         reward,
     },
   })
 
-  // 6. Credit referrer's wallet
+  // 5. Credit referrer's wallet
   await tx.user.update({
     where: { id: referrer.id },
     data:  { availableBalance: { increment: reward } },
   })
 
-  // 7. Create wallet transaction record
+  // 6. Create wallet transaction record
   await tx.transaction.create({
     data: {
       userId:        referrer.id,
       type:          'REFERRAL_REWARD',
       amount:        reward,
-      description:   `Referral reward from order #${orderNumber}`,
+      description:   `Referral reward — delivery cut from order #${orderNumber}`,
       reference:     `${orderNumber}-REFERRAL`,
       balanceBefore,
       balanceAfter,
     },
   })
 
-  // 8. Create in-app notification
+  // 7. Create in-app notification
   await tx.notification.create({
     data: {
       userId:  referrer.id,
       type:    'REFERRAL_REWARD',
-      title:   '🎉 Referral Reward Earned!',
-      message: `You earned ₦${reward.toLocaleString('en-NG', { minimumFractionDigits: 2 })} from a referral order.`,
+      title:   '🎁 Referral Reward!',
+      message: `You earned ₦240 delivery reward from order #${orderNumber}.`,
       orderId,
-      metadata: {
-        reward,
-        orderNumber,
-        commission,
-      },
+      metadata: JSON.stringify({ reward, orderNumber }),
     },
   })
 }

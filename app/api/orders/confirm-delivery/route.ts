@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     // ── Fetch order ───────────────────────────────────────────
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
+      where:   { id: orderId },
       include: { seller: true, rider: true },
     })
 
@@ -64,8 +64,8 @@ export async function POST(request: NextRequest) {
     if (order.status === 'COMPLETED') {
       return NextResponse.json(
         {
-          error: 'Order already completed',
-          message: 'This order has already been confirmed and payment released',
+          error:            'Order already completed',
+          message:          'This order has already been confirmed and payment released',
           alreadyCompleted: true,
         },
         { status: 400 }
@@ -79,26 +79,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ═══════════════════════════════════════════════════════
-    // TRANSACTION: all DB operations including referral reward
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // PAYOUT BREAKDOWN (per order):
+    //   subtotal       = product cost
+    //   platformFee    = subtotal * 5%          (platform keeps this fully)
+    //   riderShare     = ₦560                   (rider gets this)
+    //   referralReward = ₦240                   (referrer gets this — was platform's delivery cut)
+    //   sellerShare    = subtotal - platformFee  (seller gets this)
+    //
+    //   Buyer pays: subtotal + ₦800 delivery fee
+    //   Platform earns: subtotal * 5% only (no longer takes the ₦240 delivery cut)
+    // ═══════════════════════════════════════════════════════════════
+
+    const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
+    const sellerShare = subtotal - order.platformCommission
+    const riderShare  = 560
+    const hasRider    = !!order.riderId
+
     const result = await prisma.$transaction(async (tx) => {
       // 1. Mark order COMPLETED
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
-        data: {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-        },
+        data:  { status: 'COMPLETED', completedAt: new Date() },
       })
 
       // 2. Release seller payment
       const sellerAvailable = order.seller.availableBalance || 0
-      const sellerShare = order.totalAmount - order.platformCommission - (order.rider ? 560 : 0)
 
       await tx.user.update({
         where: { id: order.sellerId },
-        data: {
+        data:  {
           pendingBalance:   { decrement: sellerShare },
           availableBalance: { increment: sellerShare },
         },
@@ -118,12 +128,10 @@ export async function POST(request: NextRequest) {
 
       // 3. Release rider payment (if assigned)
       if (order.riderId) {
-        const rider = await tx.user.findUnique({
+        const rider        = await tx.user.findUnique({
           where:  { id: order.riderId },
           select: { availableBalance: true },
         })
-
-        const riderShare   = 560
         const riderBalance = rider?.availableBalance || 0
 
         await tx.user.update({
@@ -144,14 +152,17 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // 4. ── REFERRAL REWARD (new) ──────────────────────────
+      // 4. ── REFERRAL REWARD ────────────────────────────────────────
+      // Referrer earns ₦240 (the full delivery platform cut) on every
+      // completed delivery order from their referral — forever.
+      // Platform keeps its full 5% product commission.
       await processReferralReward(tx, {
         orderId,
         orderNumber: order.orderNumber,
         orderAmount: order.totalAmount,
         buyerId:     order.buyerId,
+        hasRider,    // ← only delivery orders trigger the reward
       })
-      // processReferralReward is silent on errors and no-ops if no referrer
 
       return updatedOrder
     }, {

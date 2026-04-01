@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
     // Use NEXT_PUBLIC_APP_URL so the link works on any domain (custom domain,
     // preview deployments, etc.) — never hardcode bata-mart.vercel.app here.
-    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     const referralLink = `${APP_URL}/signup?ref=${fullUser.referralCode}`
 
     return NextResponse.json({

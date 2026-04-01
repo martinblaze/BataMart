@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, AlertCircle } from 'lucide-react'
 
 const CATEGORIES = [
   'Fashion & Clothing',
@@ -28,7 +28,6 @@ const HOSTELS = [
   'School Hostel (Inside School)',
 ]
 
-// Category-specific tag suggestions
 const TAG_SUGGESTIONS: Record<string, string[]> = {
   'Tech Gadgets': ['New', 'Used', 'Refurbished', '128GB', '256GB', '64GB', 'Black', 'White', 'Gold', 'Silver', 'Battery Health 90%', 'Battery Health 80%', 'iPhone 13', 'iPhone 14', 'Samsung', 'Unlocked', 'Charger Included', 'Original Box'],
   'Fashion & Clothing': ['New', 'Used', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Unisex', 'Male', 'Female'],
@@ -42,26 +41,130 @@ const TAG_SUGGESTIONS: Record<string, string[]> = {
   'Furniture': ['New', 'Used', 'Good Condition', 'Foldable', 'Wooden', 'Plastic', 'Metal', 'Single', 'Double'],
 }
 
+// ── Confirmation Modal ────────────────────────────────────────────────────────
+function ConfirmListingModal({
+  price,
+  onConfirm,
+  onCancel,
+}: {
+  price: number
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const [agreedToPolicy, setAgreedToPolicy] = useState(false)
+
+  const platformFee = price * 0.05
+  const youReceive  = price * 0.95
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(n)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <AlertCircle className="w-5 h-5 text-amber-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">Before you list</h3>
+        </div>
+
+        {/* Fee Breakdown */}
+        <p className="text-sm text-gray-600 mb-4">
+          BATAMART charges a <strong>5% platform fee</strong> on every completed sale:
+        </p>
+
+        <div className="bg-gray-50 rounded-xl p-4 space-y-2 mb-4 text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-500">Your listed price</span>
+            <span className="font-semibold text-gray-900">{fmt(price)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Platform fee (5%)</span>
+            <span className="font-semibold text-red-500">− {fmt(platformFee)}</span>
+          </div>
+          <div className="border-t border-gray-200 pt-2 flex justify-between">
+            <span className="text-gray-700 font-semibold">You receive</span>
+            <span className="font-bold text-green-600">{fmt(youReceive)}</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-400 mb-5">
+          💡 Want to receive <strong>{fmt(price)}</strong>? List at <strong>{fmt(Math.ceil(price / 0.95))}</strong> to cover the fee.
+        </p>
+
+        {/* Policy Warning */}
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
+          <div className="flex items-start gap-2 mb-3">
+            <span className="text-lg">🚫</span>
+            <div>
+              <p className="text-sm font-bold text-red-700 mb-1">Product Availability Policy</p>
+              <p className="text-xs text-red-600 leading-relaxed">
+                The product you are listing <strong>must be physically with you right now.</strong> Listing items you plan to waybill, order, or source from elsewhere after someone buys is <strong>strictly prohibited</strong> and will result in an <strong>immediate penalty on your account</strong>, including possible suspension.
+              </p>
+            </div>
+          </div>
+
+          {/* Checkbox */}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={agreedToPolicy}
+              onChange={e => setAgreedToPolicy(e.target.checked)}
+              className="w-4 h-4 mt-0.5 accent-red-600 flex-shrink-0"
+            />
+            <span className="text-xs text-red-700 font-semibold leading-relaxed">
+              I confirm that this product is currently in my possession and ready for pickup. I understand that violating this policy will result in a penalty on my BATAMART account.
+            </span>
+          </label>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors"
+          >
+            Go Back
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!agreedToPolicy}
+            className="flex-1 py-3 rounded-xl bg-BATAMART-primary text-white font-semibold text-sm hover:bg-BATAMART-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            List Product
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SellPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [checkingAuth, setCheckingAuth] = useState(true)
-  const [error, setError] = useState('')
-  const [images, setImages] = useState<{ preview: string; url: string; uploading: boolean }[]>([])
+  const [loading, setLoading]                   = useState(false)
+  const [checkingAuth, setCheckingAuth]         = useState(true)
+  const [error, setError]                       = useState('')
+  const [images, setImages]                     = useState<{ preview: string; url: string; uploading: boolean }[]>([])
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
-  // Tag input state
-  const [tags, setTags] = useState<string[]>([])
+  const [tags, setTags]         = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
-  const tagInputRef = useRef<HTMLInputElement>(null)
+  const tagInputRef             = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState({
-    name: '',
-    price: '',
-    quantity: '1',
-    category: '',
+    name:       '',
+    price:      '',
+    quantity:   '1',
+    category:   '',
     hostelName: '',
     roomNumber: '',
-    landmark: '',
+    landmark:   '',
   })
 
   useEffect(() => {
@@ -74,7 +177,7 @@ export default function SellPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent mx-auto mb-4" />
           <p className="text-gray-600">Checking authentication...</p>
         </div>
       </div>
@@ -91,17 +194,11 @@ export default function SellPage() {
     setError('')
   }
 
-  const removeTag = (index: number) => {
-    setTags(prev => prev.filter((_, i) => i !== index))
-  }
+  const removeTag = (index: number) => setTags(prev => prev.filter((_, i) => i !== index))
 
   const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addTag(tagInput)
-    } else if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
-      removeTag(tags.length - 1)
-    }
+    if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) }
+    else if (e.key === 'Backspace' && !tagInput && tags.length > 0) removeTag(tags.length - 1)
   }
 
   const suggestions = formData.category
@@ -112,9 +209,9 @@ export default function SellPage() {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ image: base64 }),
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ image: base64 }),
       })
       const data = await response.json()
       if (!response.ok) return null
@@ -123,12 +220,12 @@ export default function SellPage() {
   }
 
   const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-  const MAX_IMAGE_SIZE_MB = 8
+  const MAX_IMAGE_SIZE_MB   = 8
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
-    const remaining = 3 - images.length
+    const remaining      = 3 - images.length
     const filesToProcess = Array.from(files).slice(0, remaining)
     for (const file of filesToProcess) {
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -145,7 +242,7 @@ export default function SellPage() {
         setImages(prev => [...prev, { preview: base64, url: '', uploading: true }])
         const cloudUrl = await uploadToCloudinary(base64)
         if (cloudUrl) {
-          setImages(prev => prev.map(img => img.preview === base64 ? { preview: base64, url: cloudUrl, uploading: false } : img))
+          setImages(prev => prev.map(img => img.preview === base64 ? { ...img, url: cloudUrl, uploading: false } : img))
         } else {
           setImages(prev => prev.filter(img => img.preview !== base64))
           setError('Failed to upload one of your images. Please try again.')
@@ -159,34 +256,37 @@ export default function SellPage() {
   const removeImage = (index: number) => setImages(prev => prev.filter((_, i) => i !== index))
   const allUploaded = images.length > 0 && images.every(img => !img.uploading)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Validates then shows modal
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-
     if (images.length < 1) { setError('Please add at least 1 product image'); return }
-    if (!allUploaded) { setError('Please wait for all images to finish uploading'); return }
+    if (!allUploaded)      { setError('Please wait for all images to finish uploading'); return }
     if (tags.length === 0) { setError('Please add at least 1 description tag (e.g. New, 128GB, Black)'); return }
+    setError('')
+    setShowConfirmModal(true)
+  }
 
+  // Called when user clicks "List Product" in the modal
+  const handleConfirmListing = async () => {
+    setShowConfirmModal(false)
     setLoading(true)
     setError('')
-
     try {
-      const token = localStorage.getItem('token')
-      const imageUrls = images.map(img => img.url)
-      // Join tags as pipe-separated string — no DB migration needed
+      const token       = localStorage.getItem('token')
+      const imageUrls   = images.map(img => img.url)
       const description = tags.join(' | ')
 
       const response = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({
           ...formData,
           description,
-          price: parseFloat(formData.price),
+          price:    parseFloat(formData.price),
           quantity: parseInt(formData.quantity),
-          images: imageUrls,
+          images:   imageUrls,
         }),
       })
-
       const data = await response.json()
       if (response.ok) router.push('/my-shop')
       else setError(data.error || 'Failed to create product')
@@ -199,9 +299,24 @@ export default function SellPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <ConfirmListingModal
+          price={parseFloat(formData.price) || 0}
+          onConfirm={handleConfirmListing}
+          onCancel={() => setShowConfirmModal(false)}
+        />
+      )}
+
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
-          <Link href={typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('app') === 'true' ? '/marketplace?app=true' : '/marketplace'} className="text-BATAMART-primary hover:underline mb-4 inline-block">← Back to Marketplace</Link>
+          <Link
+            href={typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('app') === 'true' ? '/marketplace?app=true' : '/marketplace'}
+            className="text-BATAMART-primary hover:underline mb-4 inline-block"
+          >
+            ← Back to Marketplace
+          </Link>
           <h1 className="text-3xl font-bold text-gray-900">Sell Your Product</h1>
           <p className="text-gray-600 mt-2">List your item on BATAMART marketplace</p>
         </div>
@@ -271,31 +386,22 @@ export default function SellPage() {
               </select>
             </div>
 
-            {/* ── Description Tags ── */}
+            {/* Description Tags */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
                 Product Details / Description <span className="text-red-500">*</span>
               </label>
               <p className="text-xs text-gray-500 mb-3">
-                Type a detail and press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono text-[11px]">Enter</kbd> or click <strong>Add</strong> to add it as a tag. Buyers can search by these tags.
+                Type a detail and press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono text-[11px]">Enter</kbd> or click <strong>Add</strong> to add it as a tag.
               </p>
-
-              {/* Tag chips display + input */}
               <div
                 className="min-h-[56px] w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus-within:border-BATAMART-primary transition-colors cursor-text flex flex-wrap gap-2 items-center"
                 onClick={() => tagInputRef.current?.focus()}
               >
                 {tags.map((tag, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-BATAMART-primary/10 text-BATAMART-primary text-sm font-semibold rounded-full"
-                  >
+                  <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-BATAMART-primary/10 text-BATAMART-primary text-sm font-semibold rounded-full">
                     {tag}
-                    <button
-                      type="button"
-                      onClick={e => { e.stopPropagation(); removeTag(i) }}
-                      className="hover:text-red-500 transition-colors ml-0.5"
-                    >
+                    <button type="button" onClick={e => { e.stopPropagation(); removeTag(i) }} className="hover:text-red-500 transition-colors ml-0.5">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </span>
@@ -311,39 +417,26 @@ export default function SellPage() {
                     className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 min-w-[100px]"
                   />
                   {tagInput.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => addTag(tagInput)}
-                      className="flex items-center gap-1 px-3 py-1 bg-BATAMART-primary text-white text-xs font-bold rounded-full hover:bg-BATAMART-dark transition-colors flex-shrink-0"
-                    >
+                    <button type="button" onClick={() => addTag(tagInput)} className="flex items-center gap-1 px-3 py-1 bg-BATAMART-primary text-white text-xs font-bold rounded-full hover:bg-BATAMART-dark transition-colors flex-shrink-0">
                       <Plus className="w-3 h-3" /> Add
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Quick suggestion chips */}
               {suggestions.length > 0 && (
                 <div className="mt-3">
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Quick add:</p>
                   <div className="flex flex-wrap gap-2">
                     {suggestions.slice(0, 12).map(s => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => addTag(s)}
-                        className="px-3 py-1.5 bg-gray-100 hover:bg-BATAMART-primary/10 hover:text-BATAMART-primary text-gray-600 text-xs font-semibold rounded-full transition-all border border-gray-200 hover:border-BATAMART-primary/30"
-                      >
+                      <button key={s} type="button" onClick={() => addTag(s)} className="px-3 py-1.5 bg-gray-100 hover:bg-BATAMART-primary/10 hover:text-BATAMART-primary text-gray-600 text-xs font-semibold rounded-full transition-all border border-gray-200 hover:border-BATAMART-primary/30">
                         + {s}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-
-              {tags.length > 0 && (
-                <p className="text-xs text-gray-400 mt-2">{tags.length} tag{tags.length !== 1 ? 's' : ''} added</p>
-              )}
+              {tags.length > 0 && <p className="text-xs text-gray-400 mt-2">{tags.length} tag{tags.length !== 1 ? 's' : ''} added</p>}
             </div>
 
             {/* Images */}
@@ -359,7 +452,7 @@ export default function SellPage() {
                         <img src={img.preview} alt={`Product ${index + 1}`} className="w-full h-32 object-cover rounded-lg" />
                         {img.uploading && (
                           <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-4 border-white border-t-transparent"></div>
+                            <div className="animate-spin rounded-full h-8 w-8 border-4 border-white border-t-transparent" />
                           </div>
                         )}
                         {!img.uploading && img.url && (
@@ -452,6 +545,7 @@ export default function SellPage() {
             >
               {loading ? 'Listing Product...' : !allUploaded && images.length > 0 ? 'Uploading images...' : 'List Product'}
             </button>
+
           </form>
         </div>
       </div>

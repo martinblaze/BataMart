@@ -9,7 +9,20 @@ import { verifyOtpSessionToken } from '@/app/api/auth/verify-otp/route'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, password, otpSessionToken, role, phone, referralCode, universityId } = body
+    const {
+      email,
+      name,
+      password,
+      otpSessionToken,
+      role,
+      phone,
+      referralCode,
+      universityId,
+      // ── Delivery location ──────────────────────────────────────────────
+      hostelName,
+      roomNumber,
+      landmark,
+    } = body
 
     // ── Field presence check ───────────────────────────────────────────────
     if (!email || !otpSessionToken || !password || !name || !phone) {
@@ -19,6 +32,17 @@ export async function POST(request: NextRequest) {
     // ── University required ────────────────────────────────────────────────
     if (!universityId) {
       return NextResponse.json({ error: 'Please select your university or campus area' }, { status: 400 })
+    }
+
+    // ── Delivery location required ─────────────────────────────────────────
+    if (!hostelName || !String(hostelName).trim()) {
+      return NextResponse.json({ error: 'Please enter your lodge or landmark name' }, { status: 400 })
+    }
+    if (!roomNumber || !String(roomNumber).trim()) {
+      return NextResponse.json({ error: 'Please enter your room number' }, { status: 400 })
+    }
+    if (!landmark || !String(landmark).trim()) {
+      return NextResponse.json({ error: 'Please select your delivery area' }, { status: 400 })
     }
 
     // ── Input length guards ────────────────────────────────────────────────
@@ -94,6 +118,10 @@ export async function POST(request: NextRequest) {
         role:         role || 'BUYER',
         referralCode: newReferralCode,
         universityId: university.id,
+        // ── Delivery location ────────────────────────────────────────────
+        hostelName:   String(hostelName).trim(),
+        roomNumber:   String(roomNumber).trim(),
+        landmark:     String(landmark).trim(),
         ...(referredById ? { referredById } : {}),
       },
     })
@@ -110,6 +138,8 @@ export async function POST(request: NextRequest) {
         email:        user.email,
         role:         user.role,
         hostelName:   user.hostelName,
+        roomNumber:   user.roomNumber,
+        landmark:     user.landmark,
         referralCode: user.referralCode,
         universityId: user.universityId,
         university:   { name: university.name, shortName: university.shortName },

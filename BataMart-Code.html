@@ -4159,51 +4159,116 @@ export default function RiderSignupPage() {
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { MapPin, ChevronRight } from 'lucide-react'
+import { MapPin, ChevronRight, Home, Hash, Phone } from 'lucide-react'
 
 interface University {
-  id:    string
-  name:  string
-  shortName: string
-  slug:  string
-  location: string
+  id:            string
+  name:          string
+  shortName:     string
+  slug:          string
+  location:      string
+  deliveryAreas: string[]
 }
 
+// ── Shared UI helpers — defined OUTSIDE SignupForm so they don't remount ──
+const bgStyle  = { background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }
+const btnStyle = { background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }
+
+const PageShell = ({
+  children,
+  selectedUniversity,
+}: {
+  children: React.ReactNode
+  selectedUniversity: University | null
+}) =&gt; (
+  &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" style={bgStyle}&gt;
+    &lt;div className="w-full max-w-md"&gt;
+      &lt;div className="text-center mb-8"&gt;
+        &lt;h1 className="text-3xl font-black text-white tracking-tight"&gt;BATAMART&lt;/h1&gt;
+        &lt;p className="text-blue-300 text-sm mt-1"&gt;Campus Marketplace&lt;/p&gt;
+        {selectedUniversity &amp;&amp; (
+          &lt;div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30"&gt;
+            &lt;MapPin className="w-3.5 h-3.5 text-blue-300" /&gt;
+            &lt;span className="text-blue-300 text-xs font-semibold"&gt;
+              {selectedUniversity.shortName} — {selectedUniversity.location}
+            &lt;/span&gt;
+          &lt;/div&gt;
+        )}
+      &lt;/div&gt;
+      {children}
+    &lt;/div&gt;
+  &lt;/div&gt;
+)
+
+const ErrorBox = ({ error }: { error: string }) =&gt;
+  error ? (
+    &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;
+      {error}
+    &lt;/div&gt;
+  ) : null
+
+const StepDots = ({ current }: { current: number }) =&gt; (
+  &lt;div className="flex justify-center gap-1.5 mb-6"&gt;
+    {[1, 2, 3, 4].map(s =&gt; (
+      &lt;div
+        key={s}
+        className={`h-1.5 rounded-full transition-all ${
+          s &lt; current  ? 'w-6 bg-blue-500' :
+          s === current ? 'w-6 bg-blue-400' :
+          'w-3 bg-gray-200'
+        }`}
+      /&gt;
+    ))}
+  &lt;/div&gt;
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function SignupForm() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
 
-  // ── Step 0 = university select, then steps 1–4 as before ──────────────────
-  const [step, setStep]           = useState(0)
-  const [universities, setUniversities] = useState&lt;University[]&gt;([])
+  const [step, setStep]                             = useState(0)
+  const [universities, setUniversities]             = useState&lt;University[]&gt;([])
   const [selectedUniversity, setSelectedUniversity] = useState&lt;University | null&gt;(null)
-  const [uniLoading, setUniLoading] = useState(true)
+  const [uniLoading, setUniLoading]                 = useState(true)
 
-  const [email, setEmail]         = useState('')
-  const [name, setName]           = useState('')
-  const [phone, setPhone]         = useState('')
-  const [otp, setOtp]             = useState(['', '', '', '', '', ''])
-  const [otpSessionToken, setOtpSessionToken] = useState('')
-  const [password, setPassword]   = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [email, setEmail]           = useState('')
+  const [name, setName]             = useState('')
+  const [phone, setPhone]           = useState('')
   const [wantToSell, setWantToSell] = useState(false)
-  const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
-  const [referralCode, setReferralCode] = useState('')
+
+  const [otp, setOtp]                         = useState(['', '', '', '', '', ''])
+  const [otpSessionToken, setOtpSessionToken] = useState('')
+
+  const [selectedArea, setSelectedArea]   = useState('')
+  const [hostelName, setHostelName]       = useState('')
+  const [roomNumber, setRoomNumber]       = useState('')
+  const [deliveryPhone, setDeliveryPhone] = useState('')
+
+  const [password, setPassword]               = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [agreedToTerms, setAgreedToTerms]     = useState(false)
+  const [referralCode, setReferralCode]       = useState('')
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
 
   useEffect(() =&gt; {
     const ref = searchParams.get('ref')
     if (ref) setReferralCode(ref.trim().toUpperCase())
   }, [searchParams])
 
-  // ── Fetch universities on mount ────────────────────────────────────────────
+  useEffect(() =&gt; {
+    if (step === 3 &amp;&amp; phone &amp;&amp; !deliveryPhone) {
+      setDeliveryPhone(phone)
+    }
+  }, [step])
+
   useEffect(() =&gt; {
     fetch('/api/universities')
       .then(r =&gt; r.json())
-      .then(data =&gt; {
-        setUniversities(data.universities ?? [])
-      })
+      .then(data =&gt; setUniversities(data.universities ?? []))
       .catch(() =&gt; {})
       .finally(() =&gt; setUniLoading(false))
   }, [])
@@ -4225,7 +4290,6 @@ function SignupForm() {
     e.preventDefault()
     const phoneError = validatePhone(phone)
     if (phoneError) { setError(phoneError); return }
-
     setLoading(true)
     setError('')
     try {
@@ -4235,11 +4299,8 @@ function SignupForm() {
         body:    JSON.stringify({ email }),
       })
       const data = await response.json()
-      if (response.ok) {
-        setStep(2)
-      } else {
-        setError(data.error || 'Failed to send OTP')
-      }
+      if (response.ok) { setStep(2) }
+      else { setError(data.error || 'Failed to send OTP') }
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -4266,7 +4327,6 @@ function SignupForm() {
   const handleVerifyOTP = async () =&gt; {
     const code = otp.join('')
     if (code.length !== 6) { setError('Please enter the complete 6-digit code'); return }
-
     setLoading(true)
     setError('')
     try {
@@ -4289,13 +4349,23 @@ function SignupForm() {
     }
   }
 
+  const handleLocationContinue = (e: React.FormEvent) =&gt; {
+    e.preventDefault()
+    if (!selectedArea)        { setError('Please select your delivery area'); return }
+    if (!hostelName.trim())   { setError('Please enter your lodge or landmark name'); return }
+    if (!roomNumber.trim())   { setError('Please enter your room number'); return }
+    const phoneErr = validatePhone(deliveryPhone)
+    if (phoneErr) { setError(phoneErr); return }
+    setError('')
+    setStep(4)
+  }
+
   const handleSignup = async (e: React.FormEvent) =&gt; {
     e.preventDefault()
     if (!agreedToTerms) { setError('Please agree to the Terms of Service'); return }
     const pwdError = validatePassword(password)
     if (pwdError) { setError(pwdError); return }
     if (password !== confirmPassword) { setError('Passwords do not match'); return }
-
     setLoading(true)
     setError('')
     try {
@@ -4303,14 +4373,13 @@ function SignupForm() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
-          name,
-          phone,
-          password,
-          otpSessionToken,
+          email, name, phone, password, otpSessionToken,
           role:         wantToSell ? 'SELLER' : 'BUYER',
           referralCode: referralCode || undefined,
           universityId: selectedUniversity!.id,
+          hostelName:   hostelName.trim(),
+          roomNumber:   roomNumber.trim(),
+          landmark:     selectedArea,
         }),
       })
       const data = await response.json()
@@ -4335,90 +4404,77 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 0) {
     return (
-      &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
-        &lt;div className="w-full max-w-md"&gt;
-          {/* Logo */}
-          &lt;div className="text-center mb-8"&gt;
-            &lt;h1 className="text-3xl font-black text-white tracking-tight"&gt;BATAMART&lt;/h1&gt;
-            &lt;p className="text-blue-300 text-sm mt-1"&gt;Campus Marketplace&lt;/p&gt;
-          &lt;/div&gt;
-
-          &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
-            &lt;div className="text-center mb-6"&gt;
-              &lt;div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}&gt;
-                &lt;MapPin className="w-7 h-7 text-white" /&gt;
-              &lt;/div&gt;
-              &lt;h2 className="text-xl font-black text-gray-900"&gt;Select Your Campus&lt;/h2&gt;
-              &lt;p className="text-sm text-gray-500 mt-1"&gt;
-                You'll only see buyers, sellers, and riders from your campus.
-              &lt;/p&gt;
+      &lt;PageShell selectedUniversity={selectedUniversity}&gt;
+        &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+          &lt;div className="text-center mb-6"&gt;
+            &lt;div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={btnStyle}&gt;
+              &lt;MapPin className="w-7 h-7 text-white" /&gt;
             &lt;/div&gt;
-
-            {uniLoading ? (
-              &lt;div className="flex justify-center py-8"&gt;
-                &lt;svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24"&gt;
-                  &lt;circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/&gt;
-                  &lt;path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/&gt;
-                &lt;/svg&gt;
-              &lt;/div&gt;
-            ) : (
-              &lt;div className="space-y-3"&gt;
-                {universities.map(uni =&gt; (
-                  &lt;button
-                    key={uni.id}
-                    onClick={() =&gt; setSelectedUniversity(uni)}
-                    className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
-                      selectedUniversity?.id === uni.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'
-                    }`}
-                  &gt;
-                    &lt;div className="flex items-center justify-between"&gt;
-                      &lt;div&gt;
-                        &lt;p className="font-bold text-gray-900 text-sm"&gt;{uni.shortName}&lt;/p&gt;
-                        &lt;p className="text-xs text-gray-500 mt-0.5"&gt;{uni.name}&lt;/p&gt;
-                        &lt;p className="text-xs text-blue-500 mt-0.5"&gt;{uni.location}&lt;/p&gt;
-                      &lt;/div&gt;
-                      &lt;div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                        selectedUniversity?.id === uni.id
-                          ? 'border-blue-500 bg-blue-500'
-                          : 'border-gray-300'
-                      }`}&gt;
-                        {selectedUniversity?.id === uni.id &amp;&amp; (
-                          &lt;div className="w-2 h-2 rounded-full bg-white" /&gt;
-                        )}
-                      &lt;/div&gt;
-                    &lt;/div&gt;
-                  &lt;/button&gt;
-                ))}
-
-                {universities.length === 0 &amp;&amp; (
-                  &lt;p className="text-center text-gray-400 text-sm py-4"&gt;
-                    No campuses available yet.
-                  &lt;/p&gt;
-                )}
-              &lt;/div&gt;
-            )}
-
-            &lt;button
-              onClick={() =&gt; { if (selectedUniversity) setStep(1) }}
-              disabled={!selectedUniversity}
-              className="w-full mt-6 py-4 rounded-2xl text-white font-bold text-base transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
-            &gt;
-              Continue with {selectedUniversity?.shortName ?? 'your campus'}
-              &lt;ChevronRight className="w-5 h-5" /&gt;
-            &lt;/button&gt;
-
-            &lt;p className="text-center text-sm text-gray-500 mt-4"&gt;
-              Already have an account?{' '}
-              &lt;Link href="/login" className="font-semibold text-blue-600"&gt;Sign in&lt;/Link&gt;
+            &lt;h2 className="text-xl font-black text-gray-900"&gt;Select Your Campus&lt;/h2&gt;
+            &lt;p className="text-sm text-gray-500 mt-1"&gt;
+              You'll only see buyers, sellers, and riders from your campus.
             &lt;/p&gt;
           &lt;/div&gt;
+
+          {uniLoading ? (
+            &lt;div className="flex justify-center py-8"&gt;
+              &lt;svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24"&gt;
+                &lt;circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/&gt;
+                &lt;path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/&gt;
+              &lt;/svg&gt;
+            &lt;/div&gt;
+          ) : (
+            &lt;div className="space-y-3"&gt;
+              {universities.map(uni =&gt; (
+                &lt;button
+                  key={uni.id}
+                  onClick={() =&gt; setSelectedUniversity(uni)}
+                  className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
+                    selectedUniversity?.id === uni.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'
+                  }`}
+                &gt;
+                  &lt;div className="flex items-center justify-between"&gt;
+                    &lt;div&gt;
+                      &lt;p className="font-bold text-gray-900 text-sm"&gt;{uni.shortName}&lt;/p&gt;
+                      &lt;p className="text-xs text-gray-500 mt-0.5"&gt;{uni.name}&lt;/p&gt;
+                      &lt;p className="text-xs text-blue-500 mt-0.5"&gt;{uni.location}&lt;/p&gt;
+                    &lt;/div&gt;
+                    &lt;div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                      selectedUniversity?.id === uni.id
+                        ? 'border-blue-500 bg-blue-500'
+                        : 'border-gray-300'
+                    }`}&gt;
+                      {selectedUniversity?.id === uni.id &amp;&amp; (
+                        &lt;div className="w-2 h-2 rounded-full bg-white" /&gt;
+                      )}
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+                &lt;/button&gt;
+              ))}
+              {universities.length === 0 &amp;&amp; (
+                &lt;p className="text-center text-gray-400 text-sm py-4"&gt;No campuses available yet.&lt;/p&gt;
+              )}
+            &lt;/div&gt;
+          )}
+
+          &lt;button
+            onClick={() =&gt; { if (selectedUniversity) setStep(1) }}
+            disabled={!selectedUniversity}
+            className="w-full mt-6 py-4 rounded-2xl text-white font-bold text-base transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+            style={btnStyle}
+          &gt;
+            Continue with {selectedUniversity?.shortName ?? 'your campus'}
+            &lt;ChevronRight className="w-5 h-5" /&gt;
+          &lt;/button&gt;
+
+          &lt;p className="text-center text-sm text-gray-500 mt-4"&gt;
+            Already have an account?{' '}
+            &lt;Link href="/login" className="font-semibold text-blue-600"&gt;Sign in&lt;/Link&gt;
+          &lt;/p&gt;
         &lt;/div&gt;
-      &lt;/div&gt;
+      &lt;/PageShell&gt;
     )
   }
 
@@ -4427,98 +4483,81 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 1) {
     return (
-      &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
-        &lt;div className="w-full max-w-md"&gt;
-          &lt;div className="text-center mb-8"&gt;
-            &lt;h1 className="text-3xl font-black text-white tracking-tight"&gt;BATAMART&lt;/h1&gt;
-            &lt;div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30"&gt;
-              &lt;MapPin className="w-3.5 h-3.5 text-blue-300" /&gt;
-              &lt;span className="text-blue-300 text-xs font-semibold"&gt;
-                {selectedUniversity?.shortName} — {selectedUniversity?.location}
-              &lt;/span&gt;
+      &lt;PageShell selectedUniversity={selectedUniversity}&gt;
+        &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+          &lt;StepDots current={1} /&gt;
+          &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Create account&lt;/h2&gt;
+          &lt;p className="text-sm text-gray-500 mb-6"&gt;Join the {selectedUniversity?.shortName} marketplace&lt;/p&gt;
+
+          &lt;ErrorBox error={error} /&gt;
+
+          &lt;form onSubmit={handleSendOTP} className="space-y-4"&gt;
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Full Name&lt;/label&gt;
+              &lt;input
+                type="text"
+                value={name}
+                onChange={e =&gt; setName(e.target.value)}
+                required
+                placeholder="Your full name"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              /&gt;
             &lt;/div&gt;
-          &lt;/div&gt;
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Email Address&lt;/label&gt;
+              &lt;input
+                type="email"
+                value={email}
+                onChange={e =&gt; setEmail(e.target.value)}
+                required
+                placeholder="your@email.com"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              /&gt;
+            &lt;/div&gt;
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Phone Number&lt;/label&gt;
+              &lt;input
+                type="tel"
+                value={phone}
+                onChange={e =&gt; setPhone(e.target.value)}
+                required
+                placeholder="08012345678"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              /&gt;
+            &lt;/div&gt;
 
-          &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
-            &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Create account&lt;/h2&gt;
-            &lt;p className="text-sm text-gray-500 mb-6"&gt;Join the {selectedUniversity?.shortName} marketplace&lt;/p&gt;
+            &lt;div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl"&gt;
+              &lt;input
+                type="checkbox"
+                id="wantToSell"
+                checked={wantToSell}
+                onChange={e =&gt; setWantToSell(e.target.checked)}
+                className="w-4 h-4 rounded accent-blue-600"
+              /&gt;
+              &lt;label htmlFor="wantToSell" className="text-sm text-gray-700"&gt;
+                I also want to sell on {selectedUniversity?.shortName}
+              &lt;/label&gt;
+            &lt;/div&gt;
 
-            {error &amp;&amp; (
-              &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;
-                {error}
-              &lt;/div&gt;
-            )}
-
-            &lt;form onSubmit={handleSendOTP} className="space-y-4"&gt;
-              &lt;div&gt;
-                &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Full Name&lt;/label&gt;
-                &lt;input
-                  type="text"
-                  value={name}
-                  onChange={e =&gt; setName(e.target.value)}
-                  required
-                  placeholder="Your full name"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                /&gt;
-              &lt;/div&gt;
-              &lt;div&gt;
-                &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Email Address&lt;/label&gt;
-                &lt;input
-                  type="email"
-                  value={email}
-                  onChange={e =&gt; setEmail(e.target.value)}
-                  required
-                  placeholder="your@email.com"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                /&gt;
-              &lt;/div&gt;
-              &lt;div&gt;
-                &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Phone Number&lt;/label&gt;
-                &lt;input
-                  type="tel"
-                  value={phone}
-                  onChange={e =&gt; setPhone(e.target.value)}
-                  required
-                  placeholder="08012345678"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                /&gt;
-              &lt;/div&gt;
-
-              &lt;div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl"&gt;
-                &lt;input
-                  type="checkbox"
-                  id="wantToSell"
-                  checked={wantToSell}
-                  onChange={e =&gt; setWantToSell(e.target.checked)}
-                  className="w-4 h-4 rounded accent-blue-600"
-                /&gt;
-                &lt;label htmlFor="wantToSell" className="text-sm text-gray-700"&gt;
-                  I also want to sell on {selectedUniversity?.shortName}
-                &lt;/label&gt;
-              &lt;/div&gt;
-
-              &lt;button
-                type="submit"
-                disabled={loading}
-                className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all disabled:opacity-60"
-                style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
-              &gt;
-                {loading ? 'Sending OTP…' : 'Continue →'}
-              &lt;/button&gt;
-            &lt;/form&gt;
-
-            &lt;button onClick={() =&gt; setStep(0)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
-              ← Change campus
+            &lt;button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all disabled:opacity-60"
+              style={btnStyle}
+            &gt;
+              {loading ? 'Sending OTP…' : 'Continue →'}
             &lt;/button&gt;
+          &lt;/form&gt;
 
-            &lt;p className="text-center text-sm text-gray-500 mt-4"&gt;
-              Already have an account?{' '}
-              &lt;Link href="/login" className="font-semibold text-blue-600"&gt;Sign in&lt;/Link&gt;
-            &lt;/p&gt;
-          &lt;/div&gt;
+          &lt;button onClick={() =&gt; setStep(0)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
+            ← Change campus
+          &lt;/button&gt;
+          &lt;p className="text-center text-sm text-gray-500 mt-4"&gt;
+            Already have an account?{' '}
+            &lt;Link href="/login" className="font-semibold text-blue-600"&gt;Sign in&lt;/Link&gt;
+          &lt;/p&gt;
         &lt;/div&gt;
-      &lt;/div&gt;
+      &lt;/PageShell&gt;
     )
   }
 
@@ -4527,135 +4566,232 @@ function SignupForm() {
   // ════════════════════════════════════════════════════════
   if (step === 2) {
     return (
-      &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-        style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
-        &lt;div className="w-full max-w-md"&gt;
-          &lt;div className="text-center mb-8"&gt;
-            &lt;h1 className="text-3xl font-black text-white"&gt;BATAMART&lt;/h1&gt;
+      &lt;PageShell selectedUniversity={selectedUniversity}&gt;
+        &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+          &lt;StepDots current={2} /&gt;
+          &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Verify your email&lt;/h2&gt;
+          &lt;p className="text-sm text-gray-500 mb-6"&gt;
+            Enter the 6-digit code sent to &lt;strong&gt;{email}&lt;/strong&gt;
+          &lt;/p&gt;
+
+          &lt;ErrorBox error={error} /&gt;
+
+          &lt;div className="flex justify-center gap-2 mb-6"&gt;
+            {otp.map((digit, i) =&gt; (
+              &lt;input
+                key={i}
+                id={`otp-${i}`}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={e =&gt; handleOtpChange(i, e.target.value)}
+                onKeyDown={e =&gt; handleKeyDown(i, e)}
+                className="w-12 h-12 text-center text-xl font-bold border-2 rounded-xl outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              /&gt;
+            ))}
           &lt;/div&gt;
-          &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
-            &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Verify your email&lt;/h2&gt;
-            &lt;p className="text-sm text-gray-500 mb-6"&gt;Enter the 6-digit code sent to &lt;strong&gt;{email}&lt;/strong&gt;&lt;/p&gt;
 
-            {error &amp;&amp; (
-              &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;{error}&lt;/div&gt;
-            )}
+          &lt;button
+            onClick={handleVerifyOTP}
+            disabled={loading || otp.join('').length !== 6}
+            className="w-full py-4 rounded-2xl text-white font-bold text-base disabled:opacity-60"
+            style={btnStyle}
+          &gt;
+            {loading ? 'Verifying…' : 'Verify Code'}
+          &lt;/button&gt;
 
-            &lt;div className="flex justify-center gap-2 mb-6"&gt;
-              {otp.map((digit, i) =&gt; (
-                &lt;input
-                  key={i}
-                  id={`otp-${i}`}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={e =&gt; handleOtpChange(i, e.target.value)}
-                  onKeyDown={e =&gt; handleKeyDown(i, e)}
-                  className="w-12 h-12 text-center text-xl font-bold border-2 rounded-xl outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                /&gt;
-              ))}
-            &lt;/div&gt;
-
-            &lt;button
-              onClick={handleVerifyOTP}
-              disabled={loading || otp.join('').length !== 6}
-              className="w-full py-4 rounded-2xl text-white font-bold text-base disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
-            &gt;
-              {loading ? 'Verifying…' : 'Verify Code'}
-            &lt;/button&gt;
-
-            &lt;button onClick={() =&gt; setStep(1)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
-              ← Back
-            &lt;/button&gt;
-          &lt;/div&gt;
+          &lt;button onClick={() =&gt; setStep(1)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
+            ← Back
+          &lt;/button&gt;
         &lt;/div&gt;
-      &lt;/div&gt;
+      &lt;/PageShell&gt;
     )
   }
 
   // ════════════════════════════════════════════════════════
-  // STEP 3 — Password + terms
+  // STEP 3 — Delivery location
   // ════════════════════════════════════════════════════════
-  return (
-    &lt;div className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
-      style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f,#0f172a)' }}&gt;
-      &lt;div className="w-full max-w-md"&gt;
-        &lt;div className="text-center mb-8"&gt;
-          &lt;h1 className="text-3xl font-black text-white"&gt;BATAMART&lt;/h1&gt;
-          &lt;div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30"&gt;
-            &lt;MapPin className="w-3.5 h-3.5 text-blue-300" /&gt;
-            &lt;span className="text-blue-300 text-xs font-semibold"&gt;{selectedUniversity?.shortName}&lt;/span&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
+  if (step === 3) {
+    const areas: string[] = Array.isArray(selectedUniversity?.deliveryAreas)
+      ? selectedUniversity!.deliveryAreas
+      : ['Aroma', 'Tempsite', 'Express Gate', 'Ifite', 'Bus Stand', 'School Hostel']
 
+    return (
+      &lt;PageShell selectedUniversity={selectedUniversity}&gt;
         &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
-          &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Set your password&lt;/h2&gt;
-          &lt;p className="text-sm text-gray-500 mb-6"&gt;Almost done, {name}!&lt;/p&gt;
+          &lt;StepDots current={3} /&gt;
 
-          {error &amp;&amp; (
-            &lt;div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-600"&gt;{error}&lt;/div&gt;
-          )}
-
-          &lt;form onSubmit={handleSignup} className="space-y-4"&gt;
-            &lt;div&gt;
-              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Password&lt;/label&gt;
-              &lt;input
-                type="password"
-                value={password}
-                onChange={e =&gt; setPassword(e.target.value)}
-                required
-                placeholder="Min 8 characters, include a number"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              /&gt;
+          &lt;div className="text-center mb-6"&gt;
+            &lt;div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3" style={btnStyle}&gt;
+              &lt;MapPin className="w-6 h-6 text-white" /&gt;
             &lt;/div&gt;
-            &lt;div&gt;
-              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Confirm Password&lt;/label&gt;
-              &lt;input
-                type="password"
-                value={confirmPassword}
-                onChange={e =&gt; setConfirmPassword(e.target.value)}
-                required
-                placeholder="Repeat password"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              /&gt;
-            &lt;/div&gt;
+            &lt;h2 className="text-xl font-black text-gray-900"&gt;Your Delivery Location&lt;/h2&gt;
+            &lt;p className="text-sm text-gray-500 mt-1"&gt;So riders can find you when you order&lt;/p&gt;
+          &lt;/div&gt;
 
-            {referralCode &amp;&amp; (
-              &lt;div className="p-3 bg-green-50 rounded-xl border border-green-100 text-sm text-green-700"&gt;
-                🎁 Referral code &lt;strong&gt;{referralCode}&lt;/strong&gt; applied
+          &lt;ErrorBox error={error} /&gt;
+
+          &lt;form onSubmit={handleLocationContinue} className="space-y-5"&gt;
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-2"&gt;Select Your Area&lt;/label&gt;
+              &lt;div className="flex flex-wrap gap-2"&gt;
+                {areas.map(area =&gt; (
+                  &lt;button
+                    type="button"
+                    key={area}
+                    onClick={() =&gt; { setSelectedArea(area); setError('') }}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium border-2 transition-all ${
+                      selectedArea === area
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:bg-blue-50'
+                    }`}
+                  &gt;
+                    &lt;span className="text-base"&gt;📍&lt;/span&gt;
+                    {area}
+                  &lt;/button&gt;
+                ))}
               &lt;/div&gt;
-            )}
-
-            &lt;div className="flex items-start gap-2 p-3 bg-gray-50 rounded-xl"&gt;
-              &lt;input
-                type="checkbox"
-                id="terms"
-                checked={agreedToTerms}
-                onChange={e =&gt; setAgreedToTerms(e.target.checked)}
-                className="w-4 h-4 rounded accent-blue-600 mt-0.5"
-              /&gt;
-              &lt;label htmlFor="terms" className="text-sm text-gray-700"&gt;
-                I agree to the{' '}
-                &lt;Link href="/terms" className="text-blue-600 font-semibold"&gt;Terms of Service&lt;/Link&gt;
-                {' '}and{' '}
-                &lt;Link href="/privacy" className="text-blue-600 font-semibold"&gt;Privacy Policy&lt;/Link&gt;
-              &lt;/label&gt;
             &lt;/div&gt;
 
-            &lt;button
-              type="submit"
-              disabled={loading || !agreedToTerms}
-              className="w-full py-4 rounded-2xl text-white font-bold text-base disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' }}
-            &gt;
-              {loading ? 'Creating account…' : `Join ${selectedUniversity?.shortName} 🎉`}
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Lodge Name / Landmark&lt;/label&gt;
+              &lt;div className="relative"&gt;
+                &lt;Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /&gt;
+                &lt;input
+                  type="text"
+                  value={hostelName}
+                  onChange={e =&gt; setHostelName(e.target.value)}
+                  required
+                  placeholder="e.g. Goshen Lodge, Favour Hostel"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                /&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Room Number&lt;/label&gt;
+              &lt;div className="relative"&gt;
+                &lt;Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /&gt;
+                &lt;input
+                  type="text"
+                  value={roomNumber}
+                  onChange={e =&gt; setRoomNumber(e.target.value)}
+                  required
+                  placeholder="e.g. Room 12, Block B"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                /&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div&gt;
+              &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Phone for Delivery&lt;/label&gt;
+              &lt;div className="relative"&gt;
+                &lt;Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /&gt;
+                &lt;input
+                  type="tel"
+                  value={deliveryPhone}
+                  onChange={e =&gt; setDeliveryPhone(e.target.value)}
+                  required
+                  placeholder="08012345678"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                /&gt;
+              &lt;/div&gt;
+              &lt;p className="text-xs text-gray-400 mt-1"&gt;Riders will call this number when they arrive&lt;/p&gt;
+            &lt;/div&gt;
+
+            &lt;div className="p-3 bg-blue-50 rounded-xl border border-blue-100"&gt;
+              &lt;p className="text-xs text-blue-700"&gt;
+                💡 You can update your delivery location anytime from your profile settings.
+              &lt;/p&gt;
+            &lt;/div&gt;
+
+            &lt;button type="submit" className="w-full py-4 rounded-2xl text-white font-bold text-base" style={btnStyle}&gt;
+              Continue →
             &lt;/button&gt;
           &lt;/form&gt;
+
+          &lt;button onClick={() =&gt; setStep(2)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
+            ← Back
+          &lt;/button&gt;
         &lt;/div&gt;
+      &lt;/PageShell&gt;
+    )
+  }
+
+  // ════════════════════════════════════════════════════════
+  // STEP 4 — Password + terms
+  // ════════════════════════════════════════════════════════
+  return (
+    &lt;PageShell selectedUniversity={selectedUniversity}&gt;
+      &lt;div className="bg-white rounded-3xl p-8 shadow-2xl"&gt;
+        &lt;StepDots current={4} /&gt;
+        &lt;h2 className="text-xl font-black text-gray-900 mb-1"&gt;Set your password&lt;/h2&gt;
+        &lt;p className="text-sm text-gray-500 mb-6"&gt;Almost done, {name}!&lt;/p&gt;
+
+        &lt;ErrorBox error={error} /&gt;
+
+        &lt;form onSubmit={handleSignup} className="space-y-4"&gt;
+          &lt;div&gt;
+            &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Password&lt;/label&gt;
+            &lt;input
+              type="password"
+              value={password}
+              onChange={e =&gt; setPassword(e.target.value)}
+              required
+              placeholder="Min 8 characters, include a number"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            /&gt;
+          &lt;/div&gt;
+          &lt;div&gt;
+            &lt;label className="block text-xs font-semibold text-gray-600 mb-1.5"&gt;Confirm Password&lt;/label&gt;
+            &lt;input
+              type="password"
+              value={confirmPassword}
+              onChange={e =&gt; setConfirmPassword(e.target.value)}
+              required
+              placeholder="Repeat password"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            /&gt;
+          &lt;/div&gt;
+
+          {referralCode &amp;&amp; (
+            &lt;div className="p-3 bg-green-50 rounded-xl border border-green-100 text-sm text-green-700"&gt;
+              🎁 Referral code &lt;strong&gt;{referralCode}&lt;/strong&gt; applied
+            &lt;/div&gt;
+          )}
+
+          &lt;div className="flex items-start gap-2 p-3 bg-gray-50 rounded-xl"&gt;
+            &lt;input
+              type="checkbox"
+              id="terms"
+              checked={agreedToTerms}
+              onChange={e =&gt; setAgreedToTerms(e.target.checked)}
+              className="w-4 h-4 rounded accent-blue-600 mt-0.5"
+            /&gt;
+            &lt;label htmlFor="terms" className="text-sm text-gray-700"&gt;
+              I agree to the{' '}
+              &lt;Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold"&gt;Terms of Service&lt;/Link&gt;
+              {' '}and{' '}
+              &lt;Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-semibold"&gt;Privacy Policy&lt;/Link&gt;
+            &lt;/label&gt;
+          &lt;/div&gt;
+
+          &lt;button
+            type="submit"
+            disabled={loading || !agreedToTerms}
+            className="w-full py-4 rounded-2xl text-white font-bold text-base disabled:opacity-60"
+            style={btnStyle}
+          &gt;
+            {loading ? 'Creating account…' : `Join ${selectedUniversity?.shortName} 🎉`}
+          &lt;/button&gt;
+        &lt;/form&gt;
+
+        &lt;button onClick={() =&gt; setStep(3)} className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600"&gt;
+          ← Back
+        &lt;/button&gt;
       &lt;/div&gt;
-    &lt;/div&gt;
+    &lt;/PageShell&gt;
   )
 }
 
@@ -19954,7 +20090,20 @@ import { verifyOtpSessionToken } from '@/app/api/auth/verify-otp/route'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, name, password, otpSessionToken, role, phone, referralCode, universityId } = body
+    const {
+      email,
+      name,
+      password,
+      otpSessionToken,
+      role,
+      phone,
+      referralCode,
+      universityId,
+      // ── Delivery location ──────────────────────────────────────────────
+      hostelName,
+      roomNumber,
+      landmark,
+    } = body
 
     // ── Field presence check ───────────────────────────────────────────────
     if (!email || !otpSessionToken || !password || !name || !phone) {
@@ -19964,6 +20113,17 @@ export async function POST(request: NextRequest) {
     // ── University required ────────────────────────────────────────────────
     if (!universityId) {
       return NextResponse.json({ error: 'Please select your university or campus area' }, { status: 400 })
+    }
+
+    // ── Delivery location required ─────────────────────────────────────────
+    if (!hostelName || !String(hostelName).trim()) {
+      return NextResponse.json({ error: 'Please enter your lodge or landmark name' }, { status: 400 })
+    }
+    if (!roomNumber || !String(roomNumber).trim()) {
+      return NextResponse.json({ error: 'Please enter your room number' }, { status: 400 })
+    }
+    if (!landmark || !String(landmark).trim()) {
+      return NextResponse.json({ error: 'Please select your delivery area' }, { status: 400 })
     }
 
     // ── Input length guards ────────────────────────────────────────────────
@@ -20039,6 +20199,10 @@ export async function POST(request: NextRequest) {
         role:         role || 'BUYER',
         referralCode: newReferralCode,
         universityId: university.id,
+        // ── Delivery location ────────────────────────────────────────────
+        hostelName:   String(hostelName).trim(),
+        roomNumber:   String(roomNumber).trim(),
+        landmark:     String(landmark).trim(),
         ...(referredById ? { referredById } : {}),
       },
     })
@@ -20055,6 +20219,8 @@ export async function POST(request: NextRequest) {
         email:        user.email,
         role:         user.role,
         hostelName:   user.hostelName,
+        roomNumber:   user.roomNumber,
+        landmark:     user.landmark,
         referralCode: user.referralCode,
         universityId: user.universityId,
         university:   { name: university.name, shortName: university.shortName },
@@ -21504,15 +21670,15 @@ export const dynamic = 'force-dynamic'
 // must always compute fees identically from the same function.
 // ============================================================
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
-  const PLATFORM_RATE        = 0.05
-  const RIDER_SHARE          = 560
+  const PLATFORM_RATE = 0.05
+  const RIDER_SHARE = 560
   const PLATFORM_DELIVERY_CUT = 240
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
-  const sellerShare             = subtotal - platformFeeFromProducts
-  const riderShare              = RIDER_SHARE
-  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
-  const totalAmount             = subtotal + deliveryFee
+  const sellerShare = subtotal - platformFeeFromProducts
+  const riderShare = RIDER_SHARE
+  const platformTotal = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
+  const totalAmount = subtotal + deliveryFee
 
   return {
     subtotal,
@@ -21537,12 +21703,12 @@ export async function POST(request: NextRequest) {
     const { productId, cartItems, deliveryFee = 800 } = body
 
     type CartItem = {
-      productId:  string
-      name:       string
-      price:      number
-      quantity:   number
-      category:   string
-      sellerId:   string
+      productId: string
+      name: string
+      price: number
+      quantity: number
+      category: string
+      sellerId: string
       sellerName: string
       orderNote?: string
     }
@@ -21553,7 +21719,7 @@ export async function POST(request: NextRequest) {
       // Server always re-fetches price from DB — client-supplied price is IGNORED
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
-          where:   { id: item.productId },
+          where: { id: item.productId },
           include: { seller: true },
         })
         if (!product) {
@@ -21567,19 +21733,19 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Order note must be under 300 characters' }, { status: 400 })
         }
         items.push({
-          productId:  product.id,
-          name:       product.name,
-          price:      product.price, // ← always from DB, never from client
-          quantity:   item.quantity,
-          category:   product.category,
-          sellerId:   product.sellerId,
+          productId: product.id,
+          name: product.name,
+          price: product.price, // ← always from DB, never from client
+          quantity: item.quantity,
+          category: product.category,
+          sellerId: product.sellerId,
           sellerName: product.seller.name,
-          orderNote:  item.orderNote,
+          orderNote: item.orderNote,
         })
       }
     } else if (productId) {
       const product = await prisma.product.findUnique({
-        where:   { id: productId },
+        where: { id: productId },
         include: { seller: true },
       })
       if (!product) {
@@ -21589,14 +21755,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Product unavailable' }, { status: 400 })
       }
       items = [{
-        productId:  product.id,
-        name:       product.name,
-        price:      product.price,
-        quantity:   1,
-        category:   product.category,
-        sellerId:   product.sellerId,
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+        category: product.category,
+        sellerId: product.sellerId,
         sellerName: product.seller.name,
-        orderNote:  body.orderNote,
+        orderNote: body.orderNote,
       }]
     } else {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
@@ -21610,7 +21776,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) =&gt; sum + item.price * item.quantity, 0)
-    const fees     = calculateFees(subtotal, deliveryFee)
+    const fees = calculateFees(subtotal, deliveryFee)
 
     // APP_URL required
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL
@@ -21622,7 +21788,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const reference   = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
+    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
     const callbackUrl = `${APP_URL.replace(/\/$/, '')}/api/payments/verify`
 
     console.log('💳 Initializing Paystack — reference:', reference, '| callback:', callbackUrl)
@@ -21634,13 +21800,13 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email:        user.email || `${user.id}@batamart.app`,
-        amount:       fees.totalAmount * 100, // kobo
+        email: user.email || `${user.id}@batamart.app`,
+        amount: fees.totalAmount * 100, // kobo
         reference,
         callback_url: callbackUrl,
         metadata: {
-          userId:      user.id,
-          cartItems:   items,
+          userId: user.id,
+          cartItems: items,
           deliveryFee,
           fees,
         },
@@ -21660,11 +21826,11 @@ export async function POST(request: NextRequest) {
     console.log('✅ Paystack initialized — reference:', reference)
 
     return NextResponse.json({
-      success:           true,
+      success: true,
       authorization_url: paystackData.data.authorization_url,
-      reference:         paystackData.data.reference,
-      deliveryFee:       fees.deliveryFee,
-      totalAmount:       fees.totalAmount,
+      reference: paystackData.data.reference,
+      deliveryFee: fees.deliveryFee,
+      totalAmount: fees.totalAmount,
     })
   } catch (error) {
     console.error('Payment init error:', error)
@@ -21681,23 +21847,23 @@ export async function POST(request: NextRequest) {
 // ══════════════════════════════════════════════════════════════════════════════
 export async function createOrders(
   items: {
-    productId:  string
-    name:       string
-    price:      number
-    quantity:   number
-    category:   string
-    sellerId:   string
+    productId: string
+    name: string
+    price: number
+    quantity: number
+    category: string
+    sellerId: string
     sellerName: string
     orderNote?: string
   }[],
   user: {
-    id:          string
+    id: string
     hostelName?: string | null
     roomNumber?: string | null
-    phone?:      string | null
-    landmark?:   string | null
+    phone?: string | null
+    landmark?: string | null
   },
-  fees:             ReturnType&lt;typeof calculateFees&gt;,
+  fees: ReturnType&lt;typeof calculateFees&gt;,
   paymentReference: string
 ) {
   console.log('📝 createOrders called — reference:', paymentReference)
@@ -21712,30 +21878,30 @@ export async function createOrders(
   const createdOrders: Awaited&lt;ReturnType&lt;typeof prisma.order.create&gt;&gt;[] = []
 
   const notificationQueue: Array&lt;{
-    orderId:     string
-    buyerId:     string
-    sellerId:    string
+    orderId: string
+    buyerId: string
+    sellerId: string
     orderNumber: string
-    itemsList:   string
+    itemsList: string
   }&gt; = []
 
   const outOfStockAlerts: Array&lt;{
-    sellerId:    string
-    productId:   string
+    sellerId: string
+    productId: string
     productName: string
   }&gt; = []
 
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const proportion    = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
-    const orderFees     = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
+    const proportion = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
+    const orderFees = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
 
     // FIX 1: Use crypto.randomUUID() instead of Date.now() + random suffix.
     // Date.now() has millisecond resolution — two sellers processing in the same
     // createOrders call can produce an identical timestamp, causing a unique
     // constraint violation on orderNumber. UUID is globally unique by design.
     const orderNumber = `BATAMART-${crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase()}`
-    const itemsList   = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
+    const itemsList = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
 
     console.log('🔨 Creating order:', orderNumber, 'for seller:', sellerId)
 
@@ -21743,7 +21909,7 @@ export async function createOrders(
       const order = await prisma.$transaction(async (tx) =&gt; {
         // FIX 2: Only fetch pendingBalance — availableBalance was dead data here.
         const seller = await tx.user.findUnique({
-          where:  { id: sellerId },
+          where: { id: sellerId },
           select: { pendingBalance: true },
         })
         if (!seller) throw new Error(`Seller not found: ${sellerId}`)
@@ -21756,28 +21922,28 @@ export async function createOrders(
         const newOrder = await tx.order.create({
           data: {
             orderNumber,
-            buyerId:            user.id,
+            buyerId: user.id,
             sellerId,
-            productId:          sellerItems[0].productId,
-            productPrice:       Number(orderSubtotal),
-            deliveryFee:        Number(orderFees.deliveryFee),
-            totalAmount:        Number(orderFees.totalAmount),
+            productId: sellerItems[0].productId,
+            productPrice: Number(orderSubtotal),
+            deliveryFee: Number(orderFees.deliveryFee),
+            totalAmount: Number(orderFees.totalAmount),
             platformCommission: Number(orderFees.platformTotal),
-            quantity:           Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
-            deliveryHostel:     String(user.hostelName ?? ''),
-            deliveryRoom:       String(user.roomNumber ?? ''),
-            deliveryPhone:      String(user.phone      ?? ''),
-            deliveryLandmark:   String(user.landmark   ?? ''),
-            isPaid:             true,
-            status:             'PENDING' as const,
+            quantity: Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
+            deliveryHostel: String(user.hostelName ?? ''),
+            deliveryRoom: String(user.roomNumber ?? ''),
+            deliveryPhone: String(user.phone ?? ''),
+            deliveryLandmark: String(user.landmark ?? ''),
+            isPaid: true,
+            status: 'PENDING' as const,
             orderNote,
             payment: {
               create: {
-                amount:        Number(orderFees.totalAmount),
-                method:        'CARD'      as const,
-                status:        'COMPLETED' as const,
+                amount: Number(orderFees.totalAmount),
+                method: 'CARD' as const,
+                status: 'COMPLETED' as const,
                 transactionId: paymentReference,
-                paidAt:        new Date(),
+                paidAt: new Date(),
               },
             },
           },
@@ -21794,7 +21960,7 @@ export async function createOrders(
         for (const item of sellerItems) {
           const updated = await tx.product.updateMany({
             where: {
-              id:       item.productId,
+              id: item.productId,
               quantity: { gte: Number(item.quantity) }, // only proceed if stock is still sufficient
             },
             data: { quantity: { decrement: Number(item.quantity) } },
@@ -21808,51 +21974,51 @@ export async function createOrders(
           // Check if stock just hit zero and deactivate if so.
           // We re-fetch only the fields we need — updateMany doesn't return rows.
           const afterUpdate = await tx.product.findUnique({
-            where:  { id: item.productId },
+            where: { id: item.productId },
             select: { id: true, name: true, quantity: true },
           })
 
           if (afterUpdate &amp;&amp; afterUpdate.quantity &lt;= 0) {
             await tx.product.update({
               where: { id: item.productId },
-              data:  { isActive: false },
+              data: { isActive: false },
             })
             outOfStockAlerts.push({
               sellerId,
-              productId:   afterUpdate.id,
+              productId: afterUpdate.id,
               productName: afterUpdate.name,
             })
           }
         }
 
         // Credit seller's pending (escrow) balance
-        const sellerShare          = Number(orderFees.sellerShare)
+        const sellerShare = Number(orderFees.sellerShare)
         const sellerPendingBalance = Number(seller.pendingBalance ?? 0)
 
         await tx.user.update({
           where: { id: sellerId },
-          data:  { pendingBalance: { increment: sellerShare } },
+          data: { pendingBalance: { increment: sellerShare } },
         })
 
         await tx.transaction.createMany({
           data: [
             {
-              userId:        sellerId,
-              type:          'ESCROW',
-              amount:        sellerShare,
-              description:   `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
-              reference:     `${orderNumber}-SELLER-ESCROW`,
+              userId: sellerId,
+              type: 'ESCROW',
+              amount: sellerShare,
+              description: `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
+              reference: `${orderNumber}-SELLER-ESCROW`,
               balanceBefore: sellerPendingBalance,
-              balanceAfter:  sellerPendingBalance + sellerShare,
+              balanceAfter: sellerPendingBalance + sellerShare,
             },
             {
-              userId:        user.id,
-              type:          'DEBIT',
-              amount:        Number(orderFees.totalAmount),
-              description:   `Payment for ${itemsList} (Order: ${orderNumber})`,
-              reference:     `${orderNumber}-BUYER-PAYMENT`,
+              userId: user.id,
+              type: 'DEBIT',
+              amount: Number(orderFees.totalAmount),
+              description: `Payment for ${itemsList} (Order: ${orderNumber})`,
+              reference: `${orderNumber}-BUYER-PAYMENT`,
               balanceBefore: 0,
-              balanceAfter:  0,
+              balanceAfter: 0,
             },
           ],
         })
@@ -21862,8 +22028,8 @@ export async function createOrders(
 
       createdOrders.push(order)
       notificationQueue.push({
-        orderId:     order.id,
-        buyerId:     user.id,
+        orderId: order.id,
+        buyerId: user.id,
         sellerId,
         orderNumber,
         itemsList,
@@ -21888,7 +22054,7 @@ export async function createOrders(
       outOfStockAlerts.map(alert =&gt;
         notifySellerOutOfStock(alert.sellerId, alert.productId, alert.productName)
       )
-    ).catch(() =&gt; {})
+    ).catch(() =&gt; { })
   }
 
   console.log('🎉 All orders created:', createdOrders.length)
@@ -21907,9 +22073,9 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-        where:  { id: sellerId },
-        select: { email: true, name: true },
-      }).catch(() =&gt; null)
+      where: { id: sellerId },
+      select: { email: true, name: true },
+    }).catch(() =&gt; null)
     : null
 
   const tasks: Promise&lt;any&gt;[] = []
@@ -21917,20 +22083,20 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId:   sellerId,
-        type:     'ORDER_PLACED',
-        title:    '⚠️ Product Out of Stock',
-        message:  `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
+        userId: sellerId,
+        type: 'ORDER_PLACED',
+        title: '⚠️ Product Out of Stock',
+        message: `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
         metadata: { productId, productName },
       })
     )
   }
 
   if (seller?.email &amp;&amp; emailMod?.sendEmail) {
-    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to:      seller.email,
+        to: seller.email,
         subject: `⚠️ "${productName}" is out of stock — BATAMART`,
         html: `
 &lt;!DOCTYPE html&gt;
@@ -22000,7 +22166,7 @@ function appRedirect(path: string) {
   const base = process.env.NEXT_PUBLIC_APP_URL
   if (!base) {
     console.error('❌ CRITICAL: NEXT_PUBLIC_APP_URL is not set in environment variables!')
-    return NextResponse.redirect(`https://bata-mart.vercel.app${path}`)
+    return NextResponse.redirect(`https://batamart.com${path}`)
   }
   return NextResponse.redirect(`${base.replace(/\/$/, '')}${path}`)
 }
@@ -22014,7 +22180,7 @@ export async function GET(request: NextRequest) {
   console.log('═'.repeat(70))
   console.log('📍 Reference:', reference)
   console.log('📍 Timestamp:', new Date().toISOString())
-  console.log('📍 APP_URL:',   process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
+  console.log('📍 APP_URL:', process.env.NEXT_PUBLIC_APP_URL ?? '⚠️  NOT SET')
 
   if (!reference) {
     console.error('❌ ERROR: No reference in URL')
@@ -22059,7 +22225,7 @@ export async function GET(request: NextRequest) {
     console.log('\n🔄 STEP 2: Idempotency check')
 
     const existingPayment = await prisma.payment.findFirst({
-      where:   { transactionId: reference },
+      where: { transactionId: reference },
       include: { order: { select: { id: true, orderNumber: true } } },
     })
 
@@ -22074,21 +22240,21 @@ export async function GET(request: NextRequest) {
     console.log('\n📋 STEP 3: Extracting Metadata')
 
     type CartItem = {
-      productId:  string
-      name:       string
-      price:      number
-      quantity:   number
-      category:   string
-      sellerId:   string
+      productId: string
+      name: string
+      price: number
+      quantity: number
+      category: string
+      sellerId: string
       sellerName: string
       orderNote?: string
     }
 
     const meta = verifyData.data.metadata as {
-      userId:      string
-      cartItems:   CartItem[]
+      userId: string
+      cartItems: CartItem[]
       deliveryFee: number
-      fees:        ReturnType&lt;typeof calculateFees&gt;
+      fees: ReturnType&lt;typeof calculateFees&gt;
     }
 
     if (!meta?.userId || !Array.isArray(meta?.cartItems) || meta.cartItems.length === 0) {
@@ -22102,7 +22268,7 @@ export async function GET(request: NextRequest) {
     console.log('\n👤 STEP 4: Fetching Buyer')
 
     const buyer = await prisma.user.findUnique({
-      where:  { id: meta.userId },
+      where: { id: meta.userId },
       select: {
         id: true, name: true, email: true,
         hostelName: true, roomNumber: true,
@@ -22126,7 +22292,7 @@ export async function GET(request: NextRequest) {
 
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
-        where:  { id: item.productId },
+        where: { id: item.productId },
         select: { id: true, name: true, quantity: true, isActive: true },
       })
 
@@ -22150,7 +22316,7 @@ export async function GET(request: NextRequest) {
     console.log('\n💰 STEP 6: Creating Orders')
 
     const subtotal = meta.cartItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const fees     = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
+    const fees = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
 
     let orders: Awaited&lt;ReturnType&lt;typeof createOrders&gt;&gt;
     try {
@@ -22178,20 +22344,20 @@ export async function GET(request: NextRequest) {
     console.log('\n🔔 STEP 7: Queueing Notifications')
 
     const sellerMap = new Map&lt;string, {
-      orderId:     string
+      orderId: string
       orderNumber: string
-      orderNote?:  string
-      itemsList:   string
+      orderNote?: string
+      itemsList: string
     }&gt;()
 
     for (const order of orders) {
       if (order.sellerId &amp;&amp; !sellerMap.has(order.sellerId)) {
         const sellerItems = meta.cartItems.filter(i =&gt; i.sellerId === order.sellerId)
         sellerMap.set(order.sellerId, {
-          orderId:     order.id,
+          orderId: order.id,
           orderNumber: order.orderNumber,
-          orderNote:   sellerItems[0]?.orderNote,
-          itemsList:   sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
+          orderNote: sellerItems[0]?.orderNote,
+          itemsList: sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
         })
       }
     }
@@ -22256,12 +22422,12 @@ export async function GET(request: NextRequest) {
 // never crashes the verify route
 // ─────────────────────────────────────────────────────────────────────────────
 async function notifySellerOfNewOrder(
-  sellerId:    string,
-  orderId:     string,
+  sellerId: string,
+  orderId: string,
   orderNumber: string,
-  orderNote:   string | undefined,
-  buyerName:   string,
-  itemsList:   string,
+  orderNote: string | undefined,
+  buyerName: string,
+  itemsList: string,
 ) {
   const hasNote = Boolean(orderNote?.trim())
 
@@ -22274,9 +22440,9 @@ async function notifySellerOfNewOrder(
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-        where:  { id: sellerId },
-        select: { email: true },
-      }).catch(() =&gt; null)
+      where: { id: sellerId },
+      select: { email: true },
+    }).catch(() =&gt; null)
     : null
 
   const tasks: Promise&lt;any&gt;[] = []
@@ -22284,10 +22450,10 @@ async function notifySellerOfNewOrder(
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId:   sellerId,
-        type:     'ORDER_PLACED',
-        title:    '🛒 New Order Received!',
-        message:  `You have a new order (#${orderNumber}) for ${itemsList}`,
+        userId: sellerId,
+        type: 'ORDER_PLACED',
+        title: '🛒 New Order Received!',
+        message: `You have a new order (#${orderNumber}) for ${itemsList}`,
         orderId,
         metadata: { orderNumber, buyerName, itemsList },
       })
@@ -22296,10 +22462,10 @@ async function notifySellerOfNewOrder(
     if (hasNote) {
       tasks.push(
         notifMod.createNotification({
-          userId:   sellerId,
-          type:     'ORDER_PLACED',
-          title:    '📝 Note from Buyer',
-          message:  `For order #${orderNumber}: "${orderNote}"`,
+          userId: sellerId,
+          type: 'ORDER_PLACED',
+          title: '📝 Note from Buyer',
+          message: `For order #${orderNumber}: "${orderNote}"`,
           orderId,
           metadata: { orderNumber, orderNote },
         })
@@ -22312,10 +22478,10 @@ async function notifySellerOfNewOrder(
   }
 
   if (hasNote &amp;&amp; seller?.email &amp;&amp; emailMod?.sendEmail) {
-    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to:      seller.email,
+        to: seller.email,
         subject: `🎉 New Order #${orderNumber} — BATAMART`,
         html: `
 &lt;!DOCTYPE html&gt;
@@ -22727,7 +22893,7 @@ export async function GET(request: NextRequest) {
 
     // Use NEXT_PUBLIC_APP_URL so the link works on any domain (custom domain,
     // preview deployments, etc.) — never hardcode bata-mart.vercel.app here.
-    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app').replace(/\/$/, '')
+    const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     const referralLink = `${APP_URL}/signup?ref=${fullUser.referralCode}`
 
     return NextResponse.json({
@@ -26894,7 +27060,7 @@ export function cn(...inputs: ClassValue[]) {
 <div class='file-block'><div class='file-header'>lib/email/emailTemplates.ts</div><pre>// lib/email/emailTemplates.ts
 // All email templates for BATAMART notifications
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://bata-mart.vercel.app'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com'
 
 // ─── Base layout wrapper ──────────────────────────────────────────────────────
 function baseTemplate(content: string) {
@@ -27721,14 +27887,11 @@ const UNIVERSITIES = [
     deliveryAreas: [
       'Aroma',
       'Tempsite',
-      'Town Campus',
-      'Bus Stand',
-      'Zik Avenue',
-      'Unizik Junction',
+      'Express Gate',
       'Ifite',
-      'Okpuno',
-      'Amawbia',
-      'Awka Town',
+      'Bus Stand',
+      'School Hostel',
+      'Amansea',
     ],
     hostels: [
       'Python Hall',
