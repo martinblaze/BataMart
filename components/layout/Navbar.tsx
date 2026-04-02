@@ -323,8 +323,12 @@ function RiderBottomNav({ onLogout }: { onLogout: () => void }) {
                     <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                   </svg>
                 ), label: 'Dashboard' },
-                { href: '/myprofile?app=true&rider=true', icon: User, label: 'My Profile' },
                 { href: '/wallet?app=true&rider=true', icon: Wallet, label: 'Earnings' },
+                { href: '/notifications?app=true&rider=true', icon: () => (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                ), label: 'Notifications' },
               ].map(({ href, icon: Icon, label }) => (
                 <Link
                   key={label}
@@ -378,9 +382,7 @@ function AppBottomNav({
 
     let lastScrollY = 0
 
-    const onFocusIn = () => {
-      lastScrollY = window.scrollY
-    }
+    const onFocusIn = () => { lastScrollY = window.scrollY }
 
     const onFocusOut = () => {
       setTimeout(() => {
@@ -607,9 +609,7 @@ function AppBottomNav({
                     ))}
                 </div>
 
-                {/* ── Bottom actions: mode toggle + logout ───────────── */}
                 <div className="px-6 pt-2 space-y-3">
-                  {/* Buyer / Seller toggle — only for sellers and admins */}
                   {(userRole === 'SELLER' || userRole === 'ADMIN') && (
                     <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
                       <div>
@@ -671,7 +671,7 @@ function AppBottomNav({
 }
 
 export function Navbar() {
-  const router = useRouter()
+  const router   = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -716,16 +716,16 @@ export function Navbar() {
     }
   }, [splashDone])
 
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [userName, setUserName] = useState('')
-  const [userBalance, setUserBalance] = useState(0)
-  const [userRole, setUserRole] = useState('')
-  const [isSellerMode, setIsSellerMode] = useState(true)
+  const [isMenuOpen, setIsMenuOpen]               = useState(false)
+  const [isLoggedIn, setIsLoggedIn]               = useState(false)
+  const [userName, setUserName]                   = useState('')
+  const [userBalance, setUserBalance]             = useState(0)
+  const [userRole, setUserRole]                   = useState('')
+  const [isSellerMode, setIsSellerMode]           = useState(true)
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
-  const [isVisible, setIsVisible] = useState(true)
-  const lastScrollY = useRef(0)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible]                 = useState(true)
+  const lastScrollY  = useRef(0)
+  const dropdownRef  = useRef<HTMLDivElement>(null)
 
   const getTotalItems = useCartStore((state) => state.getTotalItems)
   const cartCount = getTotalItems()
@@ -816,8 +816,10 @@ export function Navbar() {
     window.dispatchEvent(new Event('auth-change'))
   }
 
+  // ── FIXED: clear cookie on logout + send riders to /rider/login ──────────
   const handleLogout = () => {
     localStorage.clear()
+    document.cookie = 'token=; path=/; max-age=0'          // ← clears the cookie middleware reads
     sessionStorage.removeItem('batamart_rider_mode')
     setIsLoggedIn(false)
     setUserName('')
@@ -825,7 +827,7 @@ export function Navbar() {
     setUserRole('')
     setIsSellerMode(true)
     setIsUserDropdownOpen(false)
-    router.push(isRider ? '/rider-dashboard' : isApp ? '/marketplace?app=true' : '/')
+    router.push(isRider ? '/rider/login' : isApp ? '/marketplace?app=true' : '/')  // ← riders go to /rider/login
   }
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/')
@@ -897,65 +899,83 @@ export function Navbar() {
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-medium text-gray-700">Hi, {userName || 'User'}</span>
                     <span className="text-xs text-gray-500">
-                      {userRole === 'ADMIN' ? 'Admin' : userRole === 'SELLER' ? (isSellerMode ? 'Selling' : 'Buying') : 'Buyer'}
+                      {userRole === 'ADMIN' ? 'Admin' : userRole === 'SELLER' ? (isSellerMode ? 'Selling' : 'Buying') : userRole === 'RIDER' ? 'Rider' : 'Buyer'}
                     </span>
                   </div>
                   <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {isUserDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50">
-                    <Link href="/myprofile" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100">
-                      <User className="w-5 h-5 mr-3 text-gray-400" /><span className="font-medium">My Account</span>
-                    </Link>
-                    <Link href="/marketplace" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/marketplace') ? 'bg-blue-50 text-blue-600' : ''}`}>
-                      <Globe className="w-5 h-5 mr-3 text-gray-400" /><span>Marketplace</span>
-                    </Link>
-                    <Link href="/my-shop" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/my-shop') ? 'bg-blue-50 text-blue-600' : ''}`}>
-                      <Store className="w-5 h-5 mr-3 text-gray-400" /><span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
-                    </Link>
-                    {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
-                      <Link href="/sell" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/sell') ? 'bg-blue-50 text-blue-600' : ''}`}>
-                        <PlusCircle className="w-5 h-5 mr-3 text-gray-400" /><span>Sell</span>
-                      </Link>
-                    )}
-                    <Link href="/orders" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : ''}`}>
-                      <Package className="w-5 h-5 mr-3 text-gray-400" /><span>Orders</span>
-                    </Link>
-                    <Link href="/wallet" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/wallet') ? 'bg-green-50 text-green-600' : ''}`}>
-                      <Wallet className="w-5 h-5 mr-3 text-gray-400" />
-                      <div className="flex items-center justify-between flex-1">
-                        <span>Wallet</span>
-                        {userBalance > 0 && <span className="text-xs text-green-600 font-bold">₦{userBalance.toLocaleString()}</span>}
-                      </div>
-                    </Link>
-                    {userRole !== 'RIDER' && (
-                      <Link href="/dispute/select-order" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/dispute') ? 'bg-red-50 text-red-600' : ''}`}>
-                        <AlertTriangle className="w-5 h-5 mr-3 text-gray-400" /><span>Disputes</span>
-                      </Link>
-                    )}
-                    {userRole === 'RIDER' && (
-                      <Link href="/rider-dashboard" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : ''}`}>
-                        <svg className="w-5 h-5 mr-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        <span>Rider Dashboard</span>
-                      </Link>
-                    )}
-                    {(userRole === 'SELLER' || userRole === 'ADMIN') && (
-                      <div className="px-4 py-3 border-t border-gray-100">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Mode</span>
-                          <button onClick={toggleRoleMode} className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors hover:bg-gray-400">
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSellerMode ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                          <span className="text-xs text-gray-500">{isSellerMode ? 'Selling' : 'Buying'}</span>
-                        </div>
-                      </div>
-                    )}
-                    {userRole === 'BUYER' && (
-                      <Link href="/become-seller" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center px-4 py-3 text-blue-600 hover:bg-blue-50 transition-colors border-t border-gray-100">
-                        <PlusCircle className="w-5 h-5 mr-3" /><span className="font-medium">Become a Seller</span>
-                      </Link>
+                    {/* Rider-specific dropdown */}
+                    {userRole === 'RIDER' ? (
+                      <>
+                        <Link href="/rider-dashboard" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : ''}`}>
+                          <svg className="w-5 h-5 mr-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                          </svg>
+                          <span className="font-medium">Dashboard</span>
+                        </Link>
+                        <Link href="/wallet" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/wallet') ? 'bg-green-50 text-green-600' : ''}`}>
+                          <Wallet className="w-5 h-5 mr-3 text-gray-400" />
+                          <div className="flex items-center justify-between flex-1">
+                            <span>Earnings</span>
+                            {userBalance > 0 && <span className="text-xs text-green-600 font-bold">₦{userBalance.toLocaleString()}</span>}
+                          </div>
+                        </Link>
+                        <Link href="/notifications" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/notifications') ? 'bg-blue-50 text-blue-600' : ''}`}>
+                          <svg className="w-5 h-5 mr-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          <span>Notifications</span>
+                        </Link>
+                      </>
+                    ) : (
+                      /* Regular buyer/seller dropdown */
+                      <>
+                        <Link href="/myprofile" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100">
+                          <User className="w-5 h-5 mr-3 text-gray-400" /><span className="font-medium">My Account</span>
+                        </Link>
+                        <Link href="/marketplace" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/marketplace') ? 'bg-blue-50 text-blue-600' : ''}`}>
+                          <Globe className="w-5 h-5 mr-3 text-gray-400" /><span>Marketplace</span>
+                        </Link>
+                        <Link href="/my-shop" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/my-shop') ? 'bg-blue-50 text-blue-600' : ''}`}>
+                          <Store className="w-5 h-5 mr-3 text-gray-400" /><span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
+                        </Link>
+                        {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
+                          <Link href="/sell" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/sell') ? 'bg-blue-50 text-blue-600' : ''}`}>
+                            <PlusCircle className="w-5 h-5 mr-3 text-gray-400" /><span>Sell</span>
+                          </Link>
+                        )}
+                        <Link href="/orders" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : ''}`}>
+                          <Package className="w-5 h-5 mr-3 text-gray-400" /><span>Orders</span>
+                        </Link>
+                        <Link href="/wallet" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/wallet') ? 'bg-green-50 text-green-600' : ''}`}>
+                          <Wallet className="w-5 h-5 mr-3 text-gray-400" />
+                          <div className="flex items-center justify-between flex-1">
+                            <span>Wallet</span>
+                            {userBalance > 0 && <span className="text-xs text-green-600 font-bold">₦{userBalance.toLocaleString()}</span>}
+                          </div>
+                        </Link>
+                        <Link href="/dispute/select-order" onClick={() => setIsUserDropdownOpen(false)} className={`flex items-center px-4 py-3 text-gray-700 hover:bg-gray-50 transition-colors ${isActive('/dispute') ? 'bg-red-50 text-red-600' : ''}`}>
+                          <AlertTriangle className="w-5 h-5 mr-3 text-gray-400" /><span>Disputes</span>
+                        </Link>
+                        {(userRole === 'SELLER' || userRole === 'ADMIN') && (
+                          <div className="px-4 py-3 border-t border-gray-100">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Mode</span>
+                              <button onClick={toggleRoleMode} className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors hover:bg-gray-400">
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSellerMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                              </button>
+                              <span className="text-xs text-gray-500">{isSellerMode ? 'Selling' : 'Buying'}</span>
+                            </div>
+                          </div>
+                        )}
+                        {userRole === 'BUYER' && (
+                          <Link href="/become-seller" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center px-4 py-3 text-blue-600 hover:bg-blue-50 transition-colors border-t border-gray-100">
+                            <PlusCircle className="w-5 h-5 mr-3" /><span className="font-medium">Become a Seller</span>
+                          </Link>
+                        )}
+                      </>
                     )}
                     <button onClick={handleLogout} className="flex items-center w-full px-4 py-3 text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100">
                       <LogOut className="w-5 h-5 mr-3" /><span>Logout</span>
@@ -987,7 +1007,7 @@ export function Navbar() {
         <div className="md:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="px-4 py-4">
             <div className="flex items-center justify-end gap-4 mb-4 pb-4 border-b border-gray-200">
-              {isLoggedIn && (
+              {isLoggedIn && userRole !== 'RIDER' && (
                 <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600">
                   <ShoppingBag className="w-6 h-6" />
                   {cartCount > 0 && (
@@ -1001,43 +1021,58 @@ export function Navbar() {
             </div>
             {isLoggedIn ? (
               <div className="space-y-2">
-                <Link href="/myprofile" onClick={() => setIsMenuOpen(false)} className="flex items-center px-4 py-3 rounded-xl text-white" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
-                  <User className="w-5 h-5 mr-3" /><span className="font-medium">My Account</span>
-                </Link>
-                <Link href="/marketplace" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/marketplace') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  <Globe className="w-5 h-5 mr-3" /><span>Marketplace</span>
-                </Link>
-                <Link href="/my-shop" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/my-shop') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  <Store className="w-5 h-5 mr-3" /><span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
-                </Link>
-                {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
-                  <Link href="/sell" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/sell') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    <PlusCircle className="w-5 h-5 mr-3" /><span>Sell</span>
-                  </Link>
+                {userRole === 'RIDER' ? (
+                  /* Rider-only mobile menu */
+                  <>
+                    <Link href="/rider-dashboard" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                      </svg>
+                      <span>Dashboard</span>
+                    </Link>
+                    <Link href="/wallet" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/wallet') ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <Wallet className="w-5 h-5 mr-3" /><span>Earnings</span>
+                    </Link>
+                    <Link href="/notifications" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/notifications') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                      </svg>
+                      <span>Notifications</span>
+                    </Link>
+                  </>
+                ) : (
+                  /* Regular buyer/seller mobile menu */
+                  <>
+                    <Link href="/myprofile" onClick={() => setIsMenuOpen(false)} className="flex items-center px-4 py-3 rounded-xl text-white" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
+                      <User className="w-5 h-5 mr-3" /><span className="font-medium">My Account</span>
+                    </Link>
+                    <Link href="/marketplace" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/marketplace') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <Globe className="w-5 h-5 mr-3" /><span>Marketplace</span>
+                    </Link>
+                    <Link href="/my-shop" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/my-shop') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <Store className="w-5 h-5 mr-3" /><span>{isSellerMode && (userRole === 'SELLER' || userRole === 'ADMIN') ? 'My Shop' : 'My Items'}</span>
+                    </Link>
+                    {isLoggedIn && (userRole === 'SELLER' || userRole === 'ADMIN') && isSellerMode && (
+                      <Link href="/sell" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/sell') ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <PlusCircle className="w-5 h-5 mr-3" /><span>Sell</span>
+                      </Link>
+                    )}
+                    <Link href="/orders" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <Package className="w-5 h-5 mr-3" /><span>Orders</span>
+                    </Link>
+                    <Link href="/wallet" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/wallet') ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <Wallet className="w-5 h-5 mr-3" />
+                      <div className="flex items-center justify-between flex-1">
+                        <span>Wallet</span>
+                        {userBalance > 0 && <span className="text-sm text-green-600 font-bold">₦{userBalance.toLocaleString()}</span>}
+                      </div>
+                    </Link>
+                    <Link href="/dispute/select-order" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/dispute') ? 'bg-red-50 text-red-600' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <AlertTriangle className="w-5 h-5 mr-3" /><span>Disputes</span>
+                    </Link>
+                  </>
                 )}
-                <Link href="/orders" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/orders') ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  <Package className="w-5 h-5 mr-3" /><span>Orders</span>
-                </Link>
-                <Link href="/wallet" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/wallet') ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  <Wallet className="w-5 h-5 mr-3" />
-                  <div className="flex items-center justify-between flex-1">
-                    <span>Wallet</span>
-                    {userBalance > 0 && <span className="text-sm text-green-600 font-bold">₦{userBalance.toLocaleString()}</span>}
-                  </div>
-                </Link>
-                {userRole !== 'RIDER' && (
-                  <Link href="/dispute/select-order" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/dispute') ? 'bg-red-50 text-red-600' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    <AlertTriangle className="w-5 h-5 mr-3" /><span>Disputes</span>
-                  </Link>
-                )}
-                {userRole === 'RIDER' && (
-                  <Link href="/rider-dashboard" onClick={() => setIsMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive('/rider-dashboard') ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    <span>Rider Dashboard</span>
-                  </Link>
-                )}
+
                 <div className="pt-4 border-t border-gray-200 mt-4">
                   <div className="flex items-center justify-between mb-4">
                     <div>

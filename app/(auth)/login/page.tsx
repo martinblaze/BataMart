@@ -1,29 +1,25 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
   const [suspensionMessage, setSuspensionMessage] = useState<string | null>(null)
 
-  // ── Fetch real suspension info from the server when redirected ────────────
-  // We only use ?suspended=1 as a signal — the actual reason/until comes
-  // from the API so it cannot be spoofed via URL params.
   useEffect(() => {
     const wasSuspended = searchParams.get('suspended') === '1'
     if (!wasSuspended) return
 
     const fetchSuspensionInfo = async () => {
       try {
-        // The token may still be in localStorage briefly during the redirect
         const token = localStorage.getItem('token')
         const res = await fetch('/api/auth/suspension-info', {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -35,13 +31,9 @@ export default function LoginPage() {
           }
         }
       } catch {
-        // Network error — show generic message, never fall back to URL params
-        setSuspensionMessage(
-          'Your account has been suspended. Please contact support.'
-        )
+        setSuspensionMessage('Your account has been suspended. Please contact support.')
       }
     }
-
     fetchSuspensionInfo()
   }, [searchParams])
 
@@ -53,24 +45,31 @@ export default function LoginPage() {
 
     try {
       const response = await fetch('/api/auth/login-with-password', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body:    JSON.stringify({ email, password }),
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        localStorage.setItem('token', data.token)
+        localStorage.setItem('token',    data.token)
         localStorage.setItem('userName', data.user.name)
         localStorage.setItem('userRole', data.user.role || '')
-        // ── FIX: save userId so role detection works on order pages ──────
-        localStorage.setItem('userId', data.user.id)
+        localStorage.setItem('userId',   data.user.id)
+
+        // ── Store token in cookie so middleware can enforce role-based routing ──
+        document.cookie = `token=${data.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`
+
         window.dispatchEvent(new Event('auth-change'))
-        router.push('/marketplace')
+
+        // ── If a RIDER somehow logs in via the regular login, send them to their dashboard ──
+        if (data.user.role === 'RIDER') {
+          router.push('/rider-dashboard')
+        } else {
+          router.push('/marketplace')
+        }
       } else if (response.status === 403 && data.suspended) {
-        // ── Suspension returned directly from login API ───────────────────
-        // This is the most common path — no URL param needed at all.
         setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
       } else if (response.status === 429) {
         setError('Too many login attempts. Please wait a few minutes and try again.')
@@ -94,7 +93,9 @@ export default function LoginPage() {
                 <path d="M3 3h18v4H3V3zm0 6h18v12H3V9zm2 2v8h14v-8H5zm2 2h10v4H7v-4z" />
               </svg>
             </div>
-            <span className="font-bold text-2xl bg-gradient-to-r from-BATAMART-primary to-BATAMART-secondary bg-clip-text text-transparent">BATAMART</span>
+            <span className="font-bold text-2xl bg-gradient-to-r from-BATAMART-primary to-BATAMART-secondary bg-clip-text text-transparent">
+              BATAMART
+            </span>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
           <p className="text-gray-500">Login to your BATAMART account</p>
@@ -102,7 +103,6 @@ export default function LoginPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
 
-          {/* Suspension banner — data always comes from server, never URL */}
           {suspensionMessage && (
             <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-start gap-3">
@@ -173,24 +173,30 @@ export default function LoginPage() {
   )
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-BATAMART-primary border-t-transparent" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 function buildSuspensionMessage(reason: string | null, until: string | null): string {
   const reasonText = reason ?? 'Violation of platform terms'
-
   if (!until) {
     return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
-
   const untilDate = new Date(until)
   const now = new Date()
-
   if (untilDate.getFullYear() - now.getFullYear() > 50) {
     return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
-
   return `Your account is suspended until ${untilDate.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    day: 'numeric', month: 'long', year: 'numeric',
   })}.\n\nReason: ${reasonText}.`
 }
