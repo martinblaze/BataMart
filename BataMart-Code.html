@@ -849,21 +849,6 @@ export default function HomePage() {
           &lt;/div&gt;
         &lt;/section&gt;
 
-        {/* ── RIDER CTA ── */}
-        &lt;Reveal&gt;
-          &lt;div className="relative bg-gradient-to-r from-purple-50 to-indigo-50 border-y border-purple-100 py-5 px-4 text-center"&gt;
-            &lt;Link
-              href="/rider-signup"
-              className="inline-flex items-center gap-3 text-purple-700 hover:text-purple-900 transition-colors group"
-            &gt;
-              &lt;span className="text-xl"&gt;🛵&lt;/span&gt;
-              &lt;span className="BATAMART-display font-semibold tracking-wide"&gt;Become a Rider&lt;/span&gt;
-              &lt;span className="text-gray-400 text-sm"&gt;— Earn ₦560 per delivery&lt;/span&gt;
-              &lt;span className="text-purple-400 group-hover:translate-x-1 transition-transform"&gt;→&lt;/span&gt;
-            &lt;/Link&gt;
-          &lt;/div&gt;
-        &lt;/Reveal&gt;
-
         {/* ── FOOTER ── */}
         &lt;footer className="relative bg-gray-50 border-t border-gray-200 py-16 px-4"&gt;
           &lt;div className="max-w-6xl mx-auto"&gt;
@@ -888,7 +873,6 @@ export default function HomePage() {
                   links: [
                     { name: 'Marketplace', href: '/marketplace' },
                     { name: 'Sell on BATAMART', href: '/sell' },
-                    { name: 'Become a Rider', href: '/rider-signup' },
                   ],
                 },
                 {
@@ -5665,12 +5649,13 @@ export default function CheckoutPage() {
   )
 
   // ── FIX #4: Show server fee if available, else show a placeholder ──
-  const deliveryFee = serverDeliveryFee ?? 800
-  const subtotal = cartItems.reduce((sum, item) =&gt; sum + item.price * item.quantity, 0)
-  const totalAmount = subtotal + deliveryFee
-  const platformFee = subtotal * 0.05 + 240
-  const riderAmount = 560
-  const sellerAmount = subtotal * 0.95
+  const deliveryFee   = serverDeliveryFee ?? 800
+  const subtotal      = cartItems.reduce((sum, item) =&gt; sum + item.price * item.quantity, 0)
+  const totalAmount   = subtotal + deliveryFee
+  const platformFee   = subtotal * 0.05          // platform keeps full 5% — no delivery cut
+  const riderAmount   = 560
+  const referralCut   = 240                       // goes to referrer (if buyer was referred)
+  const sellerAmount  = subtotal * 0.95
   const hasNotes = Object.values(orderNotes).some(n =&gt; n.trim().length &gt; 0)
 
   return (
@@ -5917,13 +5902,15 @@ export default function CheckoutPage() {
                 By paying, you agree to BATAMART's Terms of Service. Payment secured by Paystack.
               &lt;/p&gt;
 
+              {/* ── Payment Breakdown ─────────────────────────────── */}
               &lt;div className="mt-5 pt-4 border-t border-gray-50"&gt;
                 &lt;p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3"&gt;Payment Breakdown&lt;/p&gt;
                 &lt;div className="space-y-2"&gt;
                   {[
-                    { label: 'Seller receives', value: formatPrice(sellerAmount), color: 'text-emerald-600' },
-                    { label: 'Rider receives', value: formatPrice(riderAmount), color: 'text-blue-600' },
-                    { label: 'Platform fee', value: formatPrice(platformFee), color: 'text-gray-500' },
+                    { label: 'Seller receives',   value: formatPrice(sellerAmount), color: 'text-emerald-600' },
+                    { label: 'Rider receives',    value: formatPrice(riderAmount),  color: 'text-blue-600'   },
+                    { label: 'Platform fee (5%)', value: formatPrice(platformFee),  color: 'text-gray-500'   },
+                    { label: 'Referral reward',   value: formatPrice(referralCut),  color: 'text-pink-500'   },
                   ].map(({ label, value, color }) =&gt; (
                     &lt;div key={label} className="flex justify-between text-xs"&gt;
                       &lt;span className="text-gray-400 font-medium"&gt;{label}&lt;/span&gt;
@@ -8680,7 +8667,7 @@ export default function ReferralsPage() {
             {[
               { step: '1', text: 'Share your referral link with friends' },
               { step: '2', text: 'They sign up using your link' },
-              { step: '3', text: 'When they complete an order, you earn 40% of the platform commission automatically' },
+              { step: '3', text: 'When they complete an order, you earn 30% of the delivery fee' },
             ].map(item =&gt; (
               &lt;div key={item.step} className="flex items-start gap-3"&gt;
                 &lt;div className="w-7 h-7 rounded-full bg-BATAMART-primary text-white text-sm font-bold flex items-center justify-center flex-shrink-0"&gt;
@@ -10036,7 +10023,7 @@ export default function SearchPageWrapper() {
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, AlertCircle } from 'lucide-react'
 
 const CATEGORIES = [
   'Fashion &amp; Clothing',
@@ -10061,7 +10048,6 @@ const HOSTELS = [
   'School Hostel (Inside School)',
 ]
 
-// Category-specific tag suggestions
 const TAG_SUGGESTIONS: Record&lt;string, string[]&gt; = {
   'Tech Gadgets': ['New', 'Used', 'Refurbished', '128GB', '256GB', '64GB', 'Black', 'White', 'Gold', 'Silver', 'Battery Health 90%', 'Battery Health 80%', 'iPhone 13', 'iPhone 14', 'Samsung', 'Unlocked', 'Charger Included', 'Original Box'],
   'Fashion &amp; Clothing': ['New', 'Used', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Unisex', 'Male', 'Female'],
@@ -10075,26 +10061,130 @@ const TAG_SUGGESTIONS: Record&lt;string, string[]&gt; = {
   'Furniture': ['New', 'Used', 'Good Condition', 'Foldable', 'Wooden', 'Plastic', 'Metal', 'Single', 'Double'],
 }
 
+// ── Confirmation Modal ────────────────────────────────────────────────────────
+function ConfirmListingModal({
+  price,
+  onConfirm,
+  onCancel,
+}: {
+  price: number
+  onConfirm: () =&gt; void
+  onCancel: () =&gt; void
+}) {
+  const [agreedToPolicy, setAgreedToPolicy] = useState(false)
+
+  const platformFee = price * 0.05
+  const youReceive  = price * 0.95
+
+  const fmt = (n: number) =&gt;
+    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(n)
+
+  return (
+    &lt;div className="fixed inset-0 z-50 flex items-center justify-center px-4"&gt;
+      {/* Backdrop */}
+      &lt;div className="absolute inset-0 bg-black/50" onClick={onCancel} /&gt;
+
+      {/* Modal */}
+      &lt;div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10 max-h-[90vh] overflow-y-auto"&gt;
+        &lt;div className="flex items-center gap-3 mb-4"&gt;
+          &lt;div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0"&gt;
+            &lt;AlertCircle className="w-5 h-5 text-amber-600" /&gt;
+          &lt;/div&gt;
+          &lt;h3 className="text-lg font-bold text-gray-900"&gt;Before you list&lt;/h3&gt;
+        &lt;/div&gt;
+
+        {/* Fee Breakdown */}
+        &lt;p className="text-sm text-gray-600 mb-4"&gt;
+          BATAMART charges a &lt;strong&gt;5% platform fee&lt;/strong&gt; on every completed sale:
+        &lt;/p&gt;
+
+        &lt;div className="bg-gray-50 rounded-xl p-4 space-y-2 mb-4 text-sm"&gt;
+          &lt;div className="flex justify-between"&gt;
+            &lt;span className="text-gray-500"&gt;Your listed price&lt;/span&gt;
+            &lt;span className="font-semibold text-gray-900"&gt;{fmt(price)}&lt;/span&gt;
+          &lt;/div&gt;
+          &lt;div className="flex justify-between"&gt;
+            &lt;span className="text-gray-500"&gt;Platform fee (5%)&lt;/span&gt;
+            &lt;span className="font-semibold text-red-500"&gt;− {fmt(platformFee)}&lt;/span&gt;
+          &lt;/div&gt;
+          &lt;div className="border-t border-gray-200 pt-2 flex justify-between"&gt;
+            &lt;span className="text-gray-700 font-semibold"&gt;You receive&lt;/span&gt;
+            &lt;span className="font-bold text-green-600"&gt;{fmt(youReceive)}&lt;/span&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;p className="text-xs text-gray-400 mb-5"&gt;
+          💡 Want to receive &lt;strong&gt;{fmt(price)}&lt;/strong&gt;? List at &lt;strong&gt;{fmt(Math.ceil(price / 0.95))}&lt;/strong&gt; to cover the fee.
+        &lt;/p&gt;
+
+        {/* Policy Warning */}
+        &lt;div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5"&gt;
+          &lt;div className="flex items-start gap-2 mb-3"&gt;
+            &lt;span className="text-lg"&gt;🚫&lt;/span&gt;
+            &lt;div&gt;
+              &lt;p className="text-sm font-bold text-red-700 mb-1"&gt;Product Availability Policy&lt;/p&gt;
+              &lt;p className="text-xs text-red-600 leading-relaxed"&gt;
+                The product you are listing &lt;strong&gt;must be physically with you right now.&lt;/strong&gt; Listing items you plan to waybill, order, or source from elsewhere after someone buys is &lt;strong&gt;strictly prohibited&lt;/strong&gt; and will result in an &lt;strong&gt;immediate penalty on your account&lt;/strong&gt;, including possible suspension.
+              &lt;/p&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          {/* Checkbox */}
+          &lt;label className="flex items-start gap-2.5 cursor-pointer"&gt;
+            &lt;input
+              type="checkbox"
+              checked={agreedToPolicy}
+              onChange={e =&gt; setAgreedToPolicy(e.target.checked)}
+              className="w-4 h-4 mt-0.5 accent-red-600 flex-shrink-0"
+            /&gt;
+            &lt;span className="text-xs text-red-700 font-semibold leading-relaxed"&gt;
+              I confirm that this product is currently in my possession and ready for pickup. I understand that violating this policy will result in a penalty on my BATAMART account.
+            &lt;/span&gt;
+          &lt;/label&gt;
+        &lt;/div&gt;
+
+        &lt;div className="flex gap-3"&gt;
+          &lt;button
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors"
+          &gt;
+            Go Back
+          &lt;/button&gt;
+          &lt;button
+            onClick={onConfirm}
+            disabled={!agreedToPolicy}
+            className="flex-1 py-3 rounded-xl bg-BATAMART-primary text-white font-semibold text-sm hover:bg-BATAMART-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          &gt;
+            List Product
+          &lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SellPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [checkingAuth, setCheckingAuth] = useState(true)
-  const [error, setError] = useState('')
-  const [images, setImages] = useState&lt;{ preview: string; url: string; uploading: boolean }[]&gt;([])
+  const [loading, setLoading]                   = useState(false)
+  const [checkingAuth, setCheckingAuth]         = useState(true)
+  const [error, setError]                       = useState('')
+  const [images, setImages]                     = useState&lt;{ preview: string; url: string; uploading: boolean }[]&gt;([])
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
-  // Tag input state
-  const [tags, setTags] = useState&lt;string[]&gt;([])
+  const [tags, setTags]         = useState&lt;string[]&gt;([])
   const [tagInput, setTagInput] = useState('')
-  const tagInputRef = useRef&lt;HTMLInputElement&gt;(null)
+  const tagInputRef             = useRef&lt;HTMLInputElement&gt;(null)
 
   const [formData, setFormData] = useState({
-    name: '',
-    price: '',
-    quantity: '1',
-    category: '',
+    name:       '',
+    price:      '',
+    quantity:   '1',
+    category:   '',
     hostelName: '',
     roomNumber: '',
-    landmark: '',
+    landmark:   '',
   })
 
   useEffect(() =&gt; {
@@ -10107,7 +10197,7 @@ export default function SellPage() {
     return (
       &lt;div className="min-h-screen bg-gray-50 flex items-center justify-center"&gt;
         &lt;div className="text-center"&gt;
-          &lt;div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent mx-auto mb-4"&gt;&lt;/div&gt;
+          &lt;div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent mx-auto mb-4" /&gt;
           &lt;p className="text-gray-600"&gt;Checking authentication...&lt;/p&gt;
         &lt;/div&gt;
       &lt;/div&gt;
@@ -10124,17 +10214,11 @@ export default function SellPage() {
     setError('')
   }
 
-  const removeTag = (index: number) =&gt; {
-    setTags(prev =&gt; prev.filter((_, i) =&gt; i !== index))
-  }
+  const removeTag = (index: number) =&gt; setTags(prev =&gt; prev.filter((_, i) =&gt; i !== index))
 
   const handleTagKeyDown = (e: KeyboardEvent&lt;HTMLInputElement&gt;) =&gt; {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addTag(tagInput)
-    } else if (e.key === 'Backspace' &amp;&amp; !tagInput &amp;&amp; tags.length &gt; 0) {
-      removeTag(tags.length - 1)
-    }
+    if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) }
+    else if (e.key === 'Backspace' &amp;&amp; !tagInput &amp;&amp; tags.length &gt; 0) removeTag(tags.length - 1)
   }
 
   const suggestions = formData.category
@@ -10145,9 +10229,9 @@ export default function SellPage() {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ image: base64 }),
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ image: base64 }),
       })
       const data = await response.json()
       if (!response.ok) return null
@@ -10156,12 +10240,12 @@ export default function SellPage() {
   }
 
   const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-  const MAX_IMAGE_SIZE_MB = 8
+  const MAX_IMAGE_SIZE_MB   = 8
 
   const handleImageUpload = async (e: React.ChangeEvent&lt;HTMLInputElement&gt;) =&gt; {
     const files = e.target.files
     if (!files) return
-    const remaining = 3 - images.length
+    const remaining      = 3 - images.length
     const filesToProcess = Array.from(files).slice(0, remaining)
     for (const file of filesToProcess) {
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -10178,7 +10262,7 @@ export default function SellPage() {
         setImages(prev =&gt; [...prev, { preview: base64, url: '', uploading: true }])
         const cloudUrl = await uploadToCloudinary(base64)
         if (cloudUrl) {
-          setImages(prev =&gt; prev.map(img =&gt; img.preview === base64 ? { preview: base64, url: cloudUrl, uploading: false } : img))
+          setImages(prev =&gt; prev.map(img =&gt; img.preview === base64 ? { ...img, url: cloudUrl, uploading: false } : img))
         } else {
           setImages(prev =&gt; prev.filter(img =&gt; img.preview !== base64))
           setError('Failed to upload one of your images. Please try again.')
@@ -10192,34 +10276,37 @@ export default function SellPage() {
   const removeImage = (index: number) =&gt; setImages(prev =&gt; prev.filter((_, i) =&gt; i !== index))
   const allUploaded = images.length &gt; 0 &amp;&amp; images.every(img =&gt; !img.uploading)
 
-  const handleSubmit = async (e: React.FormEvent) =&gt; {
+  // Validates then shows modal
+  const handleSubmit = (e: React.FormEvent) =&gt; {
     e.preventDefault()
-
     if (images.length &lt; 1) { setError('Please add at least 1 product image'); return }
-    if (!allUploaded) { setError('Please wait for all images to finish uploading'); return }
+    if (!allUploaded)      { setError('Please wait for all images to finish uploading'); return }
     if (tags.length === 0) { setError('Please add at least 1 description tag (e.g. New, 128GB, Black)'); return }
+    setError('')
+    setShowConfirmModal(true)
+  }
 
+  // Called when user clicks "List Product" in the modal
+  const handleConfirmListing = async () =&gt; {
+    setShowConfirmModal(false)
     setLoading(true)
     setError('')
-
     try {
-      const token = localStorage.getItem('token')
-      const imageUrls = images.map(img =&gt; img.url)
-      // Join tags as pipe-separated string — no DB migration needed
+      const token       = localStorage.getItem('token')
+      const imageUrls   = images.map(img =&gt; img.url)
       const description = tags.join(' | ')
 
       const response = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({
           ...formData,
           description,
-          price: parseFloat(formData.price),
+          price:    parseFloat(formData.price),
           quantity: parseInt(formData.quantity),
-          images: imageUrls,
+          images:   imageUrls,
         }),
       })
-
       const data = await response.json()
       if (response.ok) router.push('/my-shop')
       else setError(data.error || 'Failed to create product')
@@ -10232,9 +10319,24 @@ export default function SellPage() {
 
   return (
     &lt;div className="min-h-screen bg-gray-50 py-8 px-4"&gt;
+
+      {/* Confirmation Modal */}
+      {showConfirmModal &amp;&amp; (
+        &lt;ConfirmListingModal
+          price={parseFloat(formData.price) || 0}
+          onConfirm={handleConfirmListing}
+          onCancel={() =&gt; setShowConfirmModal(false)}
+        /&gt;
+      )}
+
       &lt;div className="max-w-3xl mx-auto"&gt;
         &lt;div className="mb-8"&gt;
-          &lt;Link href={typeof window !== 'undefined' &amp;&amp; new URLSearchParams(window.location.search).get('app') === 'true' ? '/marketplace?app=true' : '/marketplace'} className="text-BATAMART-primary hover:underline mb-4 inline-block"&gt;← Back to Marketplace&lt;/Link&gt;
+          &lt;Link
+            href={typeof window !== 'undefined' &amp;&amp; new URLSearchParams(window.location.search).get('app') === 'true' ? '/marketplace?app=true' : '/marketplace'}
+            className="text-BATAMART-primary hover:underline mb-4 inline-block"
+          &gt;
+            ← Back to Marketplace
+          &lt;/Link&gt;
           &lt;h1 className="text-3xl font-bold text-gray-900"&gt;Sell Your Product&lt;/h1&gt;
           &lt;p className="text-gray-600 mt-2"&gt;List your item on BATAMART marketplace&lt;/p&gt;
         &lt;/div&gt;
@@ -10304,31 +10406,22 @@ export default function SellPage() {
               &lt;/select&gt;
             &lt;/div&gt;
 
-            {/* ── Description Tags ── */}
+            {/* Description Tags */}
             &lt;div&gt;
               &lt;label className="block text-sm font-semibold text-gray-700 mb-1"&gt;
                 Product Details / Description &lt;span className="text-red-500"&gt;*&lt;/span&gt;
               &lt;/label&gt;
               &lt;p className="text-xs text-gray-500 mb-3"&gt;
-                Type a detail and press &lt;kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono text-[11px]"&gt;Enter&lt;/kbd&gt; or click &lt;strong&gt;Add&lt;/strong&gt; to add it as a tag. Buyers can search by these tags.
+                Type a detail and press &lt;kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono text-[11px]"&gt;Enter&lt;/kbd&gt; or click &lt;strong&gt;Add&lt;/strong&gt; to add it as a tag.
               &lt;/p&gt;
-
-              {/* Tag chips display + input */}
               &lt;div
                 className="min-h-[56px] w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus-within:border-BATAMART-primary transition-colors cursor-text flex flex-wrap gap-2 items-center"
                 onClick={() =&gt; tagInputRef.current?.focus()}
               &gt;
                 {tags.map((tag, i) =&gt; (
-                  &lt;span
-                    key={i}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-BATAMART-primary/10 text-BATAMART-primary text-sm font-semibold rounded-full"
-                  &gt;
+                  &lt;span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-BATAMART-primary/10 text-BATAMART-primary text-sm font-semibold rounded-full"&gt;
                     {tag}
-                    &lt;button
-                      type="button"
-                      onClick={e =&gt; { e.stopPropagation(); removeTag(i) }}
-                      className="hover:text-red-500 transition-colors ml-0.5"
-                    &gt;
+                    &lt;button type="button" onClick={e =&gt; { e.stopPropagation(); removeTag(i) }} className="hover:text-red-500 transition-colors ml-0.5"&gt;
                       &lt;X className="w-3.5 h-3.5" /&gt;
                     &lt;/button&gt;
                   &lt;/span&gt;
@@ -10344,39 +10437,26 @@ export default function SellPage() {
                     className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 min-w-[100px]"
                   /&gt;
                   {tagInput.trim() &amp;&amp; (
-                    &lt;button
-                      type="button"
-                      onClick={() =&gt; addTag(tagInput)}
-                      className="flex items-center gap-1 px-3 py-1 bg-BATAMART-primary text-white text-xs font-bold rounded-full hover:bg-BATAMART-dark transition-colors flex-shrink-0"
-                    &gt;
+                    &lt;button type="button" onClick={() =&gt; addTag(tagInput)} className="flex items-center gap-1 px-3 py-1 bg-BATAMART-primary text-white text-xs font-bold rounded-full hover:bg-BATAMART-dark transition-colors flex-shrink-0"&gt;
                       &lt;Plus className="w-3 h-3" /&gt; Add
                     &lt;/button&gt;
                   )}
                 &lt;/div&gt;
               &lt;/div&gt;
 
-              {/* Quick suggestion chips */}
               {suggestions.length &gt; 0 &amp;&amp; (
                 &lt;div className="mt-3"&gt;
                   &lt;p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2"&gt;Quick add:&lt;/p&gt;
                   &lt;div className="flex flex-wrap gap-2"&gt;
                     {suggestions.slice(0, 12).map(s =&gt; (
-                      &lt;button
-                        key={s}
-                        type="button"
-                        onClick={() =&gt; addTag(s)}
-                        className="px-3 py-1.5 bg-gray-100 hover:bg-BATAMART-primary/10 hover:text-BATAMART-primary text-gray-600 text-xs font-semibold rounded-full transition-all border border-gray-200 hover:border-BATAMART-primary/30"
-                      &gt;
+                      &lt;button key={s} type="button" onClick={() =&gt; addTag(s)} className="px-3 py-1.5 bg-gray-100 hover:bg-BATAMART-primary/10 hover:text-BATAMART-primary text-gray-600 text-xs font-semibold rounded-full transition-all border border-gray-200 hover:border-BATAMART-primary/30"&gt;
                         + {s}
                       &lt;/button&gt;
                     ))}
                   &lt;/div&gt;
                 &lt;/div&gt;
               )}
-
-              {tags.length &gt; 0 &amp;&amp; (
-                &lt;p className="text-xs text-gray-400 mt-2"&gt;{tags.length} tag{tags.length !== 1 ? 's' : ''} added&lt;/p&gt;
-              )}
+              {tags.length &gt; 0 &amp;&amp; &lt;p className="text-xs text-gray-400 mt-2"&gt;{tags.length} tag{tags.length !== 1 ? 's' : ''} added&lt;/p&gt;}
             &lt;/div&gt;
 
             {/* Images */}
@@ -10392,7 +10472,7 @@ export default function SellPage() {
                         &lt;img src={img.preview} alt={`Product ${index + 1}`} className="w-full h-32 object-cover rounded-lg" /&gt;
                         {img.uploading &amp;&amp; (
                           &lt;div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center"&gt;
-                            &lt;div className="animate-spin rounded-full h-8 w-8 border-4 border-white border-t-transparent"&gt;&lt;/div&gt;
+                            &lt;div className="animate-spin rounded-full h-8 w-8 border-4 border-white border-t-transparent" /&gt;
                           &lt;/div&gt;
                         )}
                         {!img.uploading &amp;&amp; img.url &amp;&amp; (
@@ -10485,6 +10565,7 @@ export default function SellPage() {
             &gt;
               {loading ? 'Listing Product...' : !allUploaded &amp;&amp; images.length &gt; 0 ? 'Uploading images...' : 'List Product'}
             &lt;/button&gt;
+
           &lt;/form&gt;
         &lt;/div&gt;
       &lt;/div&gt;
@@ -14563,8 +14644,6 @@ function RiderBottomNav({ onLogout }: { onLogout: () =&gt; void }) {
           background: '#0f172a',
           borderColor: '#1e293b',
           boxShadow: '0 -4px 24px rgba(0,0,0,0.4)',
-          // iOS PWA fix — translate3d forces GPU compositing layer
-          // which prevents the nav from moving when keyboard dismisses
           transform: 'translate3d(0,0,0)',
           WebkitTransform: 'translate3d(0,0,0)',
           willChange: 'transform',
@@ -14734,20 +14813,19 @@ function AppBottomNav({
   isSellerMode,
   userName,
   onLogout,
+  onToggleMode,
 }: {
   isLoggedIn: boolean
   userRole: string
   isSellerMode: boolean
   userName: string
   onLogout: () =&gt; void
+  onToggleMode: () =&gt; void
 }) {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
 
   // ── iOS PWA keyboard fix ──────────────────────────────────────────────────
-  // On iOS, when the keyboard dismisses, the visual viewport resizes and
-  // breaks fixed positioning. We detect focus/blur on inputs and force a
-  // repaint of the nav after the keyboard animation completes.
   useEffect(() =&gt; {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) &amp;&amp; !(window as any).MSStream
     if (!isIOS) return
@@ -14759,16 +14837,13 @@ function AppBottomNav({
     }
 
     const onFocusOut = () =&gt; {
-      // Wait for iOS keyboard close animation (~300ms)
       setTimeout(() =&gt; {
-        // Restore scroll position — prevents content jumping under top nav
         window.scrollTo({ top: lastScrollY, behavior: 'instant' })
-        // Force nav repaint by toggling display — fixes floating bottom nav
         const navs = document.querySelectorAll('nav')
         navs.forEach(nav =&gt; {
           nav.style.display = 'none'
           // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-          nav.offsetHeight // trigger reflow
+          nav.offsetHeight
           nav.style.display = ''
         })
       }, 300)
@@ -14839,8 +14914,6 @@ function AppBottomNav({
         className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
         style={{
           boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
-          // translate3d instead of translateZ — more reliable on iOS Safari
-          // for keeping fixed elements anchored during viewport resize
           transform: 'translate3d(0,0,0)',
           WebkitTransform: 'translate3d(0,0,0)',
           willChange: 'transform',
@@ -14971,7 +15044,7 @@ function AppBottomNav({
                 &lt;div className="px-4 py-2"&gt;
                   {[
                     { href: '/myprofile?app=true', icon: User, label: 'My Account' },
-                    { href: '/my-shop?app=true', icon: Store, label: isSeller &amp;&amp; isSellerMode ? 'My Shop' : 'My Items' },
+                    { href: '/my-shop?app=true', icon: Store, label: (userRole === 'SELLER' || userRole === 'ADMIN') &amp;&amp; isSellerMode ? 'My Shop' : 'My Items' },
                     { href: '/dispute/select-order?app=true', icon: AlertTriangle, label: 'Disputes', hide: userRole === 'RIDER' },
                   ]
                     .filter(item =&gt; !item.hide)
@@ -14988,7 +15061,33 @@ function AppBottomNav({
                     ))}
                 &lt;/div&gt;
 
-                &lt;div className="px-6 pt-2"&gt;
+                {/* ── Bottom actions: mode toggle + logout ───────────── */}
+                &lt;div className="px-6 pt-2 space-y-3"&gt;
+                  {/* Buyer / Seller toggle — only for sellers and admins */}
+                  {(userRole === 'SELLER' || userRole === 'ADMIN') &amp;&amp; (
+                    &lt;div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100"&gt;
+                      &lt;div&gt;
+                        &lt;p className="text-sm font-semibold text-gray-800"&gt;Mode&lt;/p&gt;
+                        &lt;p className="text-xs text-gray-400"&gt;{isSellerMode ? 'You are selling' : 'You are buying'}&lt;/p&gt;
+                      &lt;/div&gt;
+                      &lt;div className="flex items-center gap-2"&gt;
+                        &lt;span className="text-xs text-gray-500"&gt;Buying&lt;/span&gt;
+                        &lt;button
+                          onClick={() =&gt; { onToggleMode() }}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                          style={{ background: isSellerMode ? 'linear-gradient(135deg,#1a3f8f,#3b9ef5)' : '#d1d5db' }}
+                        &gt;
+                          &lt;span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                              isSellerMode ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          /&gt;
+                        &lt;/button&gt;
+                        &lt;span className="text-xs text-gray-500"&gt;Selling&lt;/span&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+                  )}
+
                   &lt;button
                     onClick={() =&gt; { setProfileOpen(false); onLogout() }}
                     className="flex items-center justify-center w-full gap-2 bg-red-50 text-red-600 font-semibold py-3 rounded-xl"
@@ -15030,9 +15129,9 @@ export function Navbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const isAppParam  = searchParams.get('app')     === 'true'
-  const isAndroid   = searchParams.get('android') === 'true'
-  const isRiderParam = searchParams.get('rider')  === 'true'
+  const isAppParam   = searchParams.get('app')     === 'true'
+  const isAndroid    = searchParams.get('android') === 'true'
+  const isRiderParam = searchParams.get('rider')   === 'true'
 
   const [isStandalone, setIsStandalone] = useState(false)
   useEffect(() =&gt; {
@@ -15086,7 +15185,6 @@ export function Navbar() {
   const cartCount = getTotalItems()
 
   useEffect(() =&gt; {
-    // ── Disable scroll-hide on iOS PWA — it fights the keyboard fix ──────
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) &amp;&amp; !(window as any).MSStream
     if (isIOS &amp;&amp; isApp) return
 
@@ -15208,6 +15306,7 @@ export function Navbar() {
           isSellerMode={isSellerMode}
           userName={userName}
           onLogout={handleLogout}
+          onToggleMode={toggleRoleMode}
         /&gt;
       &lt;/&gt;
     )
@@ -21125,7 +21224,7 @@ export async function POST(request: NextRequest) {
 
     // ── Fetch order ───────────────────────────────────────────
     const order = await prisma.order.findUnique({
-      where: { id: orderId },
+      where:   { id: orderId },
       include: { seller: true, rider: true },
     })
 
@@ -21140,8 +21239,8 @@ export async function POST(request: NextRequest) {
     if (order.status === 'COMPLETED') {
       return NextResponse.json(
         {
-          error: 'Order already completed',
-          message: 'This order has already been confirmed and payment released',
+          error:            'Order already completed',
+          message:          'This order has already been confirmed and payment released',
           alreadyCompleted: true,
         },
         { status: 400 }
@@ -21155,26 +21254,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ═══════════════════════════════════════════════════════
-    // TRANSACTION: all DB operations including referral reward
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // PAYOUT BREAKDOWN (per order):
+    //   subtotal       = product cost
+    //   platformFee    = subtotal * 5%          (platform keeps this fully)
+    //   riderShare     = ₦560                   (rider gets this)
+    //   referralReward = ₦240                   (referrer gets this — was platform's delivery cut)
+    //   sellerShare    = subtotal - platformFee  (seller gets this)
+    //
+    //   Buyer pays: subtotal + ₦800 delivery fee
+    //   Platform earns: subtotal * 5% only (no longer takes the ₦240 delivery cut)
+    // ═══════════════════════════════════════════════════════════════
+
+    const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
+    const sellerShare = subtotal - order.platformCommission
+    const riderShare  = 560
+    const hasRider    = !!order.riderId
+
     const result = await prisma.$transaction(async (tx) =&gt; {
       // 1. Mark order COMPLETED
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
-        data: {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-        },
+        data:  { status: 'COMPLETED', completedAt: new Date() },
       })
 
       // 2. Release seller payment
       const sellerAvailable = order.seller.availableBalance || 0
-      const sellerShare = order.totalAmount - order.platformCommission - (order.rider ? 560 : 0)
 
       await tx.user.update({
         where: { id: order.sellerId },
-        data: {
+        data:  {
           pendingBalance:   { decrement: sellerShare },
           availableBalance: { increment: sellerShare },
         },
@@ -21194,12 +21303,10 @@ export async function POST(request: NextRequest) {
 
       // 3. Release rider payment (if assigned)
       if (order.riderId) {
-        const rider = await tx.user.findUnique({
+        const rider        = await tx.user.findUnique({
           where:  { id: order.riderId },
           select: { availableBalance: true },
         })
-
-        const riderShare   = 560
         const riderBalance = rider?.availableBalance || 0
 
         await tx.user.update({
@@ -21220,14 +21327,17 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // 4. ── REFERRAL REWARD (new) ──────────────────────────
+      // 4. ── REFERRAL REWARD ────────────────────────────────────────
+      // Referrer earns ₦240 (the full delivery platform cut) on every
+      // completed delivery order from their referral — forever.
+      // Platform keeps its full 5% product commission.
       await processReferralReward(tx, {
         orderId,
         orderNumber: order.orderNumber,
         orderAmount: order.totalAmount,
         buyerId:     order.buyerId,
+        hasRider,    // ← only delivery orders trigger the reward
       })
-      // processReferralReward is silent on errors and no-ops if no referrer
 
       return updatedOrder
     }, {
@@ -27316,6 +27426,34 @@ export async function sendEmail({ to, subject, html }: EmailPayload) {
     console.error('Send email error:', error)
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>lib/finance/calculatePayout.ts</div><pre>// lib/finance/calculatePayout.ts
+
+export function calculatePayout(subtotal: number, deliveryFee: number = 800) {
+  const PLATFORM_RATE          = 0.05
+  const RIDER_SHARE            = 560
+  // ── NEW: ₦240 delivery cut now goes to referrer, not platform ──────────────
+  const REFERRAL_DELIVERY_CUT  = 240   // referrer earns this per delivery order
+  const PLATFORM_DELIVERY_CUT  = 0     // platform no longer takes a cut of delivery
+
+  const platformFeeFromProducts = subtotal * PLATFORM_RATE
+  const sellerShare             = subtotal - platformFeeFromProducts
+  const riderShare              = RIDER_SHARE
+  const referralDeliveryCut     = REFERRAL_DELIVERY_CUT   // goes to referrer if applicable
+  const platformTotal           = platformFeeFromProducts  // platform only earns product commission
+  const totalAmount             = subtotal + deliveryFee
+
+  return {
+    subtotal,
+    deliveryFee,
+    totalAmount,
+    sellerShare,
+    riderShare,
+    referralDeliveryCut,
+    platformTotal,
+    // legacy field names kept for compatibility
+    platformFee: platformFeeFromProducts,
+  }
+}</pre></div>
 <div class='file-block'><div class='file-header'>lib/push/sendPushNotification.ts</div><pre>// lib/push/sendPushNotification.ts
 import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
@@ -27663,14 +27801,17 @@ export async function generateUniqueReferralCode(): Promise&lt;string&gt; {
 
 import { Prisma } from '@prisma/client'
 
-const PLATFORM_COMMISSION_RATE = 0.05   // 5%
-const REFERRER_REWARD_RATE     = 0.40   // 40% of commission
+// ── Referral reward = the full ₦240 delivery platform cut ─────────────────────
+// The platform keeps its 5% product commission entirely.
+// The ₦240 delivery cut goes 100% to the referrer (forever, every order).
+// Only paid if the order had a rider (delivery orders only).
+const REFERRAL_DELIVERY_REWARD = 240
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx =&gt; ...) block.
  *
- * Checks if the buyer was referred. If so, calculates and credits the
- * referrer's wallet and creates a ReferralReward record + notification.
+ * Checks if the buyer was referred. If so, credits the referrer ₦240
+ * (the delivery platform cut) for every completed delivery order — forever.
  *
  * The @unique constraint on ReferralReward.orderId guarantees idempotency.
  */
@@ -27679,15 +27820,19 @@ export async function processReferralReward(
   params: {
     orderId:     string
     orderNumber: string
-    orderAmount: number   // totalAmount
+    orderAmount: number
     buyerId:     string
+    hasRider:    boolean   // ← NEW: only pay if delivery order
   }
 ) {
-  const { orderId, orderNumber, orderAmount, buyerId } = params
+  const { orderId, orderNumber, buyerId, hasRider } = params
+
+  // Only pay referral reward on delivery orders
+  if (!hasRider) return
 
   // 1. Check if buyer was referred
   const buyer = await tx.user.findUnique({
-    where: { id: buyerId },
+    where:  { id: buyerId },
     select: { referredById: true },
   })
 
@@ -27695,21 +27840,16 @@ export async function processReferralReward(
 
   // 2. Guard: skip if reward already exists for this order
   const existing = await tx.referralReward.findUnique({
-    where: { orderId },
+    where:  { orderId },
     select: { id: true },
   })
-  if (existing) return   // idempotency guard (belt + suspenders alongside @unique)
+  if (existing) return   // idempotency guard
 
-  // 3. Calculate reward
-  const commission = orderAmount * PLATFORM_COMMISSION_RATE
-  const reward     = commission  * REFERRER_REWARD_RATE
-  // e.g. ₦10,000 → commission ₦500 → reward ₦50
+  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦240
 
-  if (reward &lt;= 0) return
-
-  // 4. Fetch referrer's current balance
+  // 3. Fetch referrer's current balance
   const referrer = await tx.user.findUnique({
-    where: { id: buyer.referredById },
+    where:  { id: buyer.referredById },
     select: { id: true, availableBalance: true },
   })
   if (!referrer) return
@@ -27717,48 +27857,44 @@ export async function processReferralReward(
   const balanceBefore = referrer.availableBalance
   const balanceAfter  = balanceBefore + reward
 
-  // 5. Create ReferralReward record
+  // 4. Create ReferralReward record
   await tx.referralReward.create({
     data: {
-      referrerId:    referrer.id,
+      referrerId:     referrer.id,
       referredUserId: buyerId,
       orderId,
-      amount:        reward,
+      amount:         reward,
     },
   })
 
-  // 6. Credit referrer's wallet
+  // 5. Credit referrer's wallet
   await tx.user.update({
     where: { id: referrer.id },
     data:  { availableBalance: { increment: reward } },
   })
 
-  // 7. Create wallet transaction record
+  // 6. Create wallet transaction record
   await tx.transaction.create({
     data: {
       userId:        referrer.id,
       type:          'REFERRAL_REWARD',
       amount:        reward,
-      description:   `Referral reward from order #${orderNumber}`,
+      description:   `Referral reward — delivery cut from order #${orderNumber}`,
       reference:     `${orderNumber}-REFERRAL`,
       balanceBefore,
       balanceAfter,
     },
   })
 
-  // 8. Create in-app notification
+  // 7. Create in-app notification
   await tx.notification.create({
     data: {
       userId:  referrer.id,
       type:    'REFERRAL_REWARD',
-      title:   '🎉 Referral Reward Earned!',
-      message: `You earned ₦${reward.toLocaleString('en-NG', { minimumFractionDigits: 2 })} from a referral order.`,
+      title:   '🎁 Referral Reward!',
+      message: `You earned ₦240 delivery reward from order #${orderNumber}.`,
       orderId,
-      metadata: {
-        reward,
-        orderNumber,
-        commission,
-      },
+      metadata: JSON.stringify({ reward, orderNumber }),
     },
   })
 }</pre></div>

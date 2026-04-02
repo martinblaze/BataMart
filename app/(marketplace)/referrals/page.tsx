@@ -207,7 +207,7 @@ export default function ReferralsPage() {
             {[
               { step: '1', text: 'Share your referral link with friends' },
               { step: '2', text: 'They sign up using your link' },
-              { step: '3', text: 'When they complete an order, you earn 40% of the platform commission automatically' },
+              { step: '3', text: 'When they complete an order, you earn ₦120 from the delivery fee' },
             ].map(item => (
               <div key={item.step} className="flex items-start gap-3">
                 <div className="w-7 h-7 rounded-full bg-BATAMART-primary text-white text-sm font-bold flex items-center justify-center flex-shrink-0">

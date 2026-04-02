@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic'
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
   const PLATFORM_RATE = 0.05
   const RIDER_SHARE = 560
-  const PLATFORM_DELIVERY_CUT = 240
+  // ₦120 goes to referrer (50% of old ₦240), ₦120 stays with platform
+  const PLATFORM_DELIVERY_CUT = 120
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
   const sellerShare = subtotal - platformFeeFromProducts

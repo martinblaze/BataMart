@@ -4,17 +4,17 @@
 
 import { Prisma } from '@prisma/client'
 
-// ── Referral reward = the full ₦240 delivery platform cut ─────────────────────
+// ── Referral reward = ₦120 (50% of the ₦240 delivery platform cut) ────────────
 // The platform keeps its 5% product commission entirely.
-// The ₦240 delivery cut goes 100% to the referrer (forever, every order).
+// ₦120 of the ₦240 delivery cut goes to the referrer (forever, every order).
 // Only paid if the order had a rider (delivery orders only).
-const REFERRAL_DELIVERY_REWARD = 240
+const REFERRAL_DELIVERY_REWARD = 120
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx => ...) block.
  *
- * Checks if the buyer was referred. If so, credits the referrer ₦240
- * (the delivery platform cut) for every completed delivery order — forever.
+ * Checks if the buyer was referred. If so, credits the referrer ₦120
+ * (50% of the delivery platform cut) for every completed delivery order — forever.
  *
  * The @unique constraint on ReferralReward.orderId guarantees idempotency.
  */
@@ -25,7 +25,7 @@ export async function processReferralReward(
     orderNumber: string
     orderAmount: number
     buyerId:     string
-    hasRider:    boolean   // ← NEW: only pay if delivery order
+    hasRider:    boolean   // ← only pay if delivery order
   }
 ) {
   const { orderId, orderNumber, buyerId, hasRider } = params
@@ -48,7 +48,7 @@ export async function processReferralReward(
   })
   if (existing) return   // idempotency guard
 
-  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦240
+  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦120
 
   // 3. Fetch referrer's current balance
   const referrer = await tx.user.findUnique({
@@ -95,7 +95,7 @@ export async function processReferralReward(
       userId:  referrer.id,
       type:    'REFERRAL_REWARD',
       title:   '🎁 Referral Reward!',
-      message: `You earned ₦240 delivery reward from order #${orderNumber}.`,
+      message: `You earned ₦120 delivery reward from order #${orderNumber}.`,
       orderId,
       metadata: JSON.stringify({ reward, orderNumber }),
     },

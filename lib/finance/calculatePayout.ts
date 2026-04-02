@@ -3,15 +3,15 @@
 export function calculatePayout(subtotal: number, deliveryFee: number = 800) {
   const PLATFORM_RATE          = 0.05
   const RIDER_SHARE            = 560
-  // ── NEW: ₦240 delivery cut now goes to referrer, not platform ──────────────
-  const REFERRAL_DELIVERY_CUT  = 240   // referrer earns this per delivery order
-  const PLATFORM_DELIVERY_CUT  = 0     // platform no longer takes a cut of delivery
+  // ── ₦120 delivery cut goes to referrer (50% of the original ₦240) ──────────
+  const REFERRAL_DELIVERY_CUT  = 120   // referrer earns this per delivery order
+  const PLATFORM_DELIVERY_CUT  = 120   // platform retains the other ₦120
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
   const sellerShare             = subtotal - platformFeeFromProducts
   const riderShare              = RIDER_SHARE
   const referralDeliveryCut     = REFERRAL_DELIVERY_CUT   // goes to referrer if applicable
-  const platformTotal           = platformFeeFromProducts  // platform only earns product commission
+  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
   const totalAmount             = subtotal + deliveryFee
 
   return {

@@ -81,14 +81,16 @@ export async function POST(request: NextRequest) {
 
     // ═══════════════════════════════════════════════════════════════
     // PAYOUT BREAKDOWN (per order):
-    //   subtotal       = product cost
-    //   platformFee    = subtotal * 5%          (platform keeps this fully)
-    //   riderShare     = ₦560                   (rider gets this)
-    //   referralReward = ₦240                   (referrer gets this — was platform's delivery cut)
-    //   sellerShare    = subtotal - platformFee  (seller gets this)
+    //   subtotal        = product cost
+    //   platformFee     = subtotal * 5%          (platform keeps this fully)
+    //   riderShare      = ₦560                   (rider gets this)
+    //   referralReward  = ₦120                   (referrer gets this — 50% of delivery cut)
+    //   platformDelivery= ₦120                   (platform retains other 50% of delivery cut)
+    //   sellerShare     = subtotal - platformFee  (seller gets this)
     //
     //   Buyer pays: subtotal + ₦800 delivery fee
-    //   Platform earns: subtotal * 5% only (no longer takes the ₦240 delivery cut)
+    //   Platform earns: subtotal * 5% + ₦120 (when referral applies)
+    //                or subtotal * 5% + ₦240 (when no referral, full delivery cut kept)
     // ═══════════════════════════════════════════════════════════════
 
     const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
@@ -153,9 +155,9 @@ export async function POST(request: NextRequest) {
       }
 
       // 4. ── REFERRAL REWARD ────────────────────────────────────────
-      // Referrer earns ₦240 (the full delivery platform cut) on every
+      // Referrer earns ₦120 (50% of the ₦240 delivery platform cut) on every
       // completed delivery order from their referral — forever.
-      // Platform keeps its full 5% product commission.
+      // Platform keeps its full 5% product commission plus the other ₦120.
       await processReferralReward(tx, {
         orderId,
         orderNumber: order.orderNumber,
