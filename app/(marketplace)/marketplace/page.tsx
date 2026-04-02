@@ -7,7 +7,7 @@ import Link from 'next/link'
 import {
   Search, Star, Shield, ShoppingBag, Sparkles, Flame,
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
-  Package, Zap, Award, ArrowRight, Tag, Eye,
+  Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
@@ -114,8 +114,8 @@ const CATEGORIES = [
 ]
 
 const TRENDING_SEARCHES = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
-const RECENT_SEARCHES_KEY = 'BATAMART-recent-searches'
-const RECENTLY_VIEWED_KEY = 'BATAMART-recently-viewed'
+const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
+const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
 
 function parseTags(description: string): string[] {
   if (!description) return []
@@ -164,6 +164,12 @@ function ProductCard({ product, onClick, delay = 0 }: { product: any; onClick: (
           {product.isNew && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[10px] font-black rounded-lg shadow-md">
               <Sparkles className="w-2.5 h-2.5" /> NEW
+            </span>
+          )}
+          {/* ── For You badge — shown when product matched user's interests ── */}
+          {product.isPersonalised && !product.isTrending && !product.isNew && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-[10px] font-black rounded-lg shadow-md">
+              <Heart className="w-2.5 h-2.5 fill-white" /> FOR YOU
             </span>
           )}
         </div>
@@ -234,45 +240,37 @@ export default function MarketplacePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Detect app mode — URL param OR standalone PWA
   const isApp = searchParams.get('app') === 'true' ||
     (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches)
 
-  // ── ALL HOOKS MUST BE AT THE TOP — no hooks after any early return ────────
-
-  // Splash guard — synchronously check if splash is pending on first render
   const [splashDone, setSplashDone] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     return !isSplashPending()
   })
 
-  const [allProducts, setAllProducts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedCategory, setSelectedCategory] = useState('All')
-  const [viewMode, setViewMode] = useState<'feed' | 'grid'>('feed')
-  const [recentlyViewed, setRecentlyViewed] = useState<any[]>([])
+  const [allProducts, setAllProducts]               = useState<any[]>([])
+  const [loading, setLoading]                       = useState(true)
+  const [selectedCategory, setSelectedCategory]     = useState('All')
+  const [viewMode, setViewMode]                     = useState<'feed' | 'grid'>('feed')
+  const [recentlyViewed, setRecentlyViewed]         = useState<any[]>([])
   const [interestCategories, setInterestCategories] = useState<string[]>([])
-  const [searchInput, setSearchInput] = useState('')
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
-  // ── Dynamic university name ────────────────────────────────────────────────
+  const [searchInput, setSearchInput]               = useState('')
+  const [recentSearches, setRecentSearches]         = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions]       = useState(false)
+  const [mounted, setMounted]                       = useState(false)
+  const [dropdownPos, setDropdownPos]               = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
-  const inputRef = useRef<HTMLInputElement>(null)
-  const searchRef = useRef<HTMLDivElement>(null)
+
+  const inputRef               = useRef<HTMLInputElement>(null)
+  const searchRef              = useRef<HTMLDivElement>(null)
   const isClickingSuggestionRef = useRef(false)
 
-  // Listen for splash done event
   useEffect(() => {
     if (splashDone) return
     const handler = () => setSplashDone(true)
     window.addEventListener('batamart:splash-done', handler)
     const fallback = setTimeout(() => setSplashDone(true), 4000)
-    return () => {
-      window.removeEventListener('batamart:splash-done', handler)
-      clearTimeout(fallback)
-    }
+    return () => { window.removeEventListener('batamart:splash-done', handler); clearTimeout(fallback) }
   }, [splashDone])
 
   useEffect(() => {
@@ -287,16 +285,17 @@ export default function MarketplacePage() {
     setMounted(true)
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch { }
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch { }
-    fetchInterests()
-    fetchProducts()
-    // ── Fetch university short name from user session ──────────────────────
+    fetchFeed()
     const token = localStorage.getItem('token')
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
         .then(data => {
-          if (data.user?.university?.shortName) {
-            setUniversityShortName(data.user.university.shortName)
+          if (data.user?.university?.shortName) setUniversityShortName(data.user.university.shortName)
+          // Extract interest categories from user's order history for the pills UI
+          if (data.user) {
+            // interest categories come back from the feed API as part of scoring,
+            // but we also show them as filter pills — derive from recently viewed
           }
         })
         .catch(() => {})
@@ -312,7 +311,15 @@ export default function MarketplacePage() {
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  useEffect(() => { fetchProducts() }, [selectedCategory])
+  // Re-fetch when category changes (category filter still hits the old /api/products endpoint
+  // which is fine — the feed algo is only needed for the "All" / unfiltered view)
+  useEffect(() => {
+    if (selectedCategory === 'All') {
+      fetchFeed()
+    } else {
+      fetchByCategory(selectedCategory)
+    }
+  }, [selectedCategory])
 
   const updateDropdownPos = useCallback(() => {
     if (!inputRef.current) return
@@ -326,28 +333,63 @@ export default function MarketplacePage() {
     return () => { window.removeEventListener('resize', updateDropdownPos); window.removeEventListener('scroll', updateDropdownPos) }
   }, [updateDropdownPos])
 
-  const fetchInterests = async () => {
+  // ── Build client-side signals to send with the feed request ───────────────
+  // We read from localStorage (recently viewed categories + recent searches)
+  // and pass them as URL params so the server can boost matching products.
+  const buildFeedSignals = () => {
+    let viewed = ''
+    let searched = ''
     try {
-      const token = localStorage.getItem('token')
-      if (!token) return
-      const res = await fetch('/api/orders', { headers: { Authorization: `Bearer ${token}` } })
-      const data = await res.json()
-      if (data.orders?.length) {
-        const cats = Array.from(new Set(data.orders.map((o: any) => o.product?.category).filter(Boolean))) as string[]
-        setInterestCategories(cats.slice(0, 4))
-      }
+      const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+      const cats = [...new Set(rv.map(p => p.category).filter(Boolean))]
+      viewed = cats.join(',')
     } catch { }
+    try {
+      const rs: string[] = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
+      searched = rs.join(',')
+    } catch { }
+    return { viewed, searched }
   }
 
-  const fetchProducts = async () => {
+  // ── Personalised feed (used for "All" view) ───────────────────────────────
+  const fetchFeed = async () => {
     setLoading(true)
     try {
       const token = localStorage.getItem('token')
       if (!token) return
-      const url = selectedCategory === 'All' ? '/api/products' : `/api/products?category=${encodeURIComponent(selectedCategory)}`
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      const { viewed, searched } = buildFeedSignals()
+      const params = new URLSearchParams()
+      if (viewed)   params.set('viewed',   viewed)
+      if (searched) params.set('searched', searched)
+      const res  = await fetch(`/api/products/feed?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
-      if (res.ok) setAllProducts((data.products || []).map((p: any) => ({ ...p, isTrending: Math.random() > 0.7, isNew: Math.random() > 0.8 })))
+      if (res.ok) {
+        setAllProducts(data.products || [])
+        // Derive interest categories from personalised products the server returned
+        const cats = [...new Set(
+          (data.products || [])
+            .filter((p: any) => p.isPersonalised)
+            .map((p: any) => p.category)
+        )] as string[]
+        setInterestCategories(cats.slice(0, 4))
+      }
+    } catch { }
+    finally { setLoading(false) }
+  }
+
+  // ── Category-filtered view still uses the original products endpoint ───────
+  const fetchByCategory = async (category: string) => {
+    setLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const res  = await fetch(`/api/products?category=${encodeURIComponent(category)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (res.ok) setAllProducts(data.products || [])
     } catch { }
     finally { setLoading(false) }
   }
@@ -365,6 +407,15 @@ export default function MarketplacePage() {
         setRecentlyViewed(updated)
       }
     } catch { }
+
+    // ── Fire-and-forget view count increment ──────────────────────────────
+    if (token) {
+      fetch(`/api/products/${id}/view`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
+
     window.location.href = token ? `/product/${id}` : '/login'
   }
 
@@ -381,21 +432,37 @@ export default function MarketplacePage() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleSearch()
-    }
+    if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
   }
 
-  const newListings = useMemo(() => allProducts.filter(p => p.isNew).slice(0, 8), [allProducts])
-  const popularProducts = useMemo(() => [...allProducts].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 8), [allProducts])
-  const interestProducts = useMemo(() => {
-    if (!interestCategories.length) return []
-    return allProducts.filter(p => interestCategories.includes(p.category)).slice(0, 8)
-  }, [allProducts, interestCategories])
+  // ── Derived sections from the already-scored feed ────────────────────────
+  // The server has already ranked everything — we just slice different windows.
+  const forYouProducts = useMemo(
+    () => allProducts.filter(p => p.isPersonalised).slice(0, 8),
+    [allProducts]
+  )
+  const trendingProducts = useMemo(
+    () => allProducts.filter(p => p.isTrending).slice(0, 8),
+    [allProducts]
+  )
+  const newListings = useMemo(
+    () => allProducts.filter(p => p.isNew).slice(0, 8),
+    [allProducts]
+  )
+  // "Discover" = top-scored items that aren't already in for-you or trending sections
+  const discoverProducts = useMemo(() => {
+    const shown = new Set([
+      ...forYouProducts.map(p => p.id),
+      ...trendingProducts.map(p => p.id),
+      ...newListings.map(p => p.id),
+    ])
+    return allProducts.filter(p => !shown.has(p.id)).slice(0, 12)
+  }, [allProducts, forYouProducts, trendingProducts, newListings])
+
   const filteredByCategory = useMemo(() =>
     selectedCategory === 'All' ? allProducts : allProducts.filter(p => p.category === selectedCategory),
-    [allProducts, selectedCategory])
+    [allProducts, selectedCategory]
+  )
 
   const suggestions = useMemo(() => {
     const q = searchInput.trim().toLowerCase()
@@ -424,10 +491,7 @@ export default function MarketplacePage() {
             onMouseDown={(e) => { e.preventDefault(); isClickingSuggestionRef.current = true }}
             onClick={() => {
               isClickingSuggestionRef.current = false
-              if (s.type === 'product') {
-                handleProductClick(s.id)
-                return
-              }
+              if (s.type === 'product') { handleProductClick(s.id); return }
               handleSearch(s.label)
             }}
             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
@@ -454,7 +518,7 @@ export default function MarketplacePage() {
             <div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
               <Search className="w-4 h-4 text-BATAMART-primary" />
             </div>
-            <span className="text-sm font-bold text-BATAMART-primary">Search for "{searchInput}"</span>
+            <span className="text-sm font-bold text-BATAMART-primary">Search for &quot;{searchInput}&quot;</span>
             <ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" />
           </button>
         )}
@@ -462,11 +526,7 @@ export default function MarketplacePage() {
       document.body
     ) : null
 
-  // ── BLANK SCREEN WHILE SPLASH IS ACTIVE ──────────────────────────────────
-  if (!splashDone) {
-    return <div className="min-h-screen bg-white" />
-  }
-  // ─────────────────────────────────────────────────────────────────────────
+  if (!splashDone) return <div className="min-h-screen bg-white" />
 
   return (
     <div className="min-h-screen bg-[#f7f8fa]">
@@ -490,8 +550,7 @@ export default function MarketplacePage() {
                 <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-white" /> Campus Marketplace
               </span>
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[2.75rem] font-black text-white tracking-tight leading-tight sm:leading-none">
-                Your Feed{''}
-                {/* ── Dynamic university name — falls back gracefully while loading ── */}
+                Your Feed
                 <span className="text-white/70 block sm:inline">
                   <br className="hidden sm:block" />
                   {universityShortName ? ` at ${universityShortName}` : ' on Campus'}
@@ -613,6 +672,7 @@ export default function MarketplacePage() {
           </div>
 
         ) : selectedCategory !== 'All' ? (
+          /* ── CATEGORY FILTER VIEW ── */
           <div>
             <div className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-500">
               <button onClick={() => setSelectedCategory('All')} className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors">← All</button>
@@ -636,13 +696,16 @@ export default function MarketplacePage() {
           </div>
 
         ) : viewMode === 'grid' ? (
+          /* ── GRID VIEW (flat, scored order) ── */
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
             {allProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />)}
           </div>
 
         ) : (
+          /* ── PERSONALISED FEED VIEW ── */
           <div className="space-y-8 sm:space-y-10">
 
+            {/* Interest category pills */}
             {interestCategories.length > 0 && (
               <div>
                 <SectionHeader
@@ -664,6 +727,7 @@ export default function MarketplacePage() {
               </div>
             )}
 
+            {/* Recently Viewed */}
             {recentlyViewed.length > 0 && (
               <div>
                 <SectionHeader
@@ -688,19 +752,35 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {interestProducts.length > 0 && (
+            {/* For You — personalised products */}
+            {forYouProducts.length > 0 && (
               <div>
                 <SectionHeader
-                  title="Based on Your Orders"
-                  icon={<ShoppingBag className="w-5 h-5 text-BATAMART-primary" />}
-                  onSeeAll={() => setSelectedCategory(interestCategories[0])}
+                  title="For You"
+                  icon={<Heart className="w-5 h-5 text-violet-500" />}
+                  onSeeAll={interestCategories[0] ? () => setSelectedCategory(interestCategories[0]) : undefined}
                 />
+                <p className="text-xs text-gray-400 -mt-2 mb-4">Based on what you browse, search, and order</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-                  {interestProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
+                  {forYouProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
                 </div>
               </div>
             )}
 
+            {/* Trending / Hot */}
+            {trendingProducts.length > 0 && (
+              <div>
+                <SectionHeader
+                  title="Trending Right Now"
+                  icon={<TrendingUp className="w-5 h-5 text-orange-500" />}
+                />
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                  {trendingProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
+                </div>
+              </div>
+            )}
+
+            {/* New Listings */}
             {newListings.length > 0 && (
               <div>
                 <SectionHeader
@@ -713,43 +793,34 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {popularProducts.length > 0 && (
+            {/* Discover — everything else, still sorted by score */}
+            {discoverProducts.length > 0 && (
               <div>
                 <SectionHeader
-                  title="Popular Right Now"
-                  icon={<TrendingUp className="w-5 h-5 text-orange-500" />}
+                  title="Discover More"
+                  icon={<ShoppingBag className="w-5 h-5 text-gray-400" />}
                 />
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-                  {popularProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                  {discoverProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 25} />)}
                 </div>
               </div>
             )}
 
-            <div>
-              <SectionHeader
-                title="All Listings"
-                icon={<ShoppingBag className="w-5 h-5 text-gray-400" />}
-              />
-              {allProducts.length === 0 ? (
-                <div className="text-center py-16">
-                  <ShoppingBag className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-400 font-semibold mb-4">No products yet</p>
-                  <Link href="/sell" className="btn-press inline-flex items-center gap-2 px-5 py-2.5 bg-BATAMART-primary text-white rounded-xl font-bold text-sm shadow-md">
-                    <Sparkles className="w-4 h-4" /> Be the first to list
-                  </Link>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-                  {allProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 25} />)}
-                </div>
-              )}
-            </div>
+            {allProducts.length === 0 && (
+              <div className="text-center py-16">
+                <ShoppingBag className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400 font-semibold mb-4">No products yet</p>
+                <Link href="/sell" className="btn-press inline-flex items-center gap-2 px-5 py-2.5 bg-BATAMART-primary text-white rounded-xl font-bold text-sm shadow-md">
+                  <Sparkles className="w-4 h-4" /> Be the first to list
+                </Link>
+              </div>
+            )}
 
           </div>
         )}
       </div>
 
-      {/* Floating Sell Button — hidden in app mode since bottom nav already has Sell */}
+      {/* Floating Sell Button */}
       {!isApp && (
         <div className="fixed bottom-6 right-4 sm:right-6 z-40">
           <Link href="/sell" className="btn-press flex items-center gap-2 px-5 py-3 bg-BATAMART-primary text-white rounded-2xl font-bold text-sm shadow-xl shadow-BATAMART-primary/30">
