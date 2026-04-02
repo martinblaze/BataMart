@@ -166,7 +166,6 @@ function ProductCard({ product, onClick, delay = 0 }: { product: any; onClick: (
               <Sparkles className="w-2.5 h-2.5" /> NEW
             </span>
           )}
-          {/* ── For You badge — shown when product matched user's interests ── */}
           {product.isPersonalised && !product.isTrending && !product.isNew && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-[10px] font-black rounded-lg shadow-md">
               <Heart className="w-2.5 h-2.5 fill-white" /> FOR YOU
@@ -261,8 +260,8 @@ export default function MarketplacePage() {
   const [dropdownPos, setDropdownPos]               = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
 
-  const inputRef               = useRef<HTMLInputElement>(null)
-  const searchRef              = useRef<HTMLDivElement>(null)
+  const inputRef                = useRef<HTMLInputElement>(null)
+  const searchRef               = useRef<HTMLDivElement>(null)
   const isClickingSuggestionRef = useRef(false)
 
   useEffect(() => {
@@ -292,11 +291,6 @@ export default function MarketplacePage() {
         .then(r => r.json())
         .then(data => {
           if (data.user?.university?.shortName) setUniversityShortName(data.user.university.shortName)
-          // Extract interest categories from user's order history for the pills UI
-          if (data.user) {
-            // interest categories come back from the feed API as part of scoring,
-            // but we also show them as filter pills — derive from recently viewed
-          }
         })
         .catch(() => {})
     }
@@ -311,8 +305,6 @@ export default function MarketplacePage() {
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  // Re-fetch when category changes (category filter still hits the old /api/products endpoint
-  // which is fine — the feed algo is only needed for the "All" / unfiltered view)
   useEffect(() => {
     if (selectedCategory === 'All') {
       fetchFeed()
@@ -321,10 +313,12 @@ export default function MarketplacePage() {
     }
   }, [selectedCategory])
 
+  // ✅ Fix: use viewport-relative positioning only (no scrollY/scrollX)
+  // The dropdown uses position:fixed so it must be relative to the viewport, not the document.
   const updateDropdownPos = useCallback(() => {
     if (!inputRef.current) return
     const r = inputRef.current.getBoundingClientRect()
-    setDropdownPos({ top: r.bottom + window.scrollY + 8, left: r.left + window.scrollX, width: r.width })
+    setDropdownPos({ top: r.bottom + 8, left: r.left, width: r.width })
   }, [])
 
   useEffect(() => {
@@ -333,15 +327,12 @@ export default function MarketplacePage() {
     return () => { window.removeEventListener('resize', updateDropdownPos); window.removeEventListener('scroll', updateDropdownPos) }
   }, [updateDropdownPos])
 
-  // ── Build client-side signals to send with the feed request ───────────────
-  // We read from localStorage (recently viewed categories + recent searches)
-  // and pass them as URL params so the server can boost matching products.
   const buildFeedSignals = () => {
     let viewed = ''
     let searched = ''
     try {
       const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
-      const cats = [...new Set(rv.map(p => p.category).filter(Boolean))]
+      const cats = Array.from(new Set(rv.map((p: any) => p.category).filter(Boolean)))
       viewed = cats.join(',')
     } catch { }
     try {
@@ -351,7 +342,6 @@ export default function MarketplacePage() {
     return { viewed, searched }
   }
 
-  // ── Personalised feed (used for "All" view) ───────────────────────────────
   const fetchFeed = async () => {
     setLoading(true)
     try {
@@ -367,19 +357,17 @@ export default function MarketplacePage() {
       const data = await res.json()
       if (res.ok) {
         setAllProducts(data.products || [])
-        // Derive interest categories from personalised products the server returned
-        const cats = [...new Set(
+        const cats = Array.from(new Set(
           (data.products || [])
             .filter((p: any) => p.isPersonalised)
             .map((p: any) => p.category)
-        )] as string[]
+        )) as string[]
         setInterestCategories(cats.slice(0, 4))
       }
     } catch { }
     finally { setLoading(false) }
   }
 
-  // ── Category-filtered view still uses the original products endpoint ───────
   const fetchByCategory = async (category: string) => {
     setLoading(true)
     try {
@@ -408,7 +396,6 @@ export default function MarketplacePage() {
       }
     } catch { }
 
-    // ── Fire-and-forget view count increment ──────────────────────────────
     if (token) {
       fetch(`/api/products/${id}/view`, {
         method:  'POST',
@@ -435,8 +422,6 @@ export default function MarketplacePage() {
     if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
   }
 
-  // ── Derived sections from the already-scored feed ────────────────────────
-  // The server has already ranked everything — we just slice different windows.
   const forYouProducts = useMemo(
     () => allProducts.filter(p => p.isPersonalised).slice(0, 8),
     [allProducts]
@@ -449,7 +434,6 @@ export default function MarketplacePage() {
     () => allProducts.filter(p => p.isNew).slice(0, 8),
     [allProducts]
   )
-  // "Discover" = top-scored items that aren't already in for-you or trending sections
   const discoverProducts = useMemo(() => {
     const shown = new Set([
       ...forYouProducts.map(p => p.id),
@@ -696,7 +680,7 @@ export default function MarketplacePage() {
           </div>
 
         ) : viewMode === 'grid' ? (
-          /* ── GRID VIEW (flat, scored order) ── */
+          /* ── GRID VIEW ── */
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
             {allProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />)}
           </div>
@@ -705,13 +689,9 @@ export default function MarketplacePage() {
           /* ── PERSONALISED FEED VIEW ── */
           <div className="space-y-8 sm:space-y-10">
 
-            {/* Interest category pills */}
             {interestCategories.length > 0 && (
               <div>
-                <SectionHeader
-                  title="Your Interests"
-                  icon={<Eye className="w-5 h-5 text-violet-500" />}
-                />
+                <SectionHeader title="Your Interests" icon={<Eye className="w-5 h-5 text-violet-500" />} />
                 <div className="flex flex-wrap gap-2">
                   {interestCategories.map((cat, i) => {
                     const catObj = CATEGORIES.find(c => c.name === cat)
@@ -727,13 +707,9 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* Recently Viewed */}
             {recentlyViewed.length > 0 && (
               <div>
-                <SectionHeader
-                  title="Recently Viewed"
-                  icon={<Clock className="w-5 h-5 text-gray-400" />}
-                />
+                <SectionHeader title="Recently Viewed" icon={<Clock className="w-5 h-5 text-gray-400" />} />
                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
                   {recentlyViewed.slice(0, 8).map((p, i) => (
                     <div key={p.id} onClick={() => handleProductClick(p.id)}
@@ -752,7 +728,6 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* For You — personalised products */}
             {forYouProducts.length > 0 && (
               <div>
                 <SectionHeader
@@ -767,39 +742,27 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* Trending / Hot */}
             {trendingProducts.length > 0 && (
               <div>
-                <SectionHeader
-                  title="Trending Right Now"
-                  icon={<TrendingUp className="w-5 h-5 text-orange-500" />}
-                />
+                <SectionHeader title="Trending Right Now" icon={<TrendingUp className="w-5 h-5 text-orange-500" />} />
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
                   {trendingProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
                 </div>
               </div>
             )}
 
-            {/* New Listings */}
             {newListings.length > 0 && (
               <div>
-                <SectionHeader
-                  title="New Listings"
-                  icon={<Sparkles className="w-5 h-5 text-emerald-500" />}
-                />
+                <SectionHeader title="New Listings" icon={<Sparkles className="w-5 h-5 text-emerald-500" />} />
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
                   {newListings.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
                 </div>
               </div>
             )}
 
-            {/* Discover — everything else, still sorted by score */}
             {discoverProducts.length > 0 && (
               <div>
-                <SectionHeader
-                  title="Discover More"
-                  icon={<ShoppingBag className="w-5 h-5 text-gray-400" />}
-                />
+                <SectionHeader title="Discover More" icon={<ShoppingBag className="w-5 h-5 text-gray-400" />} />
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                   {discoverProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 25} />)}
                 </div>

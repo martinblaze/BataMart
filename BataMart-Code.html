@@ -3629,21 +3629,21 @@ function LoginForm() {
         localStorage.setItem('userRole', data.user.role || '')
         localStorage.setItem('userId',   data.user.id)
 
-        // ── Store token in cookie so middleware can enforce role-based routing ──
         document.cookie = `token=${data.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`
 
         window.dispatchEvent(new Event('auth-change'))
+        router.push('/marketplace')
 
-        // ── If a RIDER somehow logs in via the regular login, send them to their dashboard ──
-        if (data.user.role === 'RIDER') {
-          router.push('/rider-dashboard')
-        } else {
-          router.push('/marketplace')
-        }
+      } else if (response.status === 403 &amp;&amp; data.isRider) {
+        // ── Rider tried to log in here — show clear message, do NOT log them in ──
+        setError('__RIDER__')
+
       } else if (response.status === 403 &amp;&amp; data.suspended) {
         setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+
       } else if (response.status === 429) {
         setError('Too many login attempts. Please wait a few minutes and try again.')
+
       } else {
         setError(data.error || 'Login failed')
       }
@@ -3686,6 +3686,29 @@ function LoginForm() {
             &lt;/div&gt;
           )}
 
+          {/* ── Rider-specific error block ─────────────────────────────────── */}
+          {error === '__RIDER__' ? (
+            &lt;div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4"&gt;
+              &lt;div className="flex items-start gap-3"&gt;
+                &lt;span className="text-2xl flex-shrink-0"&gt;🚴&lt;/span&gt;
+                &lt;div&gt;
+                  &lt;p className="font-semibold text-purple-900 text-sm"&gt;Rider Account Detected&lt;/p&gt;
+                  &lt;p className="text-purple-700 text-sm mt-1"&gt;
+                    Rider accounts cannot access the marketplace. Please use the Rider Login instead.
+                  &lt;/p&gt;
+                  &lt;Link
+                    href="/rider/login"
+                    className="inline-block mt-3 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                  &gt;
+                    Go to Rider Login →
+                  &lt;/Link&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          ) : error ? (
+            &lt;p className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm"&gt;{error}&lt;/p&gt;
+          ) : null}
+
           &lt;form onSubmit={handleSubmit} className="space-y-5"&gt;
             &lt;div&gt;
               &lt;label className="block text-sm font-semibold text-gray-700 mb-2"&gt;Email Address&lt;/label&gt;
@@ -3719,10 +3742,6 @@ function LoginForm() {
               &lt;/Link&gt;
             &lt;/div&gt;
 
-            {error &amp;&amp; (
-              &lt;p className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm"&gt;{error}&lt;/p&gt;
-            )}
-
             &lt;button
               type="submit"
               disabled={loading}
@@ -3734,7 +3753,7 @@ function LoginForm() {
 
           &lt;div className="mt-6 text-center"&gt;
             &lt;p className="text-gray-600 text-sm"&gt;
-              Don't have an account?{' '}
+              Don&amp;apos;t have an account?{' '}
               &lt;Link href="/signup" className="text-BATAMART-primary font-semibold hover:underline"&gt;Sign Up&lt;/Link&gt;
             &lt;/p&gt;
           &lt;/div&gt;
@@ -3767,9 +3786,7 @@ function buildSuspensionMessage(reason: string | null, until: string | null): st
   if (untilDate.getFullYear() - now.getFullYear() &gt; 50) {
     return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
-  return `Your account is suspended until ${untilDate.toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  })}.\n\nReason: ${reasonText}.`
+  return `Your account is suspended until ${untilDate.toLocaleDateString('en-NG', { dateStyle: 'long' })}.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/(auth)/profile/setup/page.tsx</div><pre>'use client'
 
@@ -3965,14 +3982,27 @@ function RiderLoginForm() {
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [wasForceLoggedOut, setWasForceLoggedOut] = useState(false)
 
-  // If already logged in as a rider, go straight to dashboard
   useEffect(() =&gt; {
+    // ── If middleware bounced rider here after accessing a forbidden page ──
+    // Clear ALL local auth state so they're fully logged out client-side too.
+    const reason = searchParams.get('reason')
+    if (reason === 'no_access') {
+      localStorage.clear()
+      sessionStorage.removeItem('batamart_rider_mode')
+      // Cookie is already cleared by middleware — just notify UI
+      window.dispatchEvent(new Event('auth-change'))
+      setWasForceLoggedOut(true)
+      return // Don't auto-redirect to dashboard even if stale role is in storage
+    }
+
+    // ── If already properly logged in as a rider, go straight to dashboard ──
     const role = localStorage.getItem('userRole')
     if (role === 'RIDER') {
       router.replace('/rider-dashboard')
     }
-  }, [router])
+  }, [router, searchParams])
 
   const handleSubmit = async (e: React.FormEvent) =&gt; {
     e.preventDefault()
@@ -3989,15 +4019,11 @@ function RiderLoginForm() {
       const data = await response.json()
 
       if (response.ok) {
-        // Store in localStorage (for client-side checks)
         localStorage.setItem('token',    data.token)
         localStorage.setItem('userRole', data.user.role)
         localStorage.setItem('userId',   data.user.id)
         localStorage.setItem('userName', data.user.name)
 
-        // ── IMPORTANT: also store in a cookie so middleware can read it ──
-        // httpOnly is not set here because we're in client JS;
-        // the middleware reads this cookie to enforce role-based routing.
         document.cookie = `token=${data.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`
 
         router.push('/rider-dashboard')
@@ -4035,6 +4061,26 @@ function RiderLoginForm() {
         &lt;/div&gt;
 
         &lt;div className="bg-white rounded-2xl shadow-xl p-8"&gt;
+
+          {/* ── Force-logout notice ─────────────────────────────────────────── */}
+          {wasForceLoggedOut &amp;&amp; (
+            &lt;div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3"&gt;
+              &lt;span className="text-amber-500 text-xl flex-shrink-0"&gt;⚠️&lt;/span&gt;
+              &lt;div&gt;
+                &lt;p className="font-semibold text-amber-900 text-sm"&gt;Access Denied&lt;/p&gt;
+                &lt;p className="text-amber-700 text-sm mt-1"&gt;
+                  Rider accounts can only access the Rider Dashboard, Wallet, and Notifications.
+                  You have been logged out. Please log in with a regular account to use the marketplace.
+                &lt;/p&gt;
+                &lt;Link
+                  href="/login"
+                  className="inline-block mt-2 text-sm text-amber-800 font-semibold underline hover:no-underline"
+                &gt;
+                  Use a regular account →
+                &lt;/Link&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          )}
 
           &lt;form onSubmit={handleSubmit} className="space-y-5"&gt;
 
@@ -6397,7 +6443,7 @@ import Link from 'next/link'
 import {
   Search, Star, Shield, ShoppingBag, Sparkles, Flame,
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
-  Package, Zap, Award, ArrowRight, Tag, Eye,
+  Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
@@ -6504,8 +6550,8 @@ const CATEGORIES = [
 ]
 
 const TRENDING_SEARCHES = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
-const RECENT_SEARCHES_KEY = 'BATAMART-recent-searches'
-const RECENTLY_VIEWED_KEY = 'BATAMART-recently-viewed'
+const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
+const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
 
 function parseTags(description: string): string[] {
   if (!description) return []
@@ -6554,6 +6600,12 @@ function ProductCard({ product, onClick, delay = 0 }: { product: any; onClick: (
           {product.isNew &amp;&amp; (
             &lt;span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
               &lt;Sparkles className="w-2.5 h-2.5" /&gt; NEW
+            &lt;/span&gt;
+          )}
+          {/* ── For You badge — shown when product matched user's interests ── */}
+          {product.isPersonalised &amp;&amp; !product.isTrending &amp;&amp; !product.isNew &amp;&amp; (
+            &lt;span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
+              &lt;Heart className="w-2.5 h-2.5 fill-white" /&gt; FOR YOU
             &lt;/span&gt;
           )}
         &lt;/div&gt;
@@ -6624,45 +6676,37 @@ export default function MarketplacePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Detect app mode — URL param OR standalone PWA
   const isApp = searchParams.get('app') === 'true' ||
     (typeof window !== 'undefined' &amp;&amp; window.matchMedia('(display-mode: standalone)').matches)
 
-  // ── ALL HOOKS MUST BE AT THE TOP — no hooks after any early return ────────
-
-  // Splash guard — synchronously check if splash is pending on first render
   const [splashDone, setSplashDone] = useState&lt;boolean&gt;(() =&gt; {
     if (typeof window === 'undefined') return true
     return !isSplashPending()
   })
 
-  const [allProducts, setAllProducts] = useState&lt;any[]&gt;([])
-  const [loading, setLoading] = useState(true)
-  const [selectedCategory, setSelectedCategory] = useState('All')
-  const [viewMode, setViewMode] = useState&lt;'feed' | 'grid'&gt;('feed')
-  const [recentlyViewed, setRecentlyViewed] = useState&lt;any[]&gt;([])
+  const [allProducts, setAllProducts]               = useState&lt;any[]&gt;([])
+  const [loading, setLoading]                       = useState(true)
+  const [selectedCategory, setSelectedCategory]     = useState('All')
+  const [viewMode, setViewMode]                     = useState&lt;'feed' | 'grid'&gt;('feed')
+  const [recentlyViewed, setRecentlyViewed]         = useState&lt;any[]&gt;([])
   const [interestCategories, setInterestCategories] = useState&lt;string[]&gt;([])
-  const [searchInput, setSearchInput] = useState('')
-  const [recentSearches, setRecentSearches] = useState&lt;string[]&gt;([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
-  // ── Dynamic university name ────────────────────────────────────────────────
+  const [searchInput, setSearchInput]               = useState('')
+  const [recentSearches, setRecentSearches]         = useState&lt;string[]&gt;([])
+  const [showSuggestions, setShowSuggestions]       = useState(false)
+  const [mounted, setMounted]                       = useState(false)
+  const [dropdownPos, setDropdownPos]               = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState&lt;string&gt;('')
-  const inputRef = useRef&lt;HTMLInputElement&gt;(null)
-  const searchRef = useRef&lt;HTMLDivElement&gt;(null)
+
+  const inputRef               = useRef&lt;HTMLInputElement&gt;(null)
+  const searchRef              = useRef&lt;HTMLDivElement&gt;(null)
   const isClickingSuggestionRef = useRef(false)
 
-  // Listen for splash done event
   useEffect(() =&gt; {
     if (splashDone) return
     const handler = () =&gt; setSplashDone(true)
     window.addEventListener('batamart:splash-done', handler)
     const fallback = setTimeout(() =&gt; setSplashDone(true), 4000)
-    return () =&gt; {
-      window.removeEventListener('batamart:splash-done', handler)
-      clearTimeout(fallback)
-    }
+    return () =&gt; { window.removeEventListener('batamart:splash-done', handler); clearTimeout(fallback) }
   }, [splashDone])
 
   useEffect(() =&gt; {
@@ -6677,16 +6721,17 @@ export default function MarketplacePage() {
     setMounted(true)
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch { }
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch { }
-    fetchInterests()
-    fetchProducts()
-    // ── Fetch university short name from user session ──────────────────────
+    fetchFeed()
     const token = localStorage.getItem('token')
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then(r =&gt; r.json())
         .then(data =&gt; {
-          if (data.user?.university?.shortName) {
-            setUniversityShortName(data.user.university.shortName)
+          if (data.user?.university?.shortName) setUniversityShortName(data.user.university.shortName)
+          // Extract interest categories from user's order history for the pills UI
+          if (data.user) {
+            // interest categories come back from the feed API as part of scoring,
+            // but we also show them as filter pills — derive from recently viewed
           }
         })
         .catch(() =&gt; {})
@@ -6702,7 +6747,15 @@ export default function MarketplacePage() {
     return () =&gt; document.removeEventListener('mousedown', h)
   }, [])
 
-  useEffect(() =&gt; { fetchProducts() }, [selectedCategory])
+  // Re-fetch when category changes (category filter still hits the old /api/products endpoint
+  // which is fine — the feed algo is only needed for the "All" / unfiltered view)
+  useEffect(() =&gt; {
+    if (selectedCategory === 'All') {
+      fetchFeed()
+    } else {
+      fetchByCategory(selectedCategory)
+    }
+  }, [selectedCategory])
 
   const updateDropdownPos = useCallback(() =&gt; {
     if (!inputRef.current) return
@@ -6716,28 +6769,63 @@ export default function MarketplacePage() {
     return () =&gt; { window.removeEventListener('resize', updateDropdownPos); window.removeEventListener('scroll', updateDropdownPos) }
   }, [updateDropdownPos])
 
-  const fetchInterests = async () =&gt; {
+  // ── Build client-side signals to send with the feed request ───────────────
+  // We read from localStorage (recently viewed categories + recent searches)
+  // and pass them as URL params so the server can boost matching products.
+  const buildFeedSignals = () =&gt; {
+    let viewed = ''
+    let searched = ''
     try {
-      const token = localStorage.getItem('token')
-      if (!token) return
-      const res = await fetch('/api/orders', { headers: { Authorization: `Bearer ${token}` } })
-      const data = await res.json()
-      if (data.orders?.length) {
-        const cats = Array.from(new Set(data.orders.map((o: any) =&gt; o.product?.category).filter(Boolean))) as string[]
-        setInterestCategories(cats.slice(0, 4))
-      }
+      const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+      const cats = [...new Set(rv.map(p =&gt; p.category).filter(Boolean))]
+      viewed = cats.join(',')
     } catch { }
+    try {
+      const rs: string[] = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
+      searched = rs.join(',')
+    } catch { }
+    return { viewed, searched }
   }
 
-  const fetchProducts = async () =&gt; {
+  // ── Personalised feed (used for "All" view) ───────────────────────────────
+  const fetchFeed = async () =&gt; {
     setLoading(true)
     try {
       const token = localStorage.getItem('token')
       if (!token) return
-      const url = selectedCategory === 'All' ? '/api/products' : `/api/products?category=${encodeURIComponent(selectedCategory)}`
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      const { viewed, searched } = buildFeedSignals()
+      const params = new URLSearchParams()
+      if (viewed)   params.set('viewed',   viewed)
+      if (searched) params.set('searched', searched)
+      const res  = await fetch(`/api/products/feed?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
-      if (res.ok) setAllProducts((data.products || []).map((p: any) =&gt; ({ ...p, isTrending: Math.random() &gt; 0.7, isNew: Math.random() &gt; 0.8 })))
+      if (res.ok) {
+        setAllProducts(data.products || [])
+        // Derive interest categories from personalised products the server returned
+        const cats = [...new Set(
+          (data.products || [])
+            .filter((p: any) =&gt; p.isPersonalised)
+            .map((p: any) =&gt; p.category)
+        )] as string[]
+        setInterestCategories(cats.slice(0, 4))
+      }
+    } catch { }
+    finally { setLoading(false) }
+  }
+
+  // ── Category-filtered view still uses the original products endpoint ───────
+  const fetchByCategory = async (category: string) =&gt; {
+    setLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const res  = await fetch(`/api/products?category=${encodeURIComponent(category)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (res.ok) setAllProducts(data.products || [])
     } catch { }
     finally { setLoading(false) }
   }
@@ -6755,6 +6843,15 @@ export default function MarketplacePage() {
         setRecentlyViewed(updated)
       }
     } catch { }
+
+    // ── Fire-and-forget view count increment ──────────────────────────────
+    if (token) {
+      fetch(`/api/products/${id}/view`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() =&gt; {})
+    }
+
     window.location.href = token ? `/product/${id}` : '/login'
   }
 
@@ -6771,21 +6868,37 @@ export default function MarketplacePage() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) =&gt; {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleSearch()
-    }
+    if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
   }
 
-  const newListings = useMemo(() =&gt; allProducts.filter(p =&gt; p.isNew).slice(0, 8), [allProducts])
-  const popularProducts = useMemo(() =&gt; [...allProducts].sort((a, b) =&gt; (b.viewCount || 0) - (a.viewCount || 0)).slice(0, 8), [allProducts])
-  const interestProducts = useMemo(() =&gt; {
-    if (!interestCategories.length) return []
-    return allProducts.filter(p =&gt; interestCategories.includes(p.category)).slice(0, 8)
-  }, [allProducts, interestCategories])
+  // ── Derived sections from the already-scored feed ────────────────────────
+  // The server has already ranked everything — we just slice different windows.
+  const forYouProducts = useMemo(
+    () =&gt; allProducts.filter(p =&gt; p.isPersonalised).slice(0, 8),
+    [allProducts]
+  )
+  const trendingProducts = useMemo(
+    () =&gt; allProducts.filter(p =&gt; p.isTrending).slice(0, 8),
+    [allProducts]
+  )
+  const newListings = useMemo(
+    () =&gt; allProducts.filter(p =&gt; p.isNew).slice(0, 8),
+    [allProducts]
+  )
+  // "Discover" = top-scored items that aren't already in for-you or trending sections
+  const discoverProducts = useMemo(() =&gt; {
+    const shown = new Set([
+      ...forYouProducts.map(p =&gt; p.id),
+      ...trendingProducts.map(p =&gt; p.id),
+      ...newListings.map(p =&gt; p.id),
+    ])
+    return allProducts.filter(p =&gt; !shown.has(p.id)).slice(0, 12)
+  }, [allProducts, forYouProducts, trendingProducts, newListings])
+
   const filteredByCategory = useMemo(() =&gt;
     selectedCategory === 'All' ? allProducts : allProducts.filter(p =&gt; p.category === selectedCategory),
-    [allProducts, selectedCategory])
+    [allProducts, selectedCategory]
+  )
 
   const suggestions = useMemo(() =&gt; {
     const q = searchInput.trim().toLowerCase()
@@ -6814,10 +6927,7 @@ export default function MarketplacePage() {
             onMouseDown={(e) =&gt; { e.preventDefault(); isClickingSuggestionRef.current = true }}
             onClick={() =&gt; {
               isClickingSuggestionRef.current = false
-              if (s.type === 'product') {
-                handleProductClick(s.id)
-                return
-              }
+              if (s.type === 'product') { handleProductClick(s.id); return }
               handleSearch(s.label)
             }}
             className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
@@ -6844,7 +6954,7 @@ export default function MarketplacePage() {
             &lt;div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0"&gt;
               &lt;Search className="w-4 h-4 text-BATAMART-primary" /&gt;
             &lt;/div&gt;
-            &lt;span className="text-sm font-bold text-BATAMART-primary"&gt;Search for "{searchInput}"&lt;/span&gt;
+            &lt;span className="text-sm font-bold text-BATAMART-primary"&gt;Search for &amp;quot;{searchInput}&amp;quot;&lt;/span&gt;
             &lt;ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" /&gt;
           &lt;/button&gt;
         )}
@@ -6852,11 +6962,7 @@ export default function MarketplacePage() {
       document.body
     ) : null
 
-  // ── BLANK SCREEN WHILE SPLASH IS ACTIVE ──────────────────────────────────
-  if (!splashDone) {
-    return &lt;div className="min-h-screen bg-white" /&gt;
-  }
-  // ─────────────────────────────────────────────────────────────────────────
+  if (!splashDone) return &lt;div className="min-h-screen bg-white" /&gt;
 
   return (
     &lt;div className="min-h-screen bg-[#f7f8fa]"&gt;
@@ -6880,8 +6986,7 @@ export default function MarketplacePage() {
                 &lt;Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-white" /&gt; Campus Marketplace
               &lt;/span&gt;
               &lt;h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[2.75rem] font-black text-white tracking-tight leading-tight sm:leading-none"&gt;
-                Your Feed{''}
-                {/* ── Dynamic university name — falls back gracefully while loading ── */}
+                Your Feed
                 &lt;span className="text-white/70 block sm:inline"&gt;
                   &lt;br className="hidden sm:block" /&gt;
                   {universityShortName ? ` at ${universityShortName}` : ' on Campus'}
@@ -7003,6 +7108,7 @@ export default function MarketplacePage() {
           &lt;/div&gt;
 
         ) : selectedCategory !== 'All' ? (
+          /* ── CATEGORY FILTER VIEW ── */
           &lt;div&gt;
             &lt;div className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-500"&gt;
               &lt;button onClick={() =&gt; setSelectedCategory('All')} className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors"&gt;← All&lt;/button&gt;
@@ -7026,13 +7132,16 @@ export default function MarketplacePage() {
           &lt;/div&gt;
 
         ) : viewMode === 'grid' ? (
+          /* ── GRID VIEW (flat, scored order) ── */
           &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4"&gt;
             {allProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 30} /&gt;)}
           &lt;/div&gt;
 
         ) : (
+          /* ── PERSONALISED FEED VIEW ── */
           &lt;div className="space-y-8 sm:space-y-10"&gt;
 
+            {/* Interest category pills */}
             {interestCategories.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;SectionHeader
@@ -7054,6 +7163,7 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
+            {/* Recently Viewed */}
             {recentlyViewed.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;SectionHeader
@@ -7078,19 +7188,35 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {interestProducts.length &gt; 0 &amp;&amp; (
+            {/* For You — personalised products */}
+            {forYouProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;SectionHeader
-                  title="Based on Your Orders"
-                  icon={&lt;ShoppingBag className="w-5 h-5 text-BATAMART-primary" /&gt;}
-                  onSeeAll={() =&gt; setSelectedCategory(interestCategories[0])}
+                  title="For You"
+                  icon={&lt;Heart className="w-5 h-5 text-violet-500" /&gt;}
+                  onSeeAll={interestCategories[0] ? () =&gt; setSelectedCategory(interestCategories[0]) : undefined}
                 /&gt;
+                &lt;p className="text-xs text-gray-400 -mt-2 mb-4"&gt;Based on what you browse, search, and order&lt;/p&gt;
                 &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4"&gt;
-                  {interestProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 40} /&gt;)}
+                  {forYouProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 40} /&gt;)}
                 &lt;/div&gt;
               &lt;/div&gt;
             )}
 
+            {/* Trending / Hot */}
+            {trendingProducts.length &gt; 0 &amp;&amp; (
+              &lt;div&gt;
+                &lt;SectionHeader
+                  title="Trending Right Now"
+                  icon={&lt;TrendingUp className="w-5 h-5 text-orange-500" /&gt;}
+                /&gt;
+                &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4"&gt;
+                  {trendingProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 40} /&gt;)}
+                &lt;/div&gt;
+              &lt;/div&gt;
+            )}
+
+            {/* New Listings */}
             {newListings.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;SectionHeader
@@ -7103,43 +7229,34 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {popularProducts.length &gt; 0 &amp;&amp; (
+            {/* Discover — everything else, still sorted by score */}
+            {discoverProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;SectionHeader
-                  title="Popular Right Now"
-                  icon={&lt;TrendingUp className="w-5 h-5 text-orange-500" /&gt;}
+                  title="Discover More"
+                  icon={&lt;ShoppingBag className="w-5 h-5 text-gray-400" /&gt;}
                 /&gt;
-                &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4"&gt;
-                  {popularProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 40} /&gt;)}
+                &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4"&gt;
+                  {discoverProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 25} /&gt;)}
                 &lt;/div&gt;
               &lt;/div&gt;
             )}
 
-            &lt;div&gt;
-              &lt;SectionHeader
-                title="All Listings"
-                icon={&lt;ShoppingBag className="w-5 h-5 text-gray-400" /&gt;}
-              /&gt;
-              {allProducts.length === 0 ? (
-                &lt;div className="text-center py-16"&gt;
-                  &lt;ShoppingBag className="w-12 h-12 text-gray-200 mx-auto mb-3" /&gt;
-                  &lt;p className="text-gray-400 font-semibold mb-4"&gt;No products yet&lt;/p&gt;
-                  &lt;Link href="/sell" className="btn-press inline-flex items-center gap-2 px-5 py-2.5 bg-BATAMART-primary text-white rounded-xl font-bold text-sm shadow-md"&gt;
-                    &lt;Sparkles className="w-4 h-4" /&gt; Be the first to list
-                  &lt;/Link&gt;
-                &lt;/div&gt;
-              ) : (
-                &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4"&gt;
-                  {allProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 25} /&gt;)}
-                &lt;/div&gt;
-              )}
-            &lt;/div&gt;
+            {allProducts.length === 0 &amp;&amp; (
+              &lt;div className="text-center py-16"&gt;
+                &lt;ShoppingBag className="w-12 h-12 text-gray-200 mx-auto mb-3" /&gt;
+                &lt;p className="text-gray-400 font-semibold mb-4"&gt;No products yet&lt;/p&gt;
+                &lt;Link href="/sell" className="btn-press inline-flex items-center gap-2 px-5 py-2.5 bg-BATAMART-primary text-white rounded-xl font-bold text-sm shadow-md"&gt;
+                  &lt;Sparkles className="w-4 h-4" /&gt; Be the first to list
+                &lt;/Link&gt;
+              &lt;/div&gt;
+            )}
 
           &lt;/div&gt;
         )}
       &lt;/div&gt;
 
-      {/* Floating Sell Button — hidden in app mode since bottom nav already has Sell */}
+      {/* Floating Sell Button */}
       {!isApp &amp;&amp; (
         &lt;div className="fixed bottom-6 right-4 sm:right-6 z-40"&gt;
           &lt;Link href="/sell" className="btn-press flex items-center gap-2 px-5 py-3 bg-BATAMART-primary text-white rounded-2xl font-bold text-sm shadow-xl shadow-BATAMART-primary/30"&gt;
@@ -18206,37 +18323,37 @@ createAdmin();</pre></div>
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
-// ── Pages only riders can access ─────────────────────────────────────────────
+// ── Pages ONLY riders can access ──────────────────────────────────────────────
 const RIDER_ONLY_PAGES = ['/rider-dashboard']
 
-// ── Pages riders ARE allowed on (besides rider-only pages) ───────────────────
+// ── The ONLY pages a rider is allowed to visit ────────────────────────────────
 const RIDER_ALLOWED_PAGES = [
-  '/wallet',
-  '/notifications',
   '/rider/login',
   '/rider-dashboard',
+  '/wallet',
+  '/notifications',
 ]
 
 // ── Pages that are always public (no auth needed) ─────────────────────────────
 const PUBLIC_PAGES = [
   '/',
-  '/login',
-  '/signup',
-  '/rider/login',
-  '/forgot-password',
-  '/verify',
   '/about',
   '/contact',
   '/terms',
   '/privacy',
+  '/forgot-password',
+  '/verify',
+  '/rider/login',
+  // NOTE: /login and /signup are intentionally NOT here — riders are
+  // blocked from them specifically in the middleware below.
 ]
 
-async function decodeToken(token: string): Promise&lt;{ id: string; role: string } | null&gt; {
+async function decodeToken(token: string): Promise&lt;{ userId: string; role?: string } | null&gt; {
   const secret = process.env.JWT_SECRET
   if (!secret) return null
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret))
-    return { id: payload.sub as string, role: payload.role as string }
+    return { userId: payload.userId as string, role: payload.role as string | undefined }
   } catch {
     return null
   }
@@ -18244,10 +18361,7 @@ async function decodeToken(token: string): Promise&lt;{ id: string; role: string
 
 async function verifyAdminToken(token: string): Promise&lt;boolean&gt; {
   const secret = process.env.JWT_SECRET
-  if (!secret) {
-    console.error('[middleware] JWT_SECRET is not set. Admin routes are locked.')
-    return false
-  }
+  if (!secret) return false
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret))
     return payload.role === 'ADMIN'
@@ -18256,10 +18370,19 @@ async function verifyAdminToken(token: string): Promise&lt;boolean&gt; {
   }
 }
 
+// ── Clears all auth cookies/localStorage and redirects to rider login ─────────
+// We can't clear localStorage from middleware (server-side), so we redirect
+// to a special URL that the rider/login page handles by clearing storage first.
+function forceRiderLogout(req: NextRequest): NextResponse {
+  const res = NextResponse.redirect(new URL('/rider/login?reason=no_access', req.url))
+  res.cookies.set('token', '', { path: '/', maxAge: 0 })
+  return res
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // ── 1. Admin routes ──────────────────────────────────────────────────────
+  // ── 1. Admin routes ───────────────────────────────────────────────────────
   if (pathname.startsWith('/admin') &amp;&amp; !pathname.startsWith('/admin-login')) {
     const token = req.cookies.get('adminToken')?.value
     if (!token) return NextResponse.redirect(new URL('/admin-login', req.url))
@@ -18272,28 +18395,37 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // ── 2. Rider-only pages — must be logged in as RIDER ────────────────────
+  // ── 2. Block riders from /login and /signup entirely ─────────────────────
+  if (pathname === '/login' || pathname.startsWith('/login/') ||
+      pathname === '/signup' || pathname.startsWith('/signup/')) {
+    const token = req.cookies.get('token')?.value
+    if (token) {
+      const user = await decodeToken(token)
+      if (user?.role === 'RIDER') {
+        // Rider trying to use the main login/signup → force logout + redirect
+        return forceRiderLogout(req)
+      }
+    }
+    // Non-riders (or unauthenticated) can proceed to login/signup normally
+    return NextResponse.next()
+  }
+
+  // ── 3. Rider-only pages — must be logged in as RIDER ─────────────────────
   const isRiderPage = RIDER_ONLY_PAGES.some(p =&gt; pathname.startsWith(p))
   if (isRiderPage) {
     const token = req.cookies.get('token')?.value
-    if (!token) {
-      // Not logged in → rider login
-      return NextResponse.redirect(new URL('/rider/login', req.url))
-    }
+    if (!token) return NextResponse.redirect(new URL('/rider/login', req.url))
     const user = await decodeToken(token)
     if (!user || user.role !== 'RIDER') {
-      // Logged in but not a rider → rider login
       return NextResponse.redirect(new URL('/rider/login', req.url))
     }
     return NextResponse.next()
   }
 
-  // ── 3. Regular app pages — block riders from accessing them ─────────────
-  // If the path is not a public page and not in the rider-allowed list,
-  // and the user is a RIDER → redirect them to their dashboard
-  const isPublic = PUBLIC_PAGES.some(p =&gt; pathname === p || pathname.startsWith(p + '/'))
+  // ── 4. All other protected pages — riders are NOT welcome ─────────────────
+  const isPublic    = PUBLIC_PAGES.some(p =&gt; pathname === p || pathname.startsWith(p + '/'))
   const isRiderAllowed = RIDER_ALLOWED_PAGES.some(p =&gt; pathname.startsWith(p))
-  const isApiRoute = pathname.startsWith('/api/')
+  const isApiRoute  = pathname.startsWith('/api/')
   const isStaticFile = pathname.startsWith('/_next/') || pathname.includes('.')
 
   if (!isPublic &amp;&amp; !isRiderAllowed &amp;&amp; !isApiRoute &amp;&amp; !isStaticFile) {
@@ -18301,8 +18433,8 @@ export async function middleware(req: NextRequest) {
     if (token) {
       const user = await decodeToken(token)
       if (user?.role === 'RIDER') {
-        // Rider trying to access a buyer/seller page → back to dashboard
-        return NextResponse.redirect(new URL('/rider-dashboard', req.url))
+        // Rider trying to access any buyer/seller/marketplace page → force logout
+        return forceRiderLogout(req)
       }
     }
   }
@@ -18313,6 +18445,10 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
+    '/login',
+    '/login/:path*',
+    '/signup',
+    '/signup/:path*',
     '/rider-dashboard/:path*',
     '/rider-dashboard',
     '/marketplace/:path*',
@@ -19951,11 +20087,9 @@ import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
 
 // ── In-memory rate limiter ─────────────────────────────────────────────────
-// 10 attempts per IP per 15 minutes prevents brute force.
-// Swap Map for Redis/Upstash if you scale to multiple instances.
 const loginRateMap = new Map&lt;string, { count: number; resetAt: number }&gt;()
-const LOGIN_LIMIT      = 10
-const LOGIN_WINDOW_MS  = 15 * 60 * 1000
+const LOGIN_LIMIT     = 10
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
 
 function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: number } {
   const now   = Date.now()
@@ -19972,7 +20106,6 @@ function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: nu
   return { allowed: true, retryAfterSecs: 0 }
 }
 
-// Clean stale entries every minute
 setInterval(() =&gt; {
   const now = Date.now()
   Array.from(loginRateMap.entries()).forEach(([key, val]) =&gt; {
@@ -19983,7 +20116,6 @@ setInterval(() =&gt; {
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit by IP
     const ip =
       request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
       request.headers.get('x-real-ip') ??
@@ -20010,6 +20142,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
+    // ── BLOCK RIDER ACCOUNTS from the main login ────────────────────────────
+    // Riders have a separate login at /rider/login — they must never come through here.
+    if (user.role === 'RIDER') {
+      return NextResponse.json(
+        {
+          error: 'Rider accounts cannot log in here.',
+          isRider: true,
+        },
+        { status: 403 }
+      )
+    }
+
     const isValidPassword = await comparePassword(password, user.password)
     if (!isValidPassword) {
       return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
@@ -20024,8 +20168,6 @@ export async function POST(request: NextRequest) {
       user.isSuspended = false
     }
 
-    // Block if still suspended — return structured data (not just a message string)
-    // so the login page can display it properly without needing URL params
     if (user.isSuspended) {
       return NextResponse.json(
         {
@@ -20044,12 +20186,12 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id:          user.id,
-        name:        user.name,
-        phone:       user.phone,
-        email:       user.email,
-        role:        user.role,
-        hostelName:  user.hostelName,
+        id:         user.id,
+        name:       user.name,
+        phone:      user.phone,
+        email:      user.email,
+        role:       user.role,
+        hostelName: user.hostelName,
       },
     })
   } catch (error) {
@@ -23045,6 +23187,202 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/api/products/feed/route.ts</div><pre>// app/api/products/feed/route.ts
+// Personalized product feed — TikTok-style scoring based on:
+//   1. Categories the user has ordered from (strongest signal)
+//   2. Categories the user has recently viewed (sent from client via query param)
+//   3. Categories the user has searched (sent from client via query param)
+//   4. Overall product popularity (viewCount + order count)
+//   5. Recency (newer products get a small boost)
+//   6. Seller trust level (GOLD &gt; SILVER &gt; BRONZE)
+// Products are scored, shuffled within score bands, then returned.
+
+export const dynamic = 'force-dynamic'
+
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth/auth'
+
+const PAGE_SIZE = 40
+
+// Score weights — tweak these to change feed feel
+const W = {
+  ordered:      100,  // user has ordered this category before
+  viewed:        60,  // user has viewed products in this category
+  searched:      40,  // user has searched for this category / keyword
+  popular:       20,  // high viewCount
+  orderCount:    15,  // many orders on the product
+  sellerGold:    10,  // seller trust level bonus
+  sellerSilver:   5,
+  recency:       10,  // product listed within last 7 days
+  newish:         5,  // product listed within last 30 days
+}
+
+function trustScore(level: string) {
+  if (level === 'GOLD')   return W.sellerGold
+  if (level === 'SILVER') return W.sellerSilver
+  return 0
+}
+
+function recencyScore(createdAt: Date) {
+  const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)
+  if (ageDays &lt;= 7)  return W.recency
+  if (ageDays &lt;= 30) return W.newish
+  return 0
+}
+
+// Normalise a raw count to 0-maxScore using sqrt dampening (so one product
+// with 1000 views doesn't completely bury everything else).
+function normalisedCount(count: number, maxPossible: number, maxScore: number) {
+  if (!count || !maxPossible) return 0
+  return (Math.sqrt(count) / Math.sqrt(maxPossible)) * maxScore
+}
+
+// Add a small random jitter so products with identical scores shuffle
+function jitter() {
+  return Math.random() * 3 - 1.5 // ±1.5 points
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user.universityId) {
+      return NextResponse.json({ error: 'No university on account' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+
+    // ── Signals sent from the client (localStorage data) ─────────────────────
+    // viewed: comma-separated category names from recently viewed products
+    // searched: comma-separated recent search terms
+    const viewedRaw   = searchParams.get('viewed')   || ''
+    const searchedRaw = searchParams.get('searched')  || ''
+
+    const viewedCategories  = viewedRaw.split(',').map(s =&gt; s.trim()).filter(Boolean)
+    const searchedTerms     = searchedRaw.split(',').map(s =&gt; s.trim().toLowerCase()).filter(Boolean)
+
+    // ── 1. Pull the user's order history to get their category preferences ───
+    const userOrders = await prisma.order.findMany({
+      where: { buyerId: user.id },
+      select: { product: { select: { category: true } } },
+      take: 100,
+      orderBy: { orderedAt: 'desc' },
+    })
+
+    const orderedCategories = new Set(
+      userOrders.map(o =&gt; o.product?.category).filter(Boolean) as string[]
+    )
+
+    // ── 2. Fetch all active in-stock products for this university ─────────────
+    const allProducts = await prisma.product.findMany({
+      where: {
+        isActive:     true,
+        quantity:     { gt: 0 },
+        isDeleted:    false,
+        universityId: user.universityId,
+        // Exclude the user's own products from their feed
+        NOT: { sellerId: user.id },
+      },
+      include: {
+        seller: {
+          select: {
+            id:              true,
+            name:            true,
+            avgRating:       true,
+            trustLevel:      true,
+            completedOrders: true,
+          },
+        },
+        _count: {
+          select: { orders: true },
+        },
+      },
+    })
+
+    if (!allProducts.length) {
+      return NextResponse.json({ success: true, products: [], total: 0, page, hasMore: false })
+    }
+
+    // ── 3. Find max counts for normalisation ──────────────────────────────────
+    const maxViewCount  = Math.max(...allProducts.map(p =&gt; p.viewCount || 0), 1)
+    const maxOrderCount = Math.max(...allProducts.map(p =&gt; p._count.orders || 0), 1)
+
+    // ── 4. Score every product ────────────────────────────────────────────────
+    const scored = allProducts.map(product =&gt; {
+      let score = 0
+
+      const cat = product.category
+
+      // Order history signal (strongest)
+      if (orderedCategories.has(cat)) score += W.ordered
+
+      // Recently viewed signal
+      if (viewedCategories.includes(cat)) score += W.viewed
+
+      // Search signal — check if any search term matches category or product name
+      for (const term of searchedTerms) {
+        if (
+          cat.toLowerCase().includes(term) ||
+          product.name.toLowerCase().includes(term)
+        ) {
+          score += W.searched
+          break // don't double-count
+        }
+      }
+
+      // Popularity signals
+      score += normalisedCount(product.viewCount || 0, maxViewCount,  W.popular)
+      score += normalisedCount(product._count.orders || 0, maxOrderCount, W.orderCount)
+
+      // Seller trust
+      score += trustScore(product.seller?.trustLevel || 'BRONZE')
+
+      // Recency
+      score += recencyScore(product.createdAt)
+
+      // Small jitter to keep the feed feeling fresh on each load
+      score += jitter()
+
+      return { product, score }
+    })
+
+    // ── 5. Sort by score descending ───────────────────────────────────────────
+    scored.sort((a, b) =&gt; b.score - a.score)
+
+    // ── 6. Paginate ───────────────────────────────────────────────────────────
+    const total   = scored.length
+    const skip    = (page - 1) * PAGE_SIZE
+    const pageItems = scored.slice(skip, skip + PAGE_SIZE)
+
+    // ── 7. Annotate with feed metadata (real signals, not random) ─────────────
+    const now = Date.now()
+    const products = pageItems.map(({ product, score }) =&gt; {
+      const ageDays = (now - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      const isPersonalised = orderedCategories.has(product.category) || viewedCategories.includes(product.category)
+      return {
+        ...product,
+        _feedScore:       Math.round(score),
+        isNew:            ageDays &lt;= 7,
+        isTrending:       (product._count.orders &gt;= 3) || (product.viewCount &gt;= 20),
+        isPersonalised,   // used by UI to show "For You" badge
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      products,
+      total,
+      page,
+      pages:   Math.ceil(total / PAGE_SIZE),
+      hasMore: skip + pageItems.length &lt; total,
+    })
+  } catch (error) {
+    console.error('Feed error:', error)
+    return NextResponse.json({ error: 'Failed to load feed' }, { status: 500 })
+  }
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/my-products/route.ts</div><pre>// app/api/products/my-products/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -23097,6 +23435,7 @@ export async function GET(request: NextRequest) {
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/[id]/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/[id]/restock/route.ts</div><pre>Could not read file.</pre></div>
+<div class='file-block'><div class='file-header'>app/api/products/[id]/view/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/push/subscribe/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/push/subscribe/route.ts
 // Handles saving and deleting push subscriptions
@@ -24163,30 +24502,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Generate token
-    const token = generateToken(rider.id, rider.role)
+    // ── FIXED: pass rider.phone as 2nd arg, rider.role as 3rd arg ──
+    // Previously `rider.role` was passed as the `phone` slot, so the token
+    // never contained a `role` claim, silently breaking all role-based auth.
+    const token = generateToken(rider.id, rider.phone, rider.role)
 
     return NextResponse.json({
       success: true,
       token,
       user: {
-        id: rider.id,
-        name: rider.name,
-        email: rider.email,
-        phone: rider.phone,
-        role: rider.role,
-        isRiderVerified: rider.isRiderVerified,
-        isAvailable: rider.isAvailable,
+        id:               rider.id,
+        name:             rider.name,
+        email:            rider.email,
+        phone:            rider.phone,
+        role:             rider.role,
+        isRiderVerified:  rider.isRiderVerified,
+        isAvailable:      rider.isAvailable,
         availableBalance: rider.availableBalance,
-        pendingBalance: rider.pendingBalance,
+        pendingBalance:   rider.pendingBalance,
       },
     })
   } catch (error) {
     console.error('Rider login error:', error)
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/riders/my-deliveries/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/riders/my-deliveries/route.ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -27187,13 +27527,14 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set.')
 }
 
-export function generateToken(userId: string, phone: string | null): string {
-  return jwt.sign({ userId, phone }, JWT_SECRET!, { expiresIn: '30d' })
+// ── FIXED: added optional `role` param so rider tokens carry the role claim ──
+export function generateToken(userId: string, phone: string | null, role?: string): string {
+  return jwt.sign({ userId, phone, ...(role ? { role } : {}) }, JWT_SECRET!, { expiresIn: '30d' })
 }
 
-export function verifyToken(token: string): { userId: string; phone: string } | null {
+export function verifyToken(token: string): { userId: string; phone: string; role?: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET!) as { userId: string; phone: string }
+    return jwt.verify(token, JWT_SECRET!) as { userId: string; phone: string; role?: string }
   } catch {
     return null
   }
@@ -27357,37 +27698,16 @@ export const getUserFromRequest = async (request: Request) =&gt; {
       hostelName:       true,
       roomNumber:       true,
       landmark:         true,
-      trustLevel:       true,
-      avgRating:        true,
-      totalReviews:     true,
-      completedOrders:  true,
-      pendingBalance:   true,
       availableBalance: true,
-      penaltyPoints:    true,
+      pendingBalance:   true,
       isSuspended:      true,
       suspendedUntil:   true,
       suspensionReason: true,
       isRiderVerified:  true,
       isAvailable:      true,
-      withdrawalPin:    true,
-      universityId:     true,   // ← this was the missing field
-      createdAt:        true,
-      updatedAt:        true,
+      universityId:     true,
     },
   })
-
-  if (!user) return null
-
-  // Auto-lift expired suspension
-  if (user.isSuspended &amp;&amp; user.suspendedUntil &amp;&amp; new Date(user.suspendedUntil) &lt; new Date()) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isSuspended: false, suspendedUntil: null, suspensionReason: null },
-    })
-    user.isSuspended = false
-    user.suspendedUntil = null
-    user.suspensionReason = null
-  }
 
   return user
 }</pre></div>

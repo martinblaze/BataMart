@@ -56,10 +56,18 @@ function SearchPage() {
 
   useEffect(() => { fetchAll() }, [])
 
+  // ✅ Fix: pass Authorization header so the API doesn't return 401
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/products')
+      const token = localStorage.getItem('token')
+      if (!token) {
+        router.push('/login')
+        return
+      }
+      const res = await fetch('/api/products', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
       setProducts(data.products || [])
     } catch { }
@@ -197,7 +205,7 @@ function SearchPage() {
             {loading ? 'Searching...' : (
               <>
                 <span className="font-black text-gray-900">{filtered.length}</span> result{filtered.length !== 1 ? 's' : ''}
-                {query && <span className="text-gray-400"> for "<span className="text-gray-700">{query}</span>"</span>}
+                {query && <span className="text-gray-400"> for &quot;<span className="text-gray-700">{query}</span>&quot;</span>}
               </>
             )}
           </p>
@@ -272,7 +280,7 @@ function SearchPage() {
               <Search className="w-7 h-7 text-BATAMART-primary" />
             </div>
             <h3 className="text-base font-black text-gray-800 mb-1">What are you looking for?</h3>
-            <p className="text-xs text-gray-400 max-w-xs">Try "iPhone 128GB", "Black hoodie", or "Used laptop"</p>
+            <p className="text-xs text-gray-400 max-w-xs">Try &quot;iPhone 128GB&quot;, &quot;Black hoodie&quot;, or &quot;Used laptop&quot;</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center px-4">
@@ -280,7 +288,7 @@ function SearchPage() {
               <Search className="w-7 h-7 text-gray-300" />
             </div>
             <h3 className="text-base font-black text-gray-800 mb-1">No results found</h3>
-            <p className="text-xs text-gray-400 max-w-xs mb-4">No products match "<span className="font-semibold text-gray-600">{query}</span>". Try fewer or different keywords.</p>
+            <p className="text-xs text-gray-400 max-w-xs mb-4">No products match &quot;<span className="font-semibold text-gray-600">{query}</span>&quot;. Try fewer or different keywords.</p>
             <button onClick={() => router.push('/marketplace')} className="inline-flex items-center gap-2 bg-BATAMART-primary text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md">
               Browse Marketplace <ArrowRight className="w-4 h-4" />
             </button>
