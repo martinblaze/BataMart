@@ -8667,7 +8667,7 @@ export default function ReferralsPage() {
             {[
               { step: '1', text: 'Share your referral link with friends' },
               { step: '2', text: 'They sign up using your link' },
-              { step: '3', text: 'When they complete an order, you earn 30% of the delivery fee' },
+              { step: '3', text: 'When they complete an order, you earn ₦120 from the delivery fee' },
             ].map(item =&gt; (
               &lt;div key={item.step} className="flex items-start gap-3"&gt;
                 &lt;div className="w-7 h-7 rounded-full bg-BATAMART-primary text-white text-sm font-bold flex items-center justify-center flex-shrink-0"&gt;
@@ -21256,14 +21256,16 @@ export async function POST(request: NextRequest) {
 
     // ═══════════════════════════════════════════════════════════════
     // PAYOUT BREAKDOWN (per order):
-    //   subtotal       = product cost
-    //   platformFee    = subtotal * 5%          (platform keeps this fully)
-    //   riderShare     = ₦560                   (rider gets this)
-    //   referralReward = ₦240                   (referrer gets this — was platform's delivery cut)
-    //   sellerShare    = subtotal - platformFee  (seller gets this)
+    //   subtotal        = product cost
+    //   platformFee     = subtotal * 5%          (platform keeps this fully)
+    //   riderShare      = ₦560                   (rider gets this)
+    //   referralReward  = ₦120                   (referrer gets this — 50% of delivery cut)
+    //   platformDelivery= ₦120                   (platform retains other 50% of delivery cut)
+    //   sellerShare     = subtotal - platformFee  (seller gets this)
     //
     //   Buyer pays: subtotal + ₦800 delivery fee
-    //   Platform earns: subtotal * 5% only (no longer takes the ₦240 delivery cut)
+    //   Platform earns: subtotal * 5% + ₦120 (when referral applies)
+    //                or subtotal * 5% + ₦240 (when no referral, full delivery cut kept)
     // ═══════════════════════════════════════════════════════════════
 
     const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
@@ -21328,9 +21330,9 @@ export async function POST(request: NextRequest) {
       }
 
       // 4. ── REFERRAL REWARD ────────────────────────────────────────
-      // Referrer earns ₦240 (the full delivery platform cut) on every
+      // Referrer earns ₦120 (50% of the ₦240 delivery platform cut) on every
       // completed delivery order from their referral — forever.
-      // Platform keeps its full 5% product commission.
+      // Platform keeps its full 5% product commission plus the other ₦120.
       await processReferralReward(tx, {
         orderId,
         orderNumber: order.orderNumber,
@@ -21782,7 +21784,8 @@ export const dynamic = 'force-dynamic'
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
   const PLATFORM_RATE = 0.05
   const RIDER_SHARE = 560
-  const PLATFORM_DELIVERY_CUT = 240
+  // ₦120 goes to referrer (50% of old ₦240), ₦120 stays with platform
+  const PLATFORM_DELIVERY_CUT = 120
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
   const sellerShare = subtotal - platformFeeFromProducts
@@ -27431,15 +27434,15 @@ export async function sendEmail({ to, subject, html }: EmailPayload) {
 export function calculatePayout(subtotal: number, deliveryFee: number = 800) {
   const PLATFORM_RATE          = 0.05
   const RIDER_SHARE            = 560
-  // ── NEW: ₦240 delivery cut now goes to referrer, not platform ──────────────
-  const REFERRAL_DELIVERY_CUT  = 240   // referrer earns this per delivery order
-  const PLATFORM_DELIVERY_CUT  = 0     // platform no longer takes a cut of delivery
+  // ── ₦120 delivery cut goes to referrer (50% of the original ₦240) ──────────
+  const REFERRAL_DELIVERY_CUT  = 120   // referrer earns this per delivery order
+  const PLATFORM_DELIVERY_CUT  = 120   // platform retains the other ₦120
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
   const sellerShare             = subtotal - platformFeeFromProducts
   const riderShare              = RIDER_SHARE
   const referralDeliveryCut     = REFERRAL_DELIVERY_CUT   // goes to referrer if applicable
-  const platformTotal           = platformFeeFromProducts  // platform only earns product commission
+  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
   const totalAmount             = subtotal + deliveryFee
 
   return {
@@ -27801,17 +27804,17 @@ export async function generateUniqueReferralCode(): Promise&lt;string&gt; {
 
 import { Prisma } from '@prisma/client'
 
-// ── Referral reward = the full ₦240 delivery platform cut ─────────────────────
+// ── Referral reward = ₦120 (50% of the ₦240 delivery platform cut) ────────────
 // The platform keeps its 5% product commission entirely.
-// The ₦240 delivery cut goes 100% to the referrer (forever, every order).
+// ₦120 of the ₦240 delivery cut goes to the referrer (forever, every order).
 // Only paid if the order had a rider (delivery orders only).
-const REFERRAL_DELIVERY_REWARD = 240
+const REFERRAL_DELIVERY_REWARD = 120
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx =&gt; ...) block.
  *
- * Checks if the buyer was referred. If so, credits the referrer ₦240
- * (the delivery platform cut) for every completed delivery order — forever.
+ * Checks if the buyer was referred. If so, credits the referrer ₦120
+ * (50% of the delivery platform cut) for every completed delivery order — forever.
  *
  * The @unique constraint on ReferralReward.orderId guarantees idempotency.
  */
@@ -27822,7 +27825,7 @@ export async function processReferralReward(
     orderNumber: string
     orderAmount: number
     buyerId:     string
-    hasRider:    boolean   // ← NEW: only pay if delivery order
+    hasRider:    boolean   // ← only pay if delivery order
   }
 ) {
   const { orderId, orderNumber, buyerId, hasRider } = params
@@ -27845,7 +27848,7 @@ export async function processReferralReward(
   })
   if (existing) return   // idempotency guard
 
-  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦240
+  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦120
 
   // 3. Fetch referrer's current balance
   const referrer = await tx.user.findUnique({
@@ -27892,7 +27895,7 @@ export async function processReferralReward(
       userId:  referrer.id,
       type:    'REFERRAL_REWARD',
       title:   '🎁 Referral Reward!',
-      message: `You earned ₦240 delivery reward from order #${orderNumber}.`,
+      message: `You earned ₦120 delivery reward from order #${orderNumber}.`,
       orderId,
       metadata: JSON.stringify({ reward, orderNumber }),
     },
