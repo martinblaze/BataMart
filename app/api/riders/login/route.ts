@@ -35,22 +35,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Generate token
-    const token = generateToken(rider.id, rider.role)
+    // ── FIXED: pass rider.phone as 2nd arg, rider.role as 3rd arg ──
+    // Previously `rider.role` was passed as the `phone` slot, so the token
+    // never contained a `role` claim, silently breaking all role-based auth.
+    const token = generateToken(rider.id, rider.phone, rider.role)
 
     return NextResponse.json({
       success: true,
       token,
       user: {
-        id: rider.id,
-        name: rider.name,
-        email: rider.email,
-        phone: rider.phone,
-        role: rider.role,
-        isRiderVerified: rider.isRiderVerified,
-        isAvailable: rider.isAvailable,
+        id:               rider.id,
+        name:             rider.name,
+        email:            rider.email,
+        phone:            rider.phone,
+        role:             rider.role,
+        isRiderVerified:  rider.isRiderVerified,
+        isAvailable:      rider.isAvailable,
         availableBalance: rider.availableBalance,
-        pendingBalance: rider.pendingBalance,
+        pendingBalance:   rider.pendingBalance,
       },
     })
   } catch (error) {

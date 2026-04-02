@@ -9,13 +9,14 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set.')
 }
 
-export function generateToken(userId: string, phone: string | null): string {
-  return jwt.sign({ userId, phone }, JWT_SECRET!, { expiresIn: '30d' })
+// ── FIXED: added optional `role` param so rider tokens carry the role claim ──
+export function generateToken(userId: string, phone: string | null, role?: string): string {
+  return jwt.sign({ userId, phone, ...(role ? { role } : {}) }, JWT_SECRET!, { expiresIn: '30d' })
 }
 
-export function verifyToken(token: string): { userId: string; phone: string } | null {
+export function verifyToken(token: string): { userId: string; phone: string; role?: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET!) as { userId: string; phone: string }
+    return jwt.verify(token, JWT_SECRET!) as { userId: string; phone: string; role?: string }
   } catch {
     return null
   }
@@ -179,37 +180,16 @@ export const getUserFromRequest = async (request: Request) => {
       hostelName:       true,
       roomNumber:       true,
       landmark:         true,
-      trustLevel:       true,
-      avgRating:        true,
-      totalReviews:     true,
-      completedOrders:  true,
-      pendingBalance:   true,
       availableBalance: true,
-      penaltyPoints:    true,
+      pendingBalance:   true,
       isSuspended:      true,
       suspendedUntil:   true,
       suspensionReason: true,
       isRiderVerified:  true,
       isAvailable:      true,
-      withdrawalPin:    true,
-      universityId:     true,   // ← this was the missing field
-      createdAt:        true,
-      updatedAt:        true,
+      universityId:     true,
     },
   })
-
-  if (!user) return null
-
-  // Auto-lift expired suspension
-  if (user.isSuspended && user.suspendedUntil && new Date(user.suspendedUntil) < new Date()) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isSuspended: false, suspendedUntil: null, suspensionReason: null },
-    })
-    user.isSuspended = false
-    user.suspendedUntil = null
-    user.suspensionReason = null
-  }
 
   return user
 }
