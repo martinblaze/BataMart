@@ -8,8 +8,12 @@ import {
   Search, Star, Shield, ShoppingBag, Sparkles, Flame,
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
+  RefreshCw,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
+
+const PULL_THRESHOLD = 72   // px of pull needed to trigger refresh
+const PULL_MAX       = 110  // px max rubber-band distance
 
 const ANIM_CSS = `
   @keyframes fadeSlideUp {
@@ -99,6 +103,24 @@ const ANIM_CSS = `
 
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* ── Pull-to-refresh ── */
+  @keyframes ptr-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .ptr-spinning { animation: ptr-spin 0.7s linear infinite; }
+
+  @keyframes ptr-bounce-in {
+    0%   { opacity: 0; transform: translateY(-16px) scale(0.85); }
+    60%  { transform: translateY(4px) scale(1.05); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .ptr-bounce { animation: ptr-bounce-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+  .ptr-indicator {
+    transition: opacity 0.2s ease;
+  }
 `
 
 const CATEGORIES = [
@@ -235,6 +257,38 @@ function SectionHeader({ title, icon, onSeeAll, delay = 0 }: { title: string; ic
   )
 }
 
+// ─────────────────────────────────────────────
+// Pull-to-Refresh Indicator
+// ─────────────────────────────────────────────
+function PullIndicator({ pullDistance, isRefreshing }: { pullDistance: number; isRefreshing: boolean }) {
+  const progress = Math.min(pullDistance / PULL_THRESHOLD, 1)
+  const ready    = pullDistance >= PULL_THRESHOLD
+
+  return (
+    <div
+      className="ptr-indicator pointer-events-none fixed top-0 left-0 right-0 z-50 flex justify-center"
+      style={{
+        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 56}px)`,
+        transition: isRefreshing ? 'transform 0.3s cubic-bezier(0.22,1,0.36,1)' : 'none',
+        opacity: isRefreshing ? 1 : progress,
+      }}
+    >
+      <div
+        className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white shadow-lg border border-gray-100"
+        style={{ transform: `scale(${0.85 + progress * 0.15})` }}
+      >
+        <RefreshCw
+          className={`w-4 h-4 text-BATAMART-primary ${isRefreshing ? 'ptr-spinning' : ''}`}
+          style={{ transform: isRefreshing ? undefined : `rotate(${progress * 220}deg)` }}
+        />
+        <span className="text-xs font-bold text-gray-600">
+          {isRefreshing ? 'Refreshing…' : ready ? 'Release to refresh' : 'Pull to refresh'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export default function MarketplacePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -259,6 +313,12 @@ export default function MarketplacePage() {
   const [mounted, setMounted]                       = useState(false)
   const [dropdownPos, setDropdownPos]               = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
+
+  // ── Pull-to-refresh state ──
+  const [pullDistance, setPullDistance]   = useState(0)
+  const [isRefreshing, setIsRefreshing]   = useState(false)
+  const touchStartYRef                    = useRef<number | null>(null)
+  const isPullingRef                      = useRef(false)
 
   const inputRef                = useRef<HTMLInputElement>(null)
   const searchRef               = useRef<HTMLDivElement>(null)
@@ -313,8 +373,65 @@ export default function MarketplacePage() {
     }
   }, [selectedCategory])
 
-  // ✅ Fix: use viewport-relative positioning only (no scrollY/scrollX)
-  // The dropdown uses position:fixed so it must be relative to the viewport, not the document.
+  // ── Pull-to-refresh touch handlers ──
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      // Only activate when already scrolled to top
+      if (window.scrollY > 0) return
+      touchStartYRef.current = e.touches[0].clientY
+      isPullingRef.current   = false
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchStartYRef.current === null) return
+      if (isRefreshing) return
+      if (window.scrollY > 0) { touchStartYRef.current = null; return }
+
+      const delta = e.touches[0].clientY - touchStartYRef.current
+      if (delta <= 0) return
+
+      // Rubber-band: sqrt easing so it gets progressively harder to pull
+      const rubberband = Math.sqrt(delta) * Math.sqrt(PULL_MAX)
+      const clamped    = Math.min(rubberband, PULL_MAX)
+
+      isPullingRef.current = true
+      setPullDistance(clamped)
+
+      // Prevent native scroll bounce while we're handling it
+      if (delta > 4) e.preventDefault()
+    }
+
+    const onTouchEnd = async () => {
+      if (!isPullingRef.current) return
+      isPullingRef.current   = false
+      touchStartYRef.current = null
+
+      if (pullDistance >= PULL_THRESHOLD) {
+        setIsRefreshing(true)
+        setPullDistance(PULL_THRESHOLD + 8) // snap to "refreshing" position
+
+        await fetchFeed()
+
+        setIsRefreshing(false)
+        // Animate the indicator back up
+        setPullDistance(0)
+      } else {
+        // Didn't pull far enough — snap back
+        setPullDistance(0)
+      }
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    document.addEventListener('touchend',   onTouchEnd,   { passive: true })
+
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove',  onTouchMove)
+      document.removeEventListener('touchend',   onTouchEnd)
+    }
+  }, [pullDistance, isRefreshing])
+
   const updateDropdownPos = useCallback(() => {
     if (!inputRef.current) return
     const r = inputRef.current.getBoundingClientRect()
@@ -516,8 +633,22 @@ export default function MarketplacePage() {
     <div className="min-h-screen bg-[#f7f8fa]">
       {SuggestionsDropdown}
 
+      {/* ── Pull-to-Refresh Indicator ── */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <PullIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
+      )}
+
       {/* ── HERO ── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-BATAMART-primary via-BATAMART-primary to-BATAMART-dark">
+      <div
+        className="relative overflow-hidden bg-gradient-to-br from-BATAMART-primary via-BATAMART-primary to-BATAMART-dark"
+        style={{
+          // Visually push the hero down while pulling, giving a satisfying elastic feel
+          transform: pullDistance > 0
+            ? `translateY(${Math.min(pullDistance * 0.3, 28)}px)`
+            : undefined,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
+        }}
+      >
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute -top-24 -right-24 w-[500px] h-[500px] rounded-full bg-white/[0.06] blur-3xl" />
           <div className="absolute top-1/2 -left-32 w-[400px] h-[400px] rounded-full bg-white/[0.04] blur-3xl" />
