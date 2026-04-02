@@ -10,14 +10,27 @@ function RiderLoginForm() {
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [wasForceLoggedOut, setWasForceLoggedOut] = useState(false)
 
-  // If already logged in as a rider, go straight to dashboard
   useEffect(() => {
+    // ── If middleware bounced rider here after accessing a forbidden page ──
+    // Clear ALL local auth state so they're fully logged out client-side too.
+    const reason = searchParams.get('reason')
+    if (reason === 'no_access') {
+      localStorage.clear()
+      sessionStorage.removeItem('batamart_rider_mode')
+      // Cookie is already cleared by middleware — just notify UI
+      window.dispatchEvent(new Event('auth-change'))
+      setWasForceLoggedOut(true)
+      return // Don't auto-redirect to dashboard even if stale role is in storage
+    }
+
+    // ── If already properly logged in as a rider, go straight to dashboard ──
     const role = localStorage.getItem('userRole')
     if (role === 'RIDER') {
       router.replace('/rider-dashboard')
     }
-  }, [router])
+  }, [router, searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,15 +47,11 @@ function RiderLoginForm() {
       const data = await response.json()
 
       if (response.ok) {
-        // Store in localStorage (for client-side checks)
         localStorage.setItem('token',    data.token)
         localStorage.setItem('userRole', data.user.role)
         localStorage.setItem('userId',   data.user.id)
         localStorage.setItem('userName', data.user.name)
 
-        // ── IMPORTANT: also store in a cookie so middleware can read it ──
-        // httpOnly is not set here because we're in client JS;
-        // the middleware reads this cookie to enforce role-based routing.
         document.cookie = `token=${data.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`
 
         router.push('/rider-dashboard')
@@ -80,6 +89,26 @@ function RiderLoginForm() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
+
+          {/* ── Force-logout notice ─────────────────────────────────────────── */}
+          {wasForceLoggedOut && (
+            <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <span className="text-amber-500 text-xl flex-shrink-0">⚠️</span>
+              <div>
+                <p className="font-semibold text-amber-900 text-sm">Access Denied</p>
+                <p className="text-amber-700 text-sm mt-1">
+                  Rider accounts can only access the Rider Dashboard, Wallet, and Notifications.
+                  You have been logged out. Please log in with a regular account to use the marketplace.
+                </p>
+                <Link
+                  href="/login"
+                  className="inline-block mt-2 text-sm text-amber-800 font-semibold underline hover:no-underline"
+                >
+                  Use a regular account →
+                </Link>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
 

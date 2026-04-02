@@ -5,11 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
 
 // ── In-memory rate limiter ─────────────────────────────────────────────────
-// 10 attempts per IP per 15 minutes prevents brute force.
-// Swap Map for Redis/Upstash if you scale to multiple instances.
 const loginRateMap = new Map<string, { count: number; resetAt: number }>()
-const LOGIN_LIMIT      = 10
-const LOGIN_WINDOW_MS  = 15 * 60 * 1000
+const LOGIN_LIMIT     = 10
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
 
 function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: number } {
   const now   = Date.now()
@@ -26,7 +24,6 @@ function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: nu
   return { allowed: true, retryAfterSecs: 0 }
 }
 
-// Clean stale entries every minute
 setInterval(() => {
   const now = Date.now()
   Array.from(loginRateMap.entries()).forEach(([key, val]) => {
@@ -37,7 +34,6 @@ setInterval(() => {
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit by IP
     const ip =
       request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
       request.headers.get('x-real-ip') ??
@@ -64,6 +60,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
+    // ── BLOCK RIDER ACCOUNTS from the main login ────────────────────────────
+    // Riders have a separate login at /rider/login — they must never come through here.
+    if (user.role === 'RIDER') {
+      return NextResponse.json(
+        {
+          error: 'Rider accounts cannot log in here.',
+          isRider: true,
+        },
+        { status: 403 }
+      )
+    }
+
     const isValidPassword = await comparePassword(password, user.password)
     if (!isValidPassword) {
       return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
@@ -78,8 +86,6 @@ export async function POST(request: NextRequest) {
       user.isSuspended = false
     }
 
-    // Block if still suspended — return structured data (not just a message string)
-    // so the login page can display it properly without needing URL params
     if (user.isSuspended) {
       return NextResponse.json(
         {
@@ -98,12 +104,12 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id:          user.id,
-        name:        user.name,
-        phone:       user.phone,
-        email:       user.email,
-        role:        user.role,
-        hostelName:  user.hostelName,
+        id:         user.id,
+        name:       user.name,
+        phone:      user.phone,
+        email:      user.email,
+        role:       user.role,
+        hostelName: user.hostelName,
       },
     })
   } catch (error) {

@@ -2,37 +2,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
-// ── Pages only riders can access ─────────────────────────────────────────────
+// ── Pages ONLY riders can access ──────────────────────────────────────────────
 const RIDER_ONLY_PAGES = ['/rider-dashboard']
 
-// ── Pages riders ARE allowed on (besides rider-only pages) ───────────────────
+// ── The ONLY pages a rider is allowed to visit ────────────────────────────────
 const RIDER_ALLOWED_PAGES = [
-  '/wallet',
-  '/notifications',
   '/rider/login',
   '/rider-dashboard',
+  '/wallet',
+  '/notifications',
 ]
 
 // ── Pages that are always public (no auth needed) ─────────────────────────────
 const PUBLIC_PAGES = [
   '/',
-  '/login',
-  '/signup',
-  '/rider/login',
-  '/forgot-password',
-  '/verify',
   '/about',
   '/contact',
   '/terms',
   '/privacy',
+  '/forgot-password',
+  '/verify',
+  '/rider/login',
+  // NOTE: /login and /signup are intentionally NOT here — riders are
+  // blocked from them specifically in the middleware below.
 ]
 
-async function decodeToken(token: string): Promise<{ id: string; role: string } | null> {
+async function decodeToken(token: string): Promise<{ userId: string; role?: string } | null> {
   const secret = process.env.JWT_SECRET
   if (!secret) return null
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret))
-    return { id: payload.sub as string, role: payload.role as string }
+    return { userId: payload.userId as string, role: payload.role as string | undefined }
   } catch {
     return null
   }
@@ -40,10 +40,7 @@ async function decodeToken(token: string): Promise<{ id: string; role: string } 
 
 async function verifyAdminToken(token: string): Promise<boolean> {
   const secret = process.env.JWT_SECRET
-  if (!secret) {
-    console.error('[middleware] JWT_SECRET is not set. Admin routes are locked.')
-    return false
-  }
+  if (!secret) return false
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret))
     return payload.role === 'ADMIN'
@@ -52,10 +49,19 @@ async function verifyAdminToken(token: string): Promise<boolean> {
   }
 }
 
+// ── Clears all auth cookies/localStorage and redirects to rider login ─────────
+// We can't clear localStorage from middleware (server-side), so we redirect
+// to a special URL that the rider/login page handles by clearing storage first.
+function forceRiderLogout(req: NextRequest): NextResponse {
+  const res = NextResponse.redirect(new URL('/rider/login?reason=no_access', req.url))
+  res.cookies.set('token', '', { path: '/', maxAge: 0 })
+  return res
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // ── 1. Admin routes ──────────────────────────────────────────────────────
+  // ── 1. Admin routes ───────────────────────────────────────────────────────
   if (pathname.startsWith('/admin') && !pathname.startsWith('/admin-login')) {
     const token = req.cookies.get('adminToken')?.value
     if (!token) return NextResponse.redirect(new URL('/admin-login', req.url))
@@ -68,28 +74,37 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // ── 2. Rider-only pages — must be logged in as RIDER ────────────────────
+  // ── 2. Block riders from /login and /signup entirely ─────────────────────
+  if (pathname === '/login' || pathname.startsWith('/login/') ||
+      pathname === '/signup' || pathname.startsWith('/signup/')) {
+    const token = req.cookies.get('token')?.value
+    if (token) {
+      const user = await decodeToken(token)
+      if (user?.role === 'RIDER') {
+        // Rider trying to use the main login/signup → force logout + redirect
+        return forceRiderLogout(req)
+      }
+    }
+    // Non-riders (or unauthenticated) can proceed to login/signup normally
+    return NextResponse.next()
+  }
+
+  // ── 3. Rider-only pages — must be logged in as RIDER ─────────────────────
   const isRiderPage = RIDER_ONLY_PAGES.some(p => pathname.startsWith(p))
   if (isRiderPage) {
     const token = req.cookies.get('token')?.value
-    if (!token) {
-      // Not logged in → rider login
-      return NextResponse.redirect(new URL('/rider/login', req.url))
-    }
+    if (!token) return NextResponse.redirect(new URL('/rider/login', req.url))
     const user = await decodeToken(token)
     if (!user || user.role !== 'RIDER') {
-      // Logged in but not a rider → rider login
       return NextResponse.redirect(new URL('/rider/login', req.url))
     }
     return NextResponse.next()
   }
 
-  // ── 3. Regular app pages — block riders from accessing them ─────────────
-  // If the path is not a public page and not in the rider-allowed list,
-  // and the user is a RIDER → redirect them to their dashboard
-  const isPublic = PUBLIC_PAGES.some(p => pathname === p || pathname.startsWith(p + '/'))
+  // ── 4. All other protected pages — riders are NOT welcome ─────────────────
+  const isPublic    = PUBLIC_PAGES.some(p => pathname === p || pathname.startsWith(p + '/'))
   const isRiderAllowed = RIDER_ALLOWED_PAGES.some(p => pathname.startsWith(p))
-  const isApiRoute = pathname.startsWith('/api/')
+  const isApiRoute  = pathname.startsWith('/api/')
   const isStaticFile = pathname.startsWith('/_next/') || pathname.includes('.')
 
   if (!isPublic && !isRiderAllowed && !isApiRoute && !isStaticFile) {
@@ -97,8 +112,8 @@ export async function middleware(req: NextRequest) {
     if (token) {
       const user = await decodeToken(token)
       if (user?.role === 'RIDER') {
-        // Rider trying to access a buyer/seller page → back to dashboard
-        return NextResponse.redirect(new URL('/rider-dashboard', req.url))
+        // Rider trying to access any buyer/seller/marketplace page → force logout
+        return forceRiderLogout(req)
       }
     }
   }
@@ -109,6 +124,10 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
+    '/login',
+    '/login/:path*',
+    '/signup',
+    '/signup/:path*',
     '/rider-dashboard/:path*',
     '/rider-dashboard',
     '/marketplace/:path*',

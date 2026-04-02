@@ -58,21 +58,21 @@ function LoginForm() {
         localStorage.setItem('userRole', data.user.role || '')
         localStorage.setItem('userId',   data.user.id)
 
-        // ── Store token in cookie so middleware can enforce role-based routing ──
         document.cookie = `token=${data.token}; path=/; SameSite=Lax; max-age=${60 * 60 * 24 * 7}`
 
         window.dispatchEvent(new Event('auth-change'))
+        router.push('/marketplace')
 
-        // ── If a RIDER somehow logs in via the regular login, send them to their dashboard ──
-        if (data.user.role === 'RIDER') {
-          router.push('/rider-dashboard')
-        } else {
-          router.push('/marketplace')
-        }
+      } else if (response.status === 403 && data.isRider) {
+        // ── Rider tried to log in here — show clear message, do NOT log them in ──
+        setError('__RIDER__')
+
       } else if (response.status === 403 && data.suspended) {
         setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+
       } else if (response.status === 429) {
         setError('Too many login attempts. Please wait a few minutes and try again.')
+
       } else {
         setError(data.error || 'Login failed')
       }
@@ -115,6 +115,29 @@ function LoginForm() {
             </div>
           )}
 
+          {/* ── Rider-specific error block ─────────────────────────────────── */}
+          {error === '__RIDER__' ? (
+            <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl flex-shrink-0">🚴</span>
+                <div>
+                  <p className="font-semibold text-purple-900 text-sm">Rider Account Detected</p>
+                  <p className="text-purple-700 text-sm mt-1">
+                    Rider accounts cannot access the marketplace. Please use the Rider Login instead.
+                  </p>
+                  <Link
+                    href="/rider/login"
+                    className="inline-block mt-3 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Go to Rider Login →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : error ? (
+            <p className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</p>
+          ) : null}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
@@ -148,10 +171,6 @@ function LoginForm() {
               </Link>
             </div>
 
-            {error && (
-              <p className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</p>
-            )}
-
             <button
               type="submit"
               disabled={loading}
@@ -163,7 +182,7 @@ function LoginForm() {
 
           <div className="mt-6 text-center">
             <p className="text-gray-600 text-sm">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/signup" className="text-BATAMART-primary font-semibold hover:underline">Sign Up</Link>
             </p>
           </div>
@@ -196,7 +215,5 @@ function buildSuspensionMessage(reason: string | null, until: string | null): st
   if (untilDate.getFullYear() - now.getFullYear() > 50) {
     return `Your account has been permanently suspended.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
   }
-  return `Your account is suspended until ${untilDate.toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  })}.\n\nReason: ${reasonText}.`
+  return `Your account is suspended until ${untilDate.toLocaleDateString('en-NG', { dateStyle: 'long' })}.\n\nReason: ${reasonText}\n\nContact support if you believe this is an error.`
 }
