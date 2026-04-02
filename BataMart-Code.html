@@ -6747,8 +6747,10 @@ export default function MarketplacePage() {
   const fetchProducts = async () =&gt; {
     setLoading(true)
     try {
+      const token = localStorage.getItem('token')
+      if (!token) return
       const url = selectedCategory === 'All' ? '/api/products' : `/api/products?category=${encodeURIComponent(selectedCategory)}`
-      const res = await fetch(url)
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) setAllProducts((data.products || []).map((p: any) =&gt; ({ ...p, isTrending: Math.random() &gt; 0.7, isNew: Math.random() &gt; 0.8 })))
     } catch { }
@@ -6857,7 +6859,7 @@ export default function MarketplacePage() {
             &lt;div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0"&gt;
               &lt;Search className="w-4 h-4 text-BATAMART-primary" /&gt;
             &lt;/div&gt;
-            &lt;span className="text-sm font-bold text-BATAMART-primary"&gt;Search for &amp;quot;{searchInput}&amp;quot;&lt;/span&gt;
+            &lt;span className="text-sm font-bold text-BATAMART-primary"&gt;Search for "{searchInput}"&lt;/span&gt;
             &lt;ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" /&gt;
           &lt;/button&gt;
         )}
