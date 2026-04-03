@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     console.log('\n🔄 STEP 2: Idempotency check')
 
     const existingPayment = await prisma.payment.findFirst({
-      where: { transactionId: reference },
+      where:   { transactionId: reference },
       include: { order: { select: { id: true, orderNumber: true } } },
     })
 
@@ -84,21 +84,21 @@ export async function GET(request: NextRequest) {
     console.log('\n📋 STEP 3: Extracting Metadata')
 
     type CartItem = {
-      productId: string
-      name: string
-      price: number
-      quantity: number
-      category: string
-      sellerId: string
+      productId:  string
+      name:       string
+      price:      number
+      quantity:   number
+      category:   string
+      sellerId:   string
       sellerName: string
       orderNote?: string
     }
 
     const meta = verifyData.data.metadata as {
-      userId: string
-      cartItems: CartItem[]
-      deliveryFee: number
-      fees: ReturnType<typeof calculateFees>
+      userId:           string
+      cartItems:        CartItem[]
+      perOrderDelivery: number
+      distinctSellers:  number
     }
 
     if (!meta?.userId || !Array.isArray(meta?.cartItems) || meta.cartItems.length === 0) {
@@ -108,15 +108,16 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Metadata OK — User:', meta.userId, '| Items:', meta.cartItems.length)
 
-    // STEP 4: Fetch buyer
+    // STEP 4: Fetch buyer (include universityId for batch campus-scoping)
     console.log('\n👤 STEP 4: Fetching Buyer')
 
     const buyer = await prisma.user.findUnique({
-      where: { id: meta.userId },
+      where:  { id: meta.userId },
       select: {
         id: true, name: true, email: true,
         hostelName: true, roomNumber: true,
         phone: true, landmark: true,
+        universityId: true,
       },
     })
 
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest) {
 
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
-        where: { id: item.productId },
+        where:  { id: item.productId },
         select: { id: true, name: true, quantity: true, isActive: true },
       })
 
@@ -152,23 +153,18 @@ export async function GET(request: NextRequest) {
       console.log(`✅ ${item.name}: OK (stock: ${product.quantity})`)
     }
 
-    // STEP 6: Create orders
-    // createOrders runs each seller's work inside a Prisma $transaction and uses
-    // updateMany with a `quantity >= required` guard to atomically claim stock.
-    // If two buyers race for the last unit, the second one gets STOCK_GONE thrown
-    // from inside the transaction, which we catch and redirect cleanly below.
-    console.log('\n💰 STEP 6: Creating Orders')
-
-    const subtotal = meta.cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    const fees = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
+    // STEP 6: Create orders + DeliveryBatch
+    // createOrders creates ONE DeliveryBatch then one Order per seller group.
+    // Each order carries a full ₦800 delivery fee.
+    // updateMany with quantity >= guard atomically claims stock.
+    // If two buyers race for the last unit, the second gets STOCK_GONE thrown.
+    console.log('\n💰 STEP 6: Creating Orders + DeliveryBatch')
 
     let orders: Awaited<ReturnType<typeof createOrders>>
     try {
-      orders = await createOrders(meta.cartItems, buyer, fees, reference)
+      orders = await createOrders(meta.cartItems, buyer, reference)
     } catch (createErr) {
-      // FIX 3 (continued): Handle the STOCK_GONE error thrown by the
-      // TOCTOU-safe updateMany guard inside createOrders. We extract the
-      // product name from the error message and redirect with a friendly error.
+      // Handle the STOCK_GONE error thrown by the TOCTOU-safe updateMany guard.
       if (createErr instanceof Error && createErr.message.startsWith('STOCK_GONE:')) {
         const [, , productName] = createErr.message.split(':')
         console.error('❌ Stock claimed by concurrent buyer for:', productName)
@@ -188,20 +184,20 @@ export async function GET(request: NextRequest) {
     console.log('\n🔔 STEP 7: Queueing Notifications')
 
     const sellerMap = new Map<string, {
-      orderId: string
+      orderId:     string
       orderNumber: string
-      orderNote?: string
-      itemsList: string
+      orderNote?:  string
+      itemsList:   string
     }>()
 
     for (const order of orders) {
       if (order.sellerId && !sellerMap.has(order.sellerId)) {
         const sellerItems = meta.cartItems.filter(i => i.sellerId === order.sellerId)
         sellerMap.set(order.sellerId, {
-          orderId: order.id,
+          orderId:     order.id,
           orderNumber: order.orderNumber,
-          orderNote: sellerItems[0]?.orderNote,
-          itemsList: sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', '),
+          orderNote:   sellerItems[0]?.orderNote,
+          itemsList:   sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', '),
         })
       }
     }
@@ -263,15 +259,17 @@ export async function GET(request: NextRequest) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Seller notification helper — all imports are dynamic so a missing module
-// never crashes the verify route
+// never crashes the verify route.
+// Restored exactly from original: in-app bell, note notification, push,
+// and full email template (only when buyer left a note).
 // ─────────────────────────────────────────────────────────────────────────────
 async function notifySellerOfNewOrder(
-  sellerId: string,
-  orderId: string,
+  sellerId:    string,
+  orderId:     string,
   orderNumber: string,
-  orderNote: string | undefined,
-  buyerName: string,
-  itemsList: string,
+  orderNote:   string | undefined,
+  buyerName:   string,
+  itemsList:   string,
 ) {
   const hasNote = Boolean(orderNote?.trim())
 
@@ -284,9 +282,9 @@ async function notifySellerOfNewOrder(
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-      where: { id: sellerId },
-      select: { email: true },
-    }).catch(() => null)
+        where:  { id: sellerId },
+        select: { email: true },
+      }).catch(() => null)
     : null
 
   const tasks: Promise<any>[] = []
@@ -294,21 +292,22 @@ async function notifySellerOfNewOrder(
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId: sellerId,
-        type: 'ORDER_PLACED',
-        title: '🛒 New Order Received!',
+        userId:  sellerId,
+        type:    'ORDER_PLACED',
+        title:   '🛒 New Order Received!',
         message: `You have a new order (#${orderNumber}) for ${itemsList}`,
         orderId,
         metadata: { orderNumber, buyerName, itemsList },
       })
     )
 
+    // Separate in-app notification for the buyer's note
     if (hasNote) {
       tasks.push(
         notifMod.createNotification({
-          userId: sellerId,
-          type: 'ORDER_PLACED',
-          title: '📝 Note from Buyer',
+          userId:  sellerId,
+          type:    'ORDER_PLACED',
+          title:   '📝 Note from Buyer',
           message: `For order #${orderNumber}: "${orderNote}"`,
           orderId,
           metadata: { orderNumber, orderNote },
@@ -321,11 +320,12 @@ async function notifySellerOfNewOrder(
     tasks.push(pushMod.notifyNewOrder(sellerId, orderNumber))
   }
 
+  // Email only fires when the buyer left a note (same as original)
   if (hasNote && seller?.email && emailMod?.sendEmail) {
     const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to: seller.email,
+        to:      seller.email,
         subject: `🎉 New Order #${orderNumber} — BATAMART`,
         html: `
 <!DOCTYPE html>

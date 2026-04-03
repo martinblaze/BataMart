@@ -13,10 +13,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { orderId } = await request.json()
+    const { batchId } = await request.json()
 
-    if (!orderId) {
-      return NextResponse.json({ error: 'Order ID required' }, { status: 400 })
+    if (!batchId) {
+      return NextResponse.json({ error: 'Batch ID required' }, { status: 400 })
     }
 
     // ── Block if rider has a pending dispute pickup ───────────────────────
@@ -39,118 +39,139 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // ── Block if rider has any other active delivery ──────────────────────
-    const activeDelivery = await prisma.order.findFirst({
+    // ── Block if rider already has an active batch ────────────────────────
+    const activeBatch = await prisma.deliveryBatch.findFirst({
       where: {
         riderId: user.id,
-        status:  { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] },
-        isDisputed: false,
+        status:  { in: ['RIDER_ASSIGNED', 'IN_PROGRESS'] },
       },
-      select: { orderNumber: true, status: true },
+      select: { batchNumber: true },
     })
 
-    if (activeDelivery) {
+    if (activeBatch) {
       return NextResponse.json({
-        error:       `You still have an active delivery (Order #${activeDelivery.orderNumber} — ${activeDelivery.status.replace('_', ' ')}). Complete it first.`,
+        error:       `You still have an active batch (${activeBatch.batchNumber}). Complete it first.`,
         blockReason: 'ACTIVE_DELIVERY',
       }, { status: 400 })
     }
 
-    // ── Fetch order ───────────────────────────────────────────────────────
-    const order = await prisma.order.findUnique({
-      where:   { id: orderId },
+    // ── Fetch the batch with all its orders ───────────────────────────────
+    const batch = await prisma.deliveryBatch.findUnique({
+      where:   { id: batchId },
       include: {
-        product: true,
-        buyer:   { select: { name: true, phone: true, universityId: true } },
-        seller:  { select: { name: true, phone: true } },
+        orders: {
+          select: {
+            id:          true,
+            orderNumber: true,
+            status:      true,
+            buyerId:     true,
+            sellerId:    true,
+            product:     { select: { name: true } },
+          },
+        },
+        buyer: { select: { universityId: true } },
       },
     })
 
-    if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    if (!batch) {
+      return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
     }
 
-    // ── University cross-check — rider can only take orders from same campus ─
-    // We check buyer's universityId as the authoritative scope on the order.
-    if (user.universityId && order.buyer.universityId !== user.universityId) {
+    // Race condition: another rider accepted between the findFirst check and here
+    if (batch.riderId) {
+      return NextResponse.json({ error: 'Batch already assigned to another rider' }, { status: 409 })
+    }
+
+    if (batch.status !== 'PENDING') {
+      return NextResponse.json({ error: 'Batch is no longer available' }, { status: 409 })
+    }
+
+    // ── University cross-check ────────────────────────────────────────────
+    if (user.universityId && batch.buyer.universityId !== user.universityId) {
       return NextResponse.json(
-        { error: 'This order is outside your campus area.' },
+        { error: 'This batch is outside your campus area.' },
         { status: 403 }
       )
     }
 
-    if (order.status !== 'PENDING') {
-      return NextResponse.json({ error: 'Order already assigned or completed' }, { status: 400 })
-    }
+    const riderSharePerOrder = 560
+    const totalRiderEscrow   = riderSharePerOrder * batch.orders.length
 
-    if (order.riderId) {
-      return NextResponse.json({ error: 'Order already has a rider' }, { status: 400 })
-    }
+    // ── Atomic assignment ─────────────────────────────────────────────────
+    await prisma.$transaction(async (tx) => {
+      // Assign rider to the batch
+      await tx.deliveryBatch.update({
+        where: { id: batchId },
+        data:  {
+          riderId: user.id,
+          status:  'RIDER_ASSIGNED',
+        },
+      })
 
-    const riderShare = 560
+      // Assign rider to every order in the batch + flip to RIDER_ASSIGNED
+      await tx.order.updateMany({
+        where: { batchId },
+        data:  {
+          riderId:         user.id,
+          status:          'RIDER_ASSIGNED',
+          riderAssignedAt: new Date(),
+        },
+      })
 
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.order.update({
-          where: { id: orderId },
-          data: {
-            riderId:         user.id,
-            status:          'RIDER_ASSIGNED',
-            riderAssignedAt: new Date(),
-          },
-        })
+      // Escrow the full rider share for all orders at once
+      const rider = await tx.user.findUnique({
+        where:  { id: user.id },
+        select: { pendingBalance: true },
+      })
+      const balBefore = Number(rider?.pendingBalance ?? 0)
 
-        const rider = await tx.user.findUnique({
-          where:  { id: user.id },
-          select: { pendingBalance: true },
-        })
+      await tx.user.update({
+        where: { id: user.id },
+        data:  { pendingBalance: { increment: totalRiderEscrow } },
+      })
 
-        await tx.transaction.create({
-          data: {
-            userId:        user.id,
-            type:          'ESCROW',
-            amount:        riderShare,
-            description:   `Escrow for delivery: ${order.product.name} (Order: ${order.orderNumber})`,
-            reference:     `${order.orderNumber}-RIDER-ESCROW`,
-            balanceBefore: rider?.pendingBalance || 0,
-            balanceAfter:  (rider?.pendingBalance || 0) + riderShare,
-          },
-        })
+      await tx.transaction.create({
+        data: {
+          userId:        user.id,
+          type:          'ESCROW',
+          amount:        totalRiderEscrow,
+          description:   `Escrow for batch: ${batch.batchNumber} (${batch.orders.length} order${batch.orders.length > 1 ? 's' : ''})`,
+          reference:     `${batch.batchNumber}-RIDER-ESCROW`,
+          balanceBefore: balBefore,
+          balanceAfter:  balBefore + totalRiderEscrow,
+        },
+      })
+    }, { timeout: 15000, maxWait: 20000 })
 
-        await tx.user.update({
-          where: { id: user.id },
-          data:  { pendingBalance: { increment: riderShare } },
-        })
-      },
-      { timeout: 15000, maxWait: 20000 }
+    // ── Notify buyer + sellers (fire-and-forget) ──────────────────────────
+    Promise.allSettled(
+      batch.orders.map(order =>
+        import('@/lib/notification')
+          .then(({ notifyRiderAssigned }) =>
+            notifyRiderAssigned(
+              order.id,
+              order.buyerId,
+              order.sellerId,
+              user.id,
+              user.name,
+              order.orderNumber
+            )
+          )
+          .catch(err => console.error(`Rider-assigned notification failed for ${order.orderNumber}:`, err))
+      )
     )
 
-    Promise.allSettled([
-      import('@/lib/notification').then(({ notifyRiderAssigned }) =>
-        notifyRiderAssigned(
-          order.id,
-          order.buyerId,
-          order.sellerId,
-          user.id,
-          user.name,
-          order.orderNumber
-        )
-      ),
-    ]).then(results => {
-      results.forEach(r => {
-        if (r.status === 'rejected') console.error('Rider assigned notification failed:', r.reason)
-      })
-    })
-
     return NextResponse.json({
-      success:  true,
-      message:  'Order accepted successfully',
-      riderFee: riderShare,
+      success:   true,
+      message:   `Batch accepted! ${batch.orders.length} order${batch.orders.length > 1 ? 's' : ''} to pick up.`,
+      riderFee:  totalRiderEscrow,
+      batchNumber: batch.batchNumber,
+      orderCount:  batch.orders.length,
     })
   } catch (error) {
-    console.error('Accept order error:', error)
+    console.error('Accept batch error:', error)
     return NextResponse.json({
-      error:   'Failed to accept order',
+      error:   'Failed to accept batch',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }

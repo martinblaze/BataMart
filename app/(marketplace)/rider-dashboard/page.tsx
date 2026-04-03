@@ -1,35 +1,43 @@
 // app/(marketplace)/rider-dashboard/page.tsx
-// ── FIX #7 (race condition): acceptOrder uses authFetch which handles 409
-//    conflict responses from the server. The server must use a DB transaction
-//    to atomically check + assign the order, so only one rider wins.
+// ── Batch delivery model:
+//    • Rider sees DeliveryBatches, not individual orders in the available section.
+//    • Each batch may contain 1-N orders (one per seller from buyer's cart).
+//    • Rider accepts the whole batch at once (one tap).
+//    • Inside My Active Batches, each order has its own status buttons.
+//    • Buyer gets notified PER ORDER as each one is picked up / delivered.
+//    • Rider earns ₦560 per order in the batch.
 //
-// ── FIX #8 (stock reservation): No change needed here — stock locking
-//    is handled server-side in the payment flow.
-//
-// ── FIX #10 (alert/confirm dialogs): All alert() and confirm() calls
-//    replaced with inline toast/banner UI. No more browser popups.
-//
-// ── FIX #6: Uses authFetch so expired tokens auto-redirect to /login.
-//
-// ── Rider availability: If the toggle API fails, the UI reverts to the
-//    previous state instead of staying optimistically wrong.
+// ── Race condition: accept uses batchId, server returns 409 if already taken.
+// ── Availability revert: optimistic UI rolls back if API fails.
+// ── No alert() / confirm() — all feedback via inline Toast.
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, AlertTriangle, MapPin, Phone, Package, CheckCircle, X } from 'lucide-react'
+import {
+  Loader2, AlertTriangle, MapPin, Phone, Package,
+  CheckCircle, X, ShoppingBag, ArrowRight, Bike,
+} from 'lucide-react'
 import { authFetch } from '@/lib/auth-client'
 
-// ── Simple inline toast — no alert() ─────────────────────────────────────────
-function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) {
+// ── Inline Toast ──────────────────────────────────────────────────────────────
+function Toast({
+  message,
+  type,
+  onClose,
+}: {
+  message: string
+  type:    'success' | 'error' | 'info'
+  onClose: () => void
+}) {
   const colors = {
     success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
     error:   'bg-red-50 border-red-200 text-red-800',
     info:    'bg-blue-50 border-blue-200 text-blue-800',
   }
   return (
-    <div className={`fixed top-4 left-0 right-0 z-50 flex justify-center px-4`}>
-      <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg max-w-sm w-full ${colors[type]}`}>
+    <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+      <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg max-w-sm w-full pointer-events-auto ${colors[type]}`}>
         <p className="text-sm font-semibold flex-1">{message}</p>
         <button onClick={onClose} className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity">
           <X className="w-4 h-4" />
@@ -39,17 +47,32 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
   )
 }
 
+// ── Order status badge ────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    RIDER_ASSIGNED: 'bg-indigo-100 text-indigo-700',
+    PICKED_UP:      'bg-blue-100 text-blue-700',
+    ON_THE_WAY:     'bg-amber-100 text-amber-700',
+    DELIVERED:      'bg-emerald-100 text-emerald-700',
+  }
+  return (
+    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${map[status] ?? 'bg-gray-100 text-gray-500'}`}>
+      {status.replace(/_/g, ' ')}
+    </span>
+  )
+}
+
 export default function RiderDashboardPage() {
   const router = useRouter()
-  const [rider, setRider] = useState<any>(null)
-  const [availableOrders, setAvailableOrders] = useState<any[]>([])
-  const [disputePickups, setDisputePickups] = useState<any[]>([])
-  const [myDeliveries, setMyDeliveries] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isAvailable, setIsAvailable] = useState(true)
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
 
-  // ── FIX #10: Toast state instead of alert() ───────────────────────────────
+  const [rider,            setRider]            = useState<any>(null)
+  const [availableBatches, setAvailableBatches] = useState<any[]>([])
+  const [disputePickups,   setDisputePickups]   = useState<any[]>([])
+  const [myBatches,        setMyBatches]        = useState<any[]>([])
+  const [loading,          setLoading]          = useState(true)
+  const [isAvailable,      setIsAvailable]      = useState(true)
+  const [actionLoading,    setActionLoading]    = useState<Record<string, boolean>>({})
+
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type })
@@ -60,24 +83,25 @@ export default function RiderDashboardPage() {
     const token = localStorage.getItem('token')
     if (!token) { router.push('/login'); return }
     fetchRiderData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchRiderData = async () => {
     try {
-      const [profileRes, ordersRes, deliveriesRes] = await Promise.all([
+      const [profileRes, batchesRes, myBatchesRes] = await Promise.all([
         authFetch('/api/auth/me'),
         authFetch('/api/riders/available-orders'),
         authFetch('/api/riders/my-deliveries'),
       ])
 
-      const profileData    = await profileRes.json()
-      const ordersData     = await ordersRes.json()
-      const deliveriesData = await deliveriesRes.json()
+      const profileData   = await profileRes.json()
+      const batchesData   = await batchesRes.json()
+      const myBatchData   = await myBatchesRes.json()
 
       setRider(profileData.user)
-      setAvailableOrders(ordersData.orders || [])
-      setDisputePickups(ordersData.disputePickups || [])
-      setMyDeliveries(deliveriesData.deliveries || [])
+      setAvailableBatches(batchesData.batches        || [])
+      setDisputePickups(batchesData.disputePickups   || [])
+      setMyBatches(myBatchData.batches               || [])
       setIsAvailable(profileData.user.isAvailable)
     } catch (error) {
       console.error('Error fetching rider data:', error)
@@ -86,20 +110,17 @@ export default function RiderDashboardPage() {
     }
   }
 
-  // ── FIX (availability revert): Save previous state so we can roll back ────
+  // ── Toggle availability ───────────────────────────────────────────────────
   const toggleAvailability = async () => {
     if (actionLoading['toggle-availability']) return
     const previousState = isAvailable
     setActionLoading(prev => ({ ...prev, 'toggle-availability': true }))
-
-    // Optimistic update
-    setIsAvailable(!previousState)
+    setIsAvailable(!previousState) // optimistic
 
     try {
       const res = await authFetch('/api/riders/toggle-availability', { method: 'POST' })
       if (!res.ok) {
-        // Revert on failure instead of staying in wrong state
-        setIsAvailable(previousState)
+        setIsAvailable(previousState) // revert
         showToast('Failed to update availability. Please try again.', 'error')
       } else {
         showToast(`You are now ${!previousState ? 'available' : 'unavailable'} for orders.`, 'success')
@@ -112,40 +133,46 @@ export default function RiderDashboardPage() {
     }
   }
 
-  // ── FIX #7: Handle 409 conflict (another rider grabbed this order) ────────
-  const acceptOrder = async (orderId: string) => {
-    if (actionLoading[`accept-${orderId}`]) return
-    setActionLoading(prev => ({ ...prev, [`accept-${orderId}`]: true }))
+  // ── Accept a whole batch ──────────────────────────────────────────────────
+  const acceptBatch = async (batchId: string) => {
+    if (actionLoading[`accept-${batchId}`]) return
+    setActionLoading(prev => ({ ...prev, [`accept-${batchId}`]: true }))
+
     try {
-      const res = await authFetch('/api/riders/accept-order', {
+      const res  = await authFetch('/api/riders/accept-order', {
         method: 'POST',
-        body: JSON.stringify({ orderId }),
+        body:   JSON.stringify({ batchId }),
       })
       const data = await res.json()
+
       if (res.ok) {
-        showToast('Order accepted! Head to pickup location.', 'success')
+        showToast(
+          `Batch accepted! ${data.orderCount} order${data.orderCount > 1 ? 's' : ''} to pick up. You'll earn ₦${data.riderFee.toLocaleString()}.`,
+          'success'
+        )
         await fetchRiderData()
       } else if (res.status === 409) {
-        // Race condition — another rider accepted first
-        showToast('Sorry, another rider just accepted this order. Refreshing available orders.', 'info')
+        showToast('Another rider just accepted this batch. Refreshing…', 'info')
         await fetchRiderData()
       } else {
-        showToast(data.error || 'Failed to accept order. Please try again.', 'error')
+        showToast(data.error || 'Failed to accept batch. Please try again.', 'error')
       }
     } catch {
       showToast('Network error. Please check your connection.', 'error')
     } finally {
-      setActionLoading(prev => ({ ...prev, [`accept-${orderId}`]: false }))
+      setActionLoading(prev => ({ ...prev, [`accept-${batchId}`]: false }))
     }
   }
 
+  // ── Update individual order status ────────────────────────────────────────
   const updateStatus = async (orderId: string, status: string) => {
     if (actionLoading[`status-${orderId}`]) return
     setActionLoading(prev => ({ ...prev, [`status-${orderId}`]: true }))
+
     try {
-      const res = await authFetch('/api/riders/update-status', {
+      const res  = await authFetch('/api/riders/update-status', {
         method: 'POST',
-        body: JSON.stringify({ orderId, status }),
+        body:   JSON.stringify({ orderId, status }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -160,13 +187,15 @@ export default function RiderDashboardPage() {
     }
   }
 
+  // ── Dispute pickup ────────────────────────────────────────────────────────
   const markDisputePickedUp = async (orderId: string) => {
     if (actionLoading[`dispute-pickup-${orderId}`]) return
     setActionLoading(prev => ({ ...prev, [`dispute-pickup-${orderId}`]: true }))
+
     try {
-      const res = await authFetch('/api/riders/dispute-picked-up', {
+      const res  = await authFetch('/api/riders/dispute-picked-up', {
         method: 'POST',
-        body: JSON.stringify({ orderId }),
+        body:   JSON.stringify({ orderId }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -184,138 +213,139 @@ export default function RiderDashboardPage() {
 
   const hasDisputePickupPending = disputePickups.length > 0
 
+  // ── Active orders count across all batches ────────────────────────────────
+  const totalActiveOrders = myBatches.reduce((sum, b) => sum + b.orders.length, 0)
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      {/* ── FIX #10: Toast notification instead of alert() ── */}
+    <div className="min-h-screen bg-gray-50 py-6 px-4 pb-24">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-md p-6 mb-8">
-          <div className="flex justify-between items-center">
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Rider Dashboard</h1>
-              <p className="text-gray-600 mt-1">Welcome, {rider?.name}!</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Bike className="w-5 h-5 text-BATAMART-primary" />
+                <h1 className="text-xl font-black text-gray-900">Rider Dashboard</h1>
+              </div>
+              <p className="text-sm text-gray-500">Welcome back, {rider?.name}!</p>
             </div>
             <button
               onClick={toggleAvailability}
               disabled={actionLoading['toggle-availability']}
-              className={`px-6 py-3 rounded-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isAvailable ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+              className={`px-4 py-2 rounded-xl font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isAvailable
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-200'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
               }`}
             >
               {actionLoading['toggle-availability']
-                ? <><Loader2 className="w-5 h-5 animate-spin" /> Updating...</>
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
                 : isAvailable ? '🟢 Available' : '⚫ Unavailable'
               }
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-green-600">Completed</p>
-              <p className="text-2xl font-bold text-green-900">{rider?.completedOrders || 0}</p>
+          <div className="grid grid-cols-3 gap-3 mt-5">
+            <div className="bg-emerald-50 p-3 rounded-xl text-center">
+              <p className="text-2xl font-black text-emerald-700">{rider?.completedOrders || 0}</p>
+              <p className="text-xs font-semibold text-emerald-600 mt-0.5">Completed</p>
             </div>
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-blue-600">Active</p>
-              <p className="text-2xl font-bold text-blue-900">{myDeliveries.length}</p>
+            <div className="bg-blue-50 p-3 rounded-xl text-center">
+              <p className="text-2xl font-black text-blue-700">{totalActiveOrders}</p>
+              <p className="text-xs font-semibold text-blue-600 mt-0.5">Active Orders</p>
             </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-purple-600">Earnings</p>
-              <p className="text-2xl font-bold text-purple-900">₦{((rider?.completedOrders || 0) * 560).toLocaleString()}</p>
+            <div className="bg-violet-50 p-3 rounded-xl text-center">
+              <p className="text-2xl font-black text-violet-700">
+                ₦{((rider?.completedOrders || 0) * 560).toLocaleString()}
+              </p>
+              <p className="text-xs font-semibold text-violet-600 mt-0.5">Earned</p>
             </div>
           </div>
         </div>
 
-        {/* Dispute Pickup Jobs */}
+        {/* ── Dispute Pickup Jobs ───────────────────────────────────────── */}
         {hasDisputePickupPending && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h2 className="text-xl font-bold text-red-600">Return Pickup Required</h2>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <h2 className="text-base font-black text-red-600">Return Pickup Required</h2>
               <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">
                 {disputePickups.length} pending
               </span>
             </div>
 
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 mb-4 flex items-start gap-2">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 mb-3 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>
-                You must complete this return pickup before accepting new orders.
-                You will earn <strong>₦560</strong> once the item is confirmed received.
+                Complete this return pickup before accepting new orders.
+                You will earn <strong>₦560</strong> once confirmed.
               </span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {disputePickups.map((order: any) => {
                 const pickup = order.dispute?.pickupAddress as any
                 return (
-                  <div key={order.id} className="bg-white border-2 border-red-300 rounded-xl shadow-md p-6">
-                    <div className="flex justify-between items-start mb-4">
+                  <div key={order.id} className="bg-white border-2 border-red-300 rounded-2xl p-5">
+                    <div className="flex justify-between items-start mb-3">
                       <div>
-                        <span className="text-xs font-bold text-red-600 uppercase tracking-wide bg-red-50 px-2 py-1 rounded-full">
+                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">
                           Dispute Return
                         </span>
-                        <p className="text-sm text-gray-500 mt-1">#{order.orderNumber}</p>
+                        <p className="text-xs text-gray-400 mt-1">#{order.orderNumber}</p>
                         <p className="font-bold text-gray-900 mt-0.5">{order.product.name}</p>
                       </div>
                       <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">
-                        ₦560 on completion
+                        ₦560 on done
                       </span>
                     </div>
 
                     {order.dispute?.reason && (
-                      <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
-                        <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Reason for return</p>
+                      <div className="mb-3 p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
+                        <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Reason</p>
                         <p>{order.dispute.reason}</p>
                       </div>
                     )}
 
-                    <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <MapPin className="w-4 h-4 text-blue-500" />
-                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Collect from buyer</p>
+                    <div className="mb-3 p-3 bg-blue-50 rounded-xl">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                        <p className="text-xs font-bold text-blue-600 uppercase">Collect from buyer</p>
                       </div>
                       {pickup ? (
                         <div className="text-sm space-y-0.5">
-                          <p className="text-gray-800 font-medium">{pickup.hostel}{pickup.room ? `, Room ${pickup.room}` : ''}</p>
-                          {pickup.landmark && <p className="text-gray-500">{pickup.landmark}</p>}
-                          <p className="text-blue-700 font-medium flex items-center gap-1 mt-1">
+                          <p className="font-semibold text-gray-800">{pickup.hostel}{pickup.room ? `, Room ${pickup.room}` : ''}</p>
+                          {pickup.landmark && <p className="text-gray-500 text-xs">{pickup.landmark}</p>}
+                          <p className="text-blue-700 font-semibold flex items-center gap-1 mt-1">
                             <Phone className="w-3 h-3" /> {pickup.phone}
                           </p>
                         </div>
                       ) : (
                         <div className="text-sm space-y-0.5">
-                          <p className="text-gray-800 font-medium">{order.deliveryHostel}, Room {order.deliveryRoom}</p>
-                          {order.deliveryLandmark && <p className="text-gray-500">{order.deliveryLandmark}</p>}
-                          <p className="text-blue-700 font-medium flex items-center gap-1 mt-1">
+                          <p className="font-semibold text-gray-800">{order.deliveryHostel}, Room {order.deliveryRoom}</p>
+                          {order.deliveryLandmark && <p className="text-gray-500 text-xs">{order.deliveryLandmark}</p>}
+                          <p className="text-blue-700 font-semibold flex items-center gap-1 mt-1">
                             <Phone className="w-3 h-3" /> {order.deliveryPhone}
                           </p>
                         </div>
                       )}
                     </div>
 
-                    <div className="mb-4 p-3 bg-orange-50 rounded-lg">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Package className="w-4 h-4 text-orange-500" />
-                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Return item to admin / store</p>
-                      </div>
-                      <p className="text-sm text-gray-600">Contact admin for drop-off location if unsure.</p>
-                    </div>
-
                     <button
                       onClick={() => markDisputePickedUp(order.id)}
                       disabled={actionLoading[`dispute-pickup-${order.id}`]}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition-colors disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
                     >
                       {actionLoading[`dispute-pickup-${order.id}`]
                         ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
@@ -329,128 +359,265 @@ export default function RiderDashboardPage() {
           </div>
         )}
 
-        {/* Available Orders */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Available Orders ({availableOrders.length})
+        {/* ── My Active Batches ─────────────────────────────────────────── */}
+        {myBatches.length > 0 && (
+          <div>
+            <h2 className="text-base font-black text-gray-900 mb-3">
+              My Active Batch{myBatches.length > 1 ? 'es' : ''}
+            </h2>
+            <div className="space-y-4">
+              {myBatches.map((batch: any) => {
+                const deliveredCount = batch.orders.filter((o: any) => o.status === 'DELIVERED').length
+                const totalCount     = batch.orders.length
+
+                return (
+                  <div key={batch.id} className="bg-white rounded-2xl border-2 border-BATAMART-primary/20 shadow-sm overflow-hidden">
+                    {/* Batch header */}
+                    <div className="bg-BATAMART-primary/5 px-5 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-black text-BATAMART-primary uppercase tracking-wide">
+                          Active Batch · {totalCount} order{totalCount > 1 ? 's' : ''}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">#{batch.batchNumber}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                          {deliveredCount}/{totalCount} delivered
+                        </span>
+                        <p className="text-xs font-black text-BATAMART-primary mt-1">
+                          ₦{(totalCount * 560).toLocaleString()} total
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Delivery address (one buyer, same for all) */}
+                    <div className="px-5 py-3 border-b border-gray-50">
+                      <div className="flex items-start gap-2 bg-blue-50 rounded-xl p-3">
+                        <MapPin className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-blue-700">
+                            {batch.buyer.hostelName}
+                            {batch.buyer.roomNumber ? ` — Room ${batch.buyer.roomNumber}` : ''}
+                          </p>
+                          {batch.buyer.landmark && (
+                            <p className="text-xs text-blue-500 mt-0.5">{batch.buyer.landmark}</p>
+                          )}
+                          <div className="flex items-center gap-1 mt-1">
+                            <Phone className="w-3 h-3 text-blue-400" />
+                            <span className="text-xs font-semibold text-blue-600">{batch.buyer.phone}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Individual orders */}
+                    <div className="p-4 space-y-3">
+                      {batch.orders.map((order: any, idx: number) => (
+                        <div key={order.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                          {/* Order info row */}
+                          <div className="flex items-center gap-3 p-3">
+                            {order.product.images?.[0] ? (
+                              <img
+                                src={order.product.images[0]}
+                                alt={order.product.name}
+                                className="w-11 h-11 rounded-lg object-cover flex-shrink-0 bg-gray-100"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                <ShoppingBag className="w-5 h-5 text-gray-400" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-gray-800 truncate">{order.product.name}</p>
+                              <p className="text-xs text-gray-400 truncate">
+                                Pickup from: <span className="text-gray-600 font-semibold">{order.seller.name}</span>
+                              </p>
+                              {order.product.hostelName && (
+                                <p className="text-xs text-gray-400 truncate">{order.product.hostelName}</p>
+                              )}
+                              {order.seller.phone && (
+                                <p className="text-xs text-gray-400 flex items-center gap-1">
+                                  <Phone className="w-2.5 h-2.5" /> {order.seller.phone}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                              <StatusBadge status={order.status} />
+                              <span className="text-[10px] font-bold text-gray-400">#{idx + 1}</span>
+                            </div>
+                          </div>
+
+                          {/* Status action buttons */}
+                          {order.status !== 'DELIVERED' && (
+                            <div className="px-3 pb-3">
+                              {order.status === 'RIDER_ASSIGNED' && (
+                                <button
+                                  onClick={() => updateStatus(order.id, 'PICKED_UP')}
+                                  disabled={actionLoading[`status-${order.id}`]}
+                                  className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold
+                                             flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+                                >
+                                  {actionLoading[`status-${order.id}`]
+                                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating...</>
+                                    : <><Package className="w-3.5 h-3.5" /> Mark as Picked Up</>
+                                  }
+                                </button>
+                              )}
+                              {order.status === 'PICKED_UP' && (
+                                <button
+                                  onClick={() => updateStatus(order.id, 'ON_THE_WAY')}
+                                  disabled={actionLoading[`status-${order.id}`]}
+                                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold
+                                             flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+                                >
+                                  {actionLoading[`status-${order.id}`]
+                                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating...</>
+                                    : <><ArrowRight className="w-3.5 h-3.5" /> On The Way</>
+                                  }
+                                </button>
+                              )}
+                              {order.status === 'ON_THE_WAY' && (
+                                <button
+                                  onClick={() => updateStatus(order.id, 'DELIVERED')}
+                                  disabled={actionLoading[`status-${order.id}`]}
+                                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold
+                                             flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+                                >
+                                  {actionLoading[`status-${order.id}`]
+                                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating...</>
+                                    : <><CheckCircle className="w-3.5 h-3.5" /> Mark as Delivered</>
+                                  }
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {order.status === 'DELIVERED' && (
+                            <div className="px-3 pb-3">
+                              <div className="w-full py-2 bg-emerald-50 rounded-lg text-center text-xs font-bold text-emerald-600 flex items-center justify-center gap-1.5">
+                                <CheckCircle className="w-3.5 h-3.5" /> Delivered ✓
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Available Batches ─────────────────────────────────────────── */}
+        <div>
+          <h2 className="text-base font-black text-gray-900 mb-3">
+            Available Batches ({availableBatches.length})
           </h2>
 
           {hasDisputePickupPending && (
-            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded-xl text-sm text-yellow-800 flex items-center gap-2">
+            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-300 rounded-xl text-sm text-yellow-800 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              New orders are locked until you complete the return pickup above.
+              New batches are locked until you complete the return pickup above.
             </div>
           )}
 
-          {availableOrders.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center">
-              <p className="text-gray-500">No available orders at the moment</p>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 gap-4">
-              {availableOrders.map((order: any) => (
-                <div key={order.id} className={`bg-white rounded-xl shadow-md p-6 ${hasDisputePickupPending ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <p className="text-sm text-gray-500">#{order.orderNumber}</p>
-                      <p className="font-bold text-gray-900 mt-1">{order.product.name}</p>
-                    </div>
-                    <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">NEW</span>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    <p className="text-gray-600"><strong>Pickup:</strong> {order.product.hostelName}</p>
-                    <p className="text-gray-600"><strong>Delivery:</strong> {order.deliveryHostel}</p>
-                    <p className="text-green-600 font-bold">Earn: ₦560</p>
-                  </div>
-
-                  <button
-                    onClick={() => acceptOrder(order.id)}
-                    disabled={actionLoading[`accept-${order.id}`] || hasDisputePickupPending}
-                    className="w-full mt-4 bg-BATAMART-primary hover:bg-BATAMART-dark text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    {actionLoading[`accept-${order.id}`]
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Accepting...</>
-                      : 'Accept Order'
-                    }
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* My Active Deliveries */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">My Active Deliveries</h2>
-          {myDeliveries.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center">
-              <p className="text-gray-500">No active deliveries</p>
+          {availableBatches.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+              <Bike className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400 font-semibold text-sm">No available batches right now</p>
+              <p className="text-gray-300 text-xs mt-1">Check back soon</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {myDeliveries.map((delivery: any) => (
-                <div key={delivery.id} className="bg-white rounded-xl shadow-md p-6">
-                  <div className="flex justify-between items-start mb-4">
+              {availableBatches.map((batch: any) => (
+                <div
+                  key={batch.id}
+                  className={`bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden ${
+                    hasDisputePickupPending ? 'opacity-50 pointer-events-none' : ''
+                  }`}
+                >
+                  {/* Batch header */}
+                  <div className="bg-gray-50 px-5 py-3 flex items-center justify-between border-b border-gray-100">
                     <div>
-                      <p className="text-sm text-gray-500">#{delivery.orderNumber}</p>
-                      <p className="font-bold text-gray-900 mt-1">{delivery.product.name}</p>
+                      <span className="text-xs font-black text-BATAMART-primary bg-BATAMART-primary/10 px-2.5 py-1 rounded-full">
+                        {batch.orders.length} ORDER{batch.orders.length > 1 ? 'S' : ''} · 1 BATCH
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">#{batch.batchNumber}</p>
                     </div>
-                    <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold">
-                      {delivery.status.replace('_', ' ')}
-                    </span>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-4 mb-4 text-sm">
-                    <div>
-                      <p className="text-gray-600"><strong>Pickup:</strong></p>
-                      <p>{delivery.product.hostelName}</p>
-                      <p className="text-sm text-gray-500">{delivery.seller.phone}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600"><strong>Delivery:</strong></p>
-                      <p>{delivery.deliveryHostel}, {delivery.deliveryRoom}</p>
-                      <p className="text-sm text-gray-500">{delivery.deliveryPhone}</p>
+                    <div className="text-right">
+                      <p className="text-sm font-black text-emerald-600">
+                        ₦{(batch.orders.length * 560).toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-gray-400">you earn</p>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    {delivery.status === 'RIDER_ASSIGNED' && (
-                      <button
-                        onClick={() => updateStatus(delivery.id, 'PICKED_UP')}
-                        disabled={actionLoading[`status-${delivery.id}`]}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      >
-                        {actionLoading[`status-${delivery.id}`]
-                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
-                          : 'Mark as Picked Up'
-                        }
-                      </button>
-                    )}
-                    {delivery.status === 'PICKED_UP' && (
-                      <button
-                        onClick={() => updateStatus(delivery.id, 'ON_THE_WAY')}
-                        disabled={actionLoading[`status-${delivery.id}`]}
-                        className="flex-1 bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      >
-                        {actionLoading[`status-${delivery.id}`]
-                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
-                          : 'On The Way'
-                        }
-                      </button>
-                    )}
-                    {delivery.status === 'ON_THE_WAY' && (
-                      <button
-                        onClick={() => updateStatus(delivery.id, 'DELIVERED')}
-                        disabled={actionLoading[`status-${delivery.id}`]}
-                        className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      >
-                        {actionLoading[`status-${delivery.id}`]
-                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
-                          : 'Mark as Delivered'
-                        }
-                      </button>
-                    )}
+                  {/* Delivery address */}
+                  <div className="px-5 py-3 border-b border-gray-50">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-700">
+                          Deliver to: {batch.buyer.hostelName}
+                          {batch.buyer.roomNumber ? ` — Room ${batch.buyer.roomNumber}` : ''}
+                        </p>
+                        {batch.buyer.landmark && (
+                          <p className="text-xs text-gray-400">{batch.buyer.landmark}</p>
+                        )}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Phone className="w-2.5 h-2.5 text-gray-400" />
+                          <span className="text-xs text-gray-500">{batch.buyer.phone}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Orders list */}
+                  <div className="px-5 py-3 space-y-2">
+                    {batch.orders.map((order: any, idx: number) => (
+                      <div key={order.id} className="flex items-center gap-3">
+                        {order.product.images?.[0] ? (
+                          <img
+                            src={order.product.images[0]}
+                            alt={order.product.name}
+                            className="w-9 h-9 rounded-lg object-cover flex-shrink-0 bg-gray-100"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Package className="w-4 h-4 text-gray-400" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-800 truncate">{order.product.name}</p>
+                          <p className="text-xs text-gray-400">
+                            From: {order.seller.name}
+                            {order.product.hostelName ? ` · ${order.product.hostelName}` : ''}
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold text-gray-400 flex-shrink-0">#{idx + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Accept button */}
+                  <div className="px-5 pb-5">
+                    <button
+                      onClick={() => acceptBatch(batch.id)}
+                      disabled={actionLoading[`accept-${batch.id}`] || hasDisputePickupPending}
+                      className="w-full py-3 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-xl
+                                 font-bold text-sm shadow-md shadow-BATAMART-primary/20
+                                 flex items-center justify-center gap-2
+                                 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      {actionLoading[`accept-${batch.id}`]
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Accepting...</>
+                        : <>
+                            Accept Batch · ₦{(batch.orders.length * 560).toLocaleString()}
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                      }
+                    </button>
                   </div>
                 </div>
               ))}

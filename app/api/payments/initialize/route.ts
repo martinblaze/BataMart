@@ -10,18 +10,28 @@ export const dynamic = 'force-dynamic'
 // STANDARDIZED FEE STRUCTURE
 // calculateFees is imported by the verify route — both sides
 // must always compute fees identically from the same function.
+//
+// DELIVERY MODEL (batch):
+//   Each order in the cart gets its own full ₦800 delivery fee.
+//   Buyer pays ₦800 × number_of_orders (one per seller).
+//   Rider gets ₦560 per order = ₦560 × N total.
+//   Platform keeps ₦240 per order from delivery.
+//   Referral reward (₦120) fires ONCE per batch (not per order).
+//   The remaining ₦120 per order stays with the platform.
 // ============================================================
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
-  const PLATFORM_RATE = 0.05
-  const RIDER_SHARE = 560
-  // ₦120 goes to referrer (50% of old ₦240), ₦120 stays with platform
-  const PLATFORM_DELIVERY_CUT = 120
+  const PLATFORM_RATE         = 0.05
+  const RIDER_SHARE           = 560
+  // Platform keeps full ₦240 delivery cut per order.
+  // Referral (₦120) is deducted at batch level in processReferralReward,
+  // not here — so platformTotal here reflects the gross delivery cut.
+  const PLATFORM_DELIVERY_CUT = 240
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
-  const sellerShare = subtotal - platformFeeFromProducts
-  const riderShare = RIDER_SHARE
-  const platformTotal = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
-  const totalAmount = subtotal + deliveryFee
+  const sellerShare             = subtotal - platformFeeFromProducts
+  const riderShare              = RIDER_SHARE
+  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
+  const totalAmount             = subtotal + deliveryFee
 
   return {
     subtotal,
@@ -43,15 +53,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { productId, cartItems, deliveryFee = 800 } = body
+    const { productId, cartItems } = body
 
     type CartItem = {
-      productId: string
-      name: string
-      price: number
-      quantity: number
-      category: string
-      sellerId: string
+      productId:  string
+      name:       string
+      price:      number
+      quantity:   number
+      category:   string
+      sellerId:   string
       sellerName: string
       orderNote?: string
     }
@@ -62,7 +72,7 @@ export async function POST(request: NextRequest) {
       // Server always re-fetches price from DB — client-supplied price is IGNORED
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
-          where: { id: item.productId },
+          where:   { id: item.productId },
           include: { seller: true },
         })
         if (!product) {
@@ -71,24 +81,23 @@ export async function POST(request: NextRequest) {
         if (!product.isActive || product.quantity < item.quantity) {
           return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 })
         }
-        // Input length guard on order notes
         if (item.orderNote && String(item.orderNote).length > 300) {
           return NextResponse.json({ error: 'Order note must be under 300 characters' }, { status: 400 })
         }
         items.push({
-          productId: product.id,
-          name: product.name,
-          price: product.price, // ← always from DB, never from client
-          quantity: item.quantity,
-          category: product.category,
-          sellerId: product.sellerId,
+          productId:  product.id,
+          name:       product.name,
+          price:      product.price, // ← always from DB, never from client
+          quantity:   item.quantity,
+          category:   product.category,
+          sellerId:   product.sellerId,
           sellerName: product.seller.name,
-          orderNote: item.orderNote,
+          orderNote:  item.orderNote,
         })
       }
     } else if (productId) {
       const product = await prisma.product.findUnique({
-        where: { id: productId },
+        where:   { id: productId },
         include: { seller: true },
       })
       if (!product) {
@@ -98,14 +107,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Product unavailable' }, { status: 400 })
       }
       items = [{
-        productId: product.id,
-        name: product.name,
-        price: product.price,
-        quantity: 1,
-        category: product.category,
-        sellerId: product.sellerId,
+        productId:  product.id,
+        name:       product.name,
+        price:      product.price,
+        quantity:   1,
+        category:   product.category,
+        sellerId:   product.sellerId,
         sellerName: product.seller.name,
-        orderNote: body.orderNote,
+        orderNote:  body.orderNote,
       }]
     } else {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
@@ -117,9 +126,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You cannot buy your own product' }, { status: 400 })
     }
 
-    // Calculate totals
-    const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const fees = calculateFees(subtotal, deliveryFee)
+    // ── Calculate totals ──────────────────────────────────────────────────────
+    // Count distinct sellers = number of orders = number of ₦800 delivery fees
+    const distinctSellers  = new Set(items.map(i => i.sellerId)).size
+    const perOrderDelivery = 800
+    const totalDelivery    = perOrderDelivery * distinctSellers
+    const subtotal         = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+    // fees here represent the TOTAL for Paystack (all orders combined)
+    const totalSubtotal = subtotal
+    const totalAmount   = totalSubtotal + totalDelivery
 
     // APP_URL required
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL
@@ -131,27 +147,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
+    const reference   = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
     const callbackUrl = `${APP_URL.replace(/\/$/, '')}/api/payments/verify`
 
     console.log('💳 Initializing Paystack — reference:', reference, '| callback:', callbackUrl)
+    console.log(`🛒 Cart: ${items.length} item(s), ${distinctSellers} seller(s), total delivery ₦${totalDelivery}`)
 
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST',
+      method:  'POST',
       headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        Authorization:  `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: user.email || `${user.id}@batamart.app`,
-        amount: fees.totalAmount * 100, // kobo
+        email:        user.email || `${user.id}@batamart.app`,
+        amount:       totalAmount * 100, // kobo
         reference,
         callback_url: callbackUrl,
         metadata: {
-          userId: user.id,
-          cartItems: items,
-          deliveryFee,
-          fees,
+          userId:            user.id,
+          cartItems:         items,
+          perOrderDelivery,  // ← ₦800 per order, createOrders uses this per seller group
+          distinctSellers,
         },
       }),
     })
@@ -169,11 +186,11 @@ export async function POST(request: NextRequest) {
     console.log('✅ Paystack initialized — reference:', reference)
 
     return NextResponse.json({
-      success: true,
+      success:           true,
       authorization_url: paystackData.data.authorization_url,
-      reference: paystackData.data.reference,
-      deliveryFee: fees.deliveryFee,
-      totalAmount: fees.totalAmount,
+      reference:         paystackData.data.reference,
+      deliveryFee:       totalDelivery,
+      totalAmount,
     })
   } catch (error) {
     console.error('Payment init error:', error)
@@ -185,33 +202,50 @@ export async function POST(request: NextRequest) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// createOrders — called ONLY from the verify route after Paystack confirms
-// the payment. Never call this directly from any other route.
+// createOrders — called ONLY from the verify route after Paystack confirms.
+// Creates ONE DeliveryBatch then one Order per seller group.
+// Each order carries a full ₦800 delivery fee — NOT split.
 // ══════════════════════════════════════════════════════════════════════════════
 export async function createOrders(
   items: {
-    productId: string
-    name: string
-    price: number
-    quantity: number
-    category: string
-    sellerId: string
+    productId:  string
+    name:       string
+    price:      number
+    quantity:   number
+    category:   string
+    sellerId:   string
     sellerName: string
     orderNote?: string
   }[],
   user: {
-    id: string
-    hostelName?: string | null
-    roomNumber?: string | null
-    phone?: string | null
-    landmark?: string | null
+    id:           string
+    hostelName?:  string | null
+    roomNumber?:  string | null
+    phone?:       string | null
+    landmark?:    string | null
+    universityId?: string | null
   },
-  fees: ReturnType<typeof calculateFees>,
   paymentReference: string
 ) {
   console.log('📝 createOrders called — reference:', paymentReference)
 
-  // Group items by seller so each seller gets their own Order record
+  // ── STEP 1: Create the DeliveryBatch FIRST ──────────────────────────────────
+  // One batch per checkout session. All orders in this cart link to it.
+  const batchNumber = `BATCH-${crypto.randomUUID().replace(/-/g, '').substring(0, 12).toUpperCase()}`
+
+  const batch = await prisma.deliveryBatch.create({
+    data: {
+      batchNumber,
+      buyerId:          user.id,
+      universityId:     user.universityId ?? '',
+      paymentReference,
+      status:           'PENDING',
+    },
+  })
+
+  console.log('📦 DeliveryBatch created:', batchNumber)
+
+  // ── STEP 2: Group items by seller ───────────────────────────────────────────
   const sellerGroups = items.reduce<Record<string, typeof items>>((acc, item) => {
     if (!acc[item.sellerId]) acc[item.sellerId] = []
     acc[item.sellerId].push(item)
@@ -221,38 +255,35 @@ export async function createOrders(
   const createdOrders: Awaited<ReturnType<typeof prisma.order.create>>[] = []
 
   const notificationQueue: Array<{
-    orderId: string
-    buyerId: string
-    sellerId: string
+    orderId:     string
+    buyerId:     string
+    sellerId:    string
     orderNumber: string
-    itemsList: string
+    itemsList:   string
   }> = []
 
   const outOfStockAlerts: Array<{
-    sellerId: string
-    productId: string
+    sellerId:    string
+    productId:   string
     productName: string
   }> = []
 
+  // Each order gets a FULL ₦800 delivery fee (not split, not proportional)
+  const perOrderDelivery = 800
+
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    const proportion = fees.subtotal > 0 ? orderSubtotal / fees.subtotal : 1
-    const orderFees = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
+    const orderFees     = calculateFees(orderSubtotal, perOrderDelivery)
 
-    // FIX 1: Use crypto.randomUUID() instead of Date.now() + random suffix.
-    // Date.now() has millisecond resolution — two sellers processing in the same
-    // createOrders call can produce an identical timestamp, causing a unique
-    // constraint violation on orderNumber. UUID is globally unique by design.
     const orderNumber = `BATAMART-${crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase()}`
-    const itemsList = sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', ')
+    const itemsList   = sellerItems.map(i => `${i.name} (x${i.quantity})`).join(', ')
 
     console.log('🔨 Creating order:', orderNumber, 'for seller:', sellerId)
 
     try {
       const order = await prisma.$transaction(async (tx) => {
-        // FIX 2: Only fetch pendingBalance — availableBalance was dead data here.
         const seller = await tx.user.findUnique({
-          where: { id: sellerId },
+          where:  { id: sellerId },
           select: { pendingBalance: true },
         })
         if (!seller) throw new Error(`Seller not found: ${sellerId}`)
@@ -265,103 +296,94 @@ export async function createOrders(
         const newOrder = await tx.order.create({
           data: {
             orderNumber,
-            buyerId: user.id,
+            buyerId:            user.id,
             sellerId,
-            productId: sellerItems[0].productId,
-            productPrice: Number(orderSubtotal),
-            deliveryFee: Number(orderFees.deliveryFee),
-            totalAmount: Number(orderFees.totalAmount),
+            batchId:            batch.id,   // ← link to the batch
+            productId:          sellerItems[0].productId,
+            productPrice:       Number(orderSubtotal),
+            deliveryFee:        Number(orderFees.deliveryFee),
+            totalAmount:        Number(orderFees.totalAmount),
             platformCommission: Number(orderFees.platformTotal),
-            quantity: Number(sellerItems.reduce((sum, i) => sum + i.quantity, 0)),
-            deliveryHostel: String(user.hostelName ?? ''),
-            deliveryRoom: String(user.roomNumber ?? ''),
-            deliveryPhone: String(user.phone ?? ''),
-            deliveryLandmark: String(user.landmark ?? ''),
-            isPaid: true,
-            status: 'PENDING' as const,
+            quantity:           Number(sellerItems.reduce((sum, i) => sum + i.quantity, 0)),
+            deliveryHostel:     String(user.hostelName  ?? ''),
+            deliveryRoom:       String(user.roomNumber  ?? ''),
+            deliveryPhone:      String(user.phone       ?? ''),
+            deliveryLandmark:   String(user.landmark    ?? ''),
+            isPaid:             true,
+            status:             'PENDING' as const,
             orderNote,
             payment: {
               create: {
-                amount: Number(orderFees.totalAmount),
-                method: 'CARD' as const,
-                status: 'COMPLETED' as const,
+                amount:        Number(orderFees.totalAmount),
+                method:        'CARD' as const,
+                status:        'COMPLETED' as const,
                 transactionId: paymentReference,
-                paidAt: new Date(),
+                paidAt:        new Date(),
               },
             },
           },
         })
 
-        // FIX 3: TOCTOU-safe stock decrement.
-        // The verify route checks stock BEFORE calling createOrders, but two
-        // concurrent buyers could both pass that check for the last unit and
-        // then both enter this transaction. We guard against that by including
-        // a `where` filter that only matches rows with sufficient stock.
-        // If the updateMany affects 0 rows, the item was already snapped up —
-        // we throw immediately so Prisma rolls back the whole transaction and
-        // the second buyer gets a clean error rather than negative inventory.
+        // TOCTOU-safe stock decrement
         for (const item of sellerItems) {
           const updated = await tx.product.updateMany({
             where: {
-              id: item.productId,
-              quantity: { gte: Number(item.quantity) }, // only proceed if stock is still sufficient
+              id:       item.productId,
+              quantity: { gte: Number(item.quantity) },
             },
             data: { quantity: { decrement: Number(item.quantity) } },
           })
 
           if (updated.count === 0) {
-            // Stock was snatched between the pre-check and this transaction.
             throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
           }
 
-          // Check if stock just hit zero and deactivate if so.
-          // We re-fetch only the fields we need — updateMany doesn't return rows.
           const afterUpdate = await tx.product.findUnique({
-            where: { id: item.productId },
+            where:  { id: item.productId },
             select: { id: true, name: true, quantity: true },
           })
 
           if (afterUpdate && afterUpdate.quantity <= 0) {
             await tx.product.update({
               where: { id: item.productId },
-              data: { isActive: false },
+              data:  { isActive: false },
             })
             outOfStockAlerts.push({
               sellerId,
-              productId: afterUpdate.id,
+              productId:   afterUpdate.id,
               productName: afterUpdate.name,
             })
           }
         }
 
         // Credit seller's pending (escrow) balance
-        const sellerShare = Number(orderFees.sellerShare)
+        const sellerShare        = Number(orderFees.sellerShare)
         const sellerPendingBalance = Number(seller.pendingBalance ?? 0)
 
         await tx.user.update({
           where: { id: sellerId },
-          data: { pendingBalance: { increment: sellerShare } },
+          data:  { pendingBalance: { increment: sellerShare } },
         })
 
         await tx.transaction.createMany({
           data: [
             {
-              userId: sellerId,
-              type: 'ESCROW',
-              amount: sellerShare,
-              description: `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
-              reference: `${orderNumber}-SELLER-ESCROW`,
+              userId:        sellerId,
+              type:          'ESCROW',
+              amount:        sellerShare,
+              description:   `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
+              reference:     `${orderNumber}-SELLER-ESCROW`,
               balanceBefore: sellerPendingBalance,
-              balanceAfter: sellerPendingBalance + sellerShare,
+              balanceAfter:  sellerPendingBalance + sellerShare,
             },
             {
-              userId: user.id,
-              type: 'DEBIT',
-              amount: Number(orderFees.totalAmount),
-              description: `Payment for ${itemsList} (Order: ${orderNumber})`,
-              reference: `${orderNumber}-BUYER-PAYMENT`,
+              userId:        user.id,
+              type:          'DEBIT',
+              amount:        Number(orderFees.totalAmount),
+              description:   `Payment for ${itemsList} (Order: ${orderNumber})`,
+              reference:     `${orderNumber}-BUYER-PAYMENT`,
               balanceBefore: 0,
-              balanceAfter: 0,
+              balanceAfter:  0,
             },
           ],
         })
@@ -371,8 +393,8 @@ export async function createOrders(
 
       createdOrders.push(order)
       notificationQueue.push({
-        orderId: order.id,
-        buyerId: user.id,
+        orderId:     order.id,
+        buyerId:     user.id,
         sellerId,
         orderNumber,
         itemsList,
@@ -391,7 +413,6 @@ export async function createOrders(
       .catch(err => console.error(`⚠️  Notification failed for ${n.orderNumber}:`, err))
   }
 
-  // Fire out-of-stock alerts — non-blocking
   if (outOfStockAlerts.length > 0) {
     Promise.allSettled(
       outOfStockAlerts.map(alert =>
@@ -400,7 +421,7 @@ export async function createOrders(
     ).catch(() => { })
   }
 
-  console.log('🎉 All orders created:', createdOrders.length)
+  console.log('🎉 All orders created:', createdOrders.length, '| Batch:', batchNumber)
   return createdOrders
 }
 
@@ -416,9 +437,9 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-      where: { id: sellerId },
-      select: { email: true, name: true },
-    }).catch(() => null)
+        where:  { id: sellerId },
+        select: { email: true, name: true },
+      }).catch(() => null)
     : null
 
   const tasks: Promise<any>[] = []
@@ -426,10 +447,10 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId: sellerId,
-        type: 'ORDER_PLACED',
-        title: '⚠️ Product Out of Stock',
-        message: `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
+        userId:   sellerId,
+        type:     'ORDER_PLACED',
+        title:    '⚠️ Product Out of Stock',
+        message:  `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
         metadata: { productId, productName },
       })
     )
@@ -439,7 +460,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
     const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to: seller.email,
+        to:      seller.email,
         subject: `⚠️ "${productName}" is out of stock — BATAMART`,
         html: `
 <!DOCTYPE html>
@@ -453,7 +474,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
           <tr>
             <td align="center" style="padding-bottom:24px;">
               <span style="font-size:28px;font-weight:800;color:#111827;letter-spacing:-1px;">BATAMART</span>
-              <span style="font-size:12px;color:#6b7280;display:block;margin-top:2px;">UNIZIK Campus Marketplace</span>
+              <span style="font-size:12px;color:#6b7280;display:block;margin-top:2px;">Campus Marketplace</span>
             </td>
           </tr>
           <tr>
@@ -469,7 +490,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
                 </p>
               </div>
               <p style="font-size:14px;color:#6b7280;margin:0 0 24px;">
-                To start selling again, go to your shop and restock this product. It will become visible again automatically once you add more quantity.
+                To start selling again, go to your shop and restock this product.
               </p>
               <a href="${APP_URL}/my-shop"
                  style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;font-size:15px;font-weight:600;border-radius:10px;text-decoration:none;">
@@ -479,9 +500,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
           </tr>
           <tr>
             <td align="center" style="padding-top:24px;">
-              <p style="font-size:12px;color:#9ca3af;margin:0;">
-                BATAMART — UNIZIK Campus Marketplace · Awka, Anambra State
-              </p>
+              <p style="font-size:12px;color:#9ca3af;margin:0;">BATAMART — Campus Marketplace</p>
             </td>
           </tr>
         </table>

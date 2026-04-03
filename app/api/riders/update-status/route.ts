@@ -17,11 +17,12 @@ export async function POST(request: NextRequest) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       select: {
-        id: true,
-        riderId: true,
-        buyerId: true,
-        sellerId: true,
+        id:          true,
+        riderId:     true,
+        buyerId:     true,
+        sellerId:    true,
         orderNumber: true,
+        batchId:     true,
       },
     })
 
@@ -34,32 +35,61 @@ export async function POST(request: NextRequest) {
     }
 
     const updateData: any = { status }
-    if (status === 'DELIVERED') {
-      updateData.deliveredAt = new Date()
-    }
+    if (status === 'PICKED_UP') updateData.pickedUpAt  = new Date()
+    if (status === 'DELIVERED') updateData.deliveredAt = new Date()
 
-    // ── Database transaction only ─────────────────────────────────────────
+    // ── Database transaction ──────────────────────────────────────────────
     const updatedOrder = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id: orderId },
-        data: updateData,
+        data:  updateData,
       })
 
+      // Increment rider completed count when an order is delivered
       if (status === 'DELIVERED') {
         await tx.user.update({
           where: { id: user.id },
-          data: { completedOrders: { increment: 1 } },
+          data:  { completedOrders: { increment: 1 } },
         })
+      }
+
+      // ── Update batch status based on all orders ───────────────────────
+      if (order.batchId) {
+        if (status === 'DELIVERED') {
+          // Check if every other order in the batch is also DELIVERED
+          const batchOrders = await tx.order.findMany({
+            where:  { batchId: order.batchId },
+            select: { id: true, status: true },
+          })
+
+          const allDelivered = batchOrders.every(o =>
+            o.id === orderId
+              ? true               // this is the one we just set to DELIVERED
+              : o.status === 'DELIVERED'
+          )
+
+          await tx.deliveryBatch.update({
+            where: { id: order.batchId },
+            data:  { status: allDelivered ? 'COMPLETED' : 'IN_PROGRESS' },
+          })
+        } else if (status === 'PICKED_UP' || status === 'ON_THE_WAY') {
+          // At least one order is moving — batch is IN_PROGRESS
+          await tx.deliveryBatch.update({
+            where: { id: order.batchId },
+            data:  { status: 'IN_PROGRESS' },
+          })
+        }
       }
 
       return updated
     }, {
       timeout: 15000,
-      maxWait: 20000,
+      maxWait:  20000,
     })
 
     // ── Fire notifications after transaction (non-blocking) ───────────────
-    const riderName = user.name || 'Your rider'
+    // Buyer gets notified per individual order — intentional behaviour.
+    const riderName   = user.name || 'Your rider'
     const orderNumber = order.orderNumber
 
     Promise.allSettled([
@@ -71,7 +101,7 @@ export async function POST(request: NextRequest) {
         } = await import('@/lib/notification')
 
         const {
-          notifyOrderOnTheWay: pushOnTheWay,
+          notifyOrderOnTheWay:  pushOnTheWay,
           notifyOrderDelivered: pushDelivered,
         } = await import('@/lib/push/sendPushNotification')
 
@@ -104,7 +134,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Update status error:', error)
     return NextResponse.json({
-      error: 'Failed to update status',
+      error:   'Failed to update status',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }

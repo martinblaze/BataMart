@@ -13,30 +13,46 @@ export async function GET(request: NextRequest) {
     }
 
     if (!user.universityId) {
-      return NextResponse.json({ orders: [], disputePickups: [] })
+      return NextResponse.json({ batches: [], disputePickups: [] })
     }
 
-    // ── Regular pending orders — scoped to rider's university ──────────────
-    // Orders inherit universityId from the buyer who placed them.
-    // A rider only sees orders from buyers in their own university.
-    const orders = await prisma.order.findMany({
+    // ── Available batches ──────────────────────────────────────────────────
+    // A batch is available when:
+    //   • status is PENDING (no rider yet)
+    //   • riderId is null
+    //   • all orders inside belong to the rider's campus
+    const batches = await prisma.deliveryBatch.findMany({
       where: {
-        status:      'PENDING',
-        riderId:     null,
-        isDisputed:  false,
-        buyer: {
-          universityId: user.universityId,
-        },
+        status:       'PENDING',
+        riderId:      null,
+        universityId: user.universityId,
       },
       include: {
-        product: true,
-        seller:  { select: { name: true, phone: true } },
-        buyer:   { select: { name: true, phone: true } },
+        buyer: {
+          select: {
+            name:      true,
+            phone:     true,
+            hostelName: true,
+            roomNumber: true,
+            landmark:  true,
+          },
+        },
+        orders: {
+          include: {
+            product: {
+              select: { name: true, images: true, hostelName: true },
+            },
+            seller: {
+              select: { name: true, phone: true },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    // ── Dispute pickup jobs assigned specifically to this rider ────────────
+    // ── Dispute pickup jobs assigned to this rider ─────────────────────────
     const disputePickups = await prisma.order.findMany({
       where: {
         riderId:    user.id,
@@ -52,16 +68,17 @@ export async function GET(request: NextRequest) {
         buyer:   { select: { name: true, phone: true } },
         dispute: {
           select: {
-            id:             true,
-            reason:         true,
-            pickupAddress:  true,
+            id:            true,
+            reason:        true,
+            pickupAddress: true,
           },
         },
       },
     })
 
-    return NextResponse.json({ orders, disputePickups })
+    return NextResponse.json({ batches, disputePickups })
   } catch (error) {
+    console.error('available-orders error:', error)
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
   }
 }

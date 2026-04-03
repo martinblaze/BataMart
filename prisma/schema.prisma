@@ -48,6 +48,15 @@ enum OrderStatus {
   @@schema("public")
 }
 
+enum BatchStatus {
+  PENDING
+  RIDER_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+
+  @@schema("public")
+}
+
 enum TransactionType {
   CREDIT
   DEBIT
@@ -283,6 +292,10 @@ model User {
   sellerOrders    Order[]  @relation("SellerOrders")
   riderDeliveries Order[]  @relation("RiderDeliveries")
 
+  // DeliveryBatch relations
+  buyerBatches    DeliveryBatch[] @relation("BuyerBatches")
+  riderBatches    DeliveryBatch[] @relation("RiderBatches")
+
   reviewsGiven    Review[] @relation("UserReviewsGiven")
   reviewsReceived Review[] @relation("UserReviewsReceived")
 
@@ -319,6 +332,40 @@ model User {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([referralCode])
+  @@index([universityId])
+  @@schema("public")
+}
+
+// ── NEW: DeliveryBatch groups multiple orders from one checkout ──────────────
+// One batch per Paystack payment session. The rider accepts a whole batch
+// and gets ₦560 per order inside it. Referral fires once per batch.
+model DeliveryBatch {
+  id           String      @id @default(cuid())
+  batchNumber  String      @unique
+
+  buyerId      String
+  buyer        User        @relation("BuyerBatches", fields: [buyerId], references: [id])
+
+  riderId      String?
+  rider        User?       @relation("RiderBatches", fields: [riderId], references: [id])
+
+  universityId String
+
+  paymentReference String?
+
+  // Prevents referral reward from firing more than once per checkout session
+  referralPaid Boolean     @default(false)
+
+  status       BatchStatus @default(PENDING)
+
+  orders       Order[]
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([buyerId])
+  @@index([riderId])
+  @@index([status])
   @@index([universityId])
   @@schema("public")
 }
@@ -384,6 +431,10 @@ model Order {
   riderId String?
   rider   User?   @relation("RiderDeliveries", fields: [riderId], references: [id])
 
+  // ── NEW: link to the DeliveryBatch this order belongs to ──────────────────
+  batchId String?
+  batch   DeliveryBatch? @relation(fields: [batchId], references: [id])
+
   productPrice       Float
   deliveryFee        Float
   totalAmount        Float
@@ -422,6 +473,7 @@ model Order {
   @@index([buyerId])
   @@index([sellerId])
   @@index([riderId])
+  @@index([batchId])
   @@index([status])
   @@index([createdAt])
   @@index([orderedAt])

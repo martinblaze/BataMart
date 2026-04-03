@@ -6444,8 +6444,14 @@ import {
   Search, Star, Shield, ShoppingBag, Sparkles, Flame,
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
+  RefreshCw,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
+
+const PULL_THRESHOLD    = 130  // px the user must pull before release triggers refresh (long like TikTok)
+const PULL_MAX          = 175  // px max rubber-band travel
+const PULL_DEAD_ZONE    = 12   // px of downward movement before pull mode even activates
+const PULL_RESIST       = 0.38 // how much resistance to apply (lower = harder to pull)
 
 const ANIM_CSS = `
   @keyframes fadeSlideUp {
@@ -6535,6 +6541,24 @@ const ANIM_CSS = `
 
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* ── Pull-to-refresh ── */
+  @keyframes ptr-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .ptr-spinning { animation: ptr-spin 0.7s linear infinite; }
+
+  @keyframes ptr-bounce-in {
+    0%   { opacity: 0; transform: translateY(-16px) scale(0.85); }
+    60%  { transform: translateY(4px) scale(1.05); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .ptr-bounce { animation: ptr-bounce-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+  .ptr-indicator {
+    transition: opacity 0.2s ease;
+  }
 `
 
 const CATEGORIES = [
@@ -6602,7 +6626,6 @@ function ProductCard({ product, onClick, delay = 0 }: { product: any; onClick: (
               &lt;Sparkles className="w-2.5 h-2.5" /&gt; NEW
             &lt;/span&gt;
           )}
-          {/* ── For You badge — shown when product matched user's interests ── */}
           {product.isPersonalised &amp;&amp; !product.isTrending &amp;&amp; !product.isNew &amp;&amp; (
             &lt;span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
               &lt;Heart className="w-2.5 h-2.5 fill-white" /&gt; FOR YOU
@@ -6672,6 +6695,38 @@ function SectionHeader({ title, icon, onSeeAll, delay = 0 }: { title: string; ic
   )
 }
 
+// ─────────────────────────────────────────────
+// Pull-to-Refresh Indicator
+// ─────────────────────────────────────────────
+function PullIndicator({ pullDistance, isRefreshing }: { pullDistance: number; isRefreshing: boolean }) {
+  const progress = Math.min(pullDistance / PULL_THRESHOLD, 1)
+  const ready    = pullDistance &gt;= PULL_THRESHOLD
+
+  return (
+    &lt;div
+      className="ptr-indicator pointer-events-none fixed top-0 left-0 right-0 z-50 flex justify-center"
+      style={{
+        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 64}px)`,
+        transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
+        opacity: isRefreshing ? 1 : progress,
+      }}
+    &gt;
+      &lt;div
+        className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white shadow-lg border border-gray-100"
+        style={{ transform: `scale(${0.85 + progress * 0.15})` }}
+      &gt;
+        &lt;RefreshCw
+          className={`w-4 h-4 text-BATAMART-primary ${isRefreshing ? 'ptr-spinning' : ''}`}
+          style={{ transform: isRefreshing ? undefined : `rotate(${progress * 220}deg)` }}
+        /&gt;
+        &lt;span className="text-xs font-bold text-gray-600"&gt;
+          {isRefreshing ? 'Refreshing…' : ready ? 'Release to refresh' : 'Pull to refresh'}
+        &lt;/span&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
 export default function MarketplacePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -6697,8 +6752,12 @@ export default function MarketplacePage() {
   const [dropdownPos, setDropdownPos]               = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState&lt;string&gt;('')
 
-  const inputRef               = useRef&lt;HTMLInputElement&gt;(null)
-  const searchRef              = useRef&lt;HTMLDivElement&gt;(null)
+  // ── Pull-to-refresh state ──
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const inputRef                = useRef&lt;HTMLInputElement&gt;(null)
+  const searchRef               = useRef&lt;HTMLDivElement&gt;(null)
   const isClickingSuggestionRef = useRef(false)
 
   useEffect(() =&gt; {
@@ -6728,11 +6787,6 @@ export default function MarketplacePage() {
         .then(r =&gt; r.json())
         .then(data =&gt; {
           if (data.user?.university?.shortName) setUniversityShortName(data.user.university.shortName)
-          // Extract interest categories from user's order history for the pills UI
-          if (data.user) {
-            // interest categories come back from the feed API as part of scoring,
-            // but we also show them as filter pills — derive from recently viewed
-          }
         })
         .catch(() =&gt; {})
     }
@@ -6747,8 +6801,6 @@ export default function MarketplacePage() {
     return () =&gt; document.removeEventListener('mousedown', h)
   }, [])
 
-  // Re-fetch when category changes (category filter still hits the old /api/products endpoint
-  // which is fine — the feed algo is only needed for the "All" / unfiltered view)
   useEffect(() =&gt; {
     if (selectedCategory === 'All') {
       fetchFeed()
@@ -6757,10 +6809,93 @@ export default function MarketplacePage() {
     }
   }, [selectedCategory])
 
+  // ── Pull-to-refresh touch handlers ──
+  useEffect(() =&gt; {
+    // We track these in refs so the listeners don't get stale
+    let startY        = 0
+    let latestDelta   = 0
+    let inPullMode    = false   // only true once user has passed dead-zone going downward from top
+
+    const onTouchStart = (e: TouchEvent) =&gt; {
+      // Hard gate: page must be scrolled to the very top
+      if (window.scrollY &gt; 0) return
+      if (isRefreshing) return
+      startY      = e.touches[0].clientY
+      latestDelta = 0
+      inPullMode  = false
+    }
+
+    const onTouchMove = (e: TouchEvent) =&gt; {
+      // Bail early if we never registered a valid start
+      if (startY === 0) return
+      if (isRefreshing) return
+
+      // If user has scrolled down since touchstart, abandon
+      if (window.scrollY &gt; 0) {
+        startY     = 0
+        inPullMode = false
+        setPullDistance(0)
+        return
+      }
+
+      const delta = e.touches[0].clientY - startY
+
+      // Must be a deliberate downward swipe past the dead-zone
+      if (!inPullMode) {
+        if (delta &lt; PULL_DEAD_ZONE) return   // too small — normal scroll up or no movement
+        if (delta &lt; 0) { startY = 0; return } // swiping up — ignore completely
+        inPullMode = true
+      }
+
+      latestDelta = delta
+
+      // Resistance curve: feels heavy to pull, like TikTok / Instagram
+      const visual = Math.min(delta * PULL_RESIST, PULL_MAX)
+      setPullDistance(visual)
+
+      // Block the browser's native overscroll/bounce while we handle it
+      e.preventDefault()
+    }
+
+    const onTouchEnd = async () =&gt; {
+      if (!inPullMode) return
+
+      const triggered = latestDelta * PULL_RESIST &gt;= PULL_THRESHOLD
+
+      inPullMode  = false
+      startY      = 0
+      latestDelta = 0
+
+      if (triggered) {
+        setIsRefreshing(true)
+        setPullDistance(PULL_THRESHOLD)   // hold indicator at threshold while loading
+
+        await fetchFeed()
+
+        setIsRefreshing(false)
+        setPullDistance(0)
+      } else {
+        // Snap back — didn't pull far enough
+        setPullDistance(0)
+      }
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    document.addEventListener('touchend',   onTouchEnd,   { passive: true })
+
+    return () =&gt; {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove',  onTouchMove)
+      document.removeEventListener('touchend',   onTouchEnd)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRefreshing])  // only re-register when refreshing state flips
+
   const updateDropdownPos = useCallback(() =&gt; {
     if (!inputRef.current) return
     const r = inputRef.current.getBoundingClientRect()
-    setDropdownPos({ top: r.bottom + window.scrollY + 8, left: r.left + window.scrollX, width: r.width })
+    setDropdownPos({ top: r.bottom + 8, left: r.left, width: r.width })
   }, [])
 
   useEffect(() =&gt; {
@@ -6769,15 +6904,12 @@ export default function MarketplacePage() {
     return () =&gt; { window.removeEventListener('resize', updateDropdownPos); window.removeEventListener('scroll', updateDropdownPos) }
   }, [updateDropdownPos])
 
-  // ── Build client-side signals to send with the feed request ───────────────
-  // We read from localStorage (recently viewed categories + recent searches)
-  // and pass them as URL params so the server can boost matching products.
   const buildFeedSignals = () =&gt; {
     let viewed = ''
     let searched = ''
     try {
       const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
-      const cats = [...new Set(rv.map(p =&gt; p.category).filter(Boolean))]
+      const cats = Array.from(new Set(rv.map((p: any) =&gt; p.category).filter(Boolean)))
       viewed = cats.join(',')
     } catch { }
     try {
@@ -6787,7 +6919,6 @@ export default function MarketplacePage() {
     return { viewed, searched }
   }
 
-  // ── Personalised feed (used for "All" view) ───────────────────────────────
   const fetchFeed = async () =&gt; {
     setLoading(true)
     try {
@@ -6803,19 +6934,17 @@ export default function MarketplacePage() {
       const data = await res.json()
       if (res.ok) {
         setAllProducts(data.products || [])
-        // Derive interest categories from personalised products the server returned
-        const cats = [...new Set(
+        const cats = Array.from(new Set(
           (data.products || [])
             .filter((p: any) =&gt; p.isPersonalised)
             .map((p: any) =&gt; p.category)
-        )] as string[]
+        )) as string[]
         setInterestCategories(cats.slice(0, 4))
       }
     } catch { }
     finally { setLoading(false) }
   }
 
-  // ── Category-filtered view still uses the original products endpoint ───────
   const fetchByCategory = async (category: string) =&gt; {
     setLoading(true)
     try {
@@ -6844,7 +6973,6 @@ export default function MarketplacePage() {
       }
     } catch { }
 
-    // ── Fire-and-forget view count increment ──────────────────────────────
     if (token) {
       fetch(`/api/products/${id}/view`, {
         method:  'POST',
@@ -6871,8 +6999,6 @@ export default function MarketplacePage() {
     if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
   }
 
-  // ── Derived sections from the already-scored feed ────────────────────────
-  // The server has already ranked everything — we just slice different windows.
   const forYouProducts = useMemo(
     () =&gt; allProducts.filter(p =&gt; p.isPersonalised).slice(0, 8),
     [allProducts]
@@ -6885,7 +7011,6 @@ export default function MarketplacePage() {
     () =&gt; allProducts.filter(p =&gt; p.isNew).slice(0, 8),
     [allProducts]
   )
-  // "Discover" = top-scored items that aren't already in for-you or trending sections
   const discoverProducts = useMemo(() =&gt; {
     const shown = new Set([
       ...forYouProducts.map(p =&gt; p.id),
@@ -6968,8 +7093,22 @@ export default function MarketplacePage() {
     &lt;div className="min-h-screen bg-[#f7f8fa]"&gt;
       {SuggestionsDropdown}
 
+      {/* ── Pull-to-Refresh Indicator ── */}
+      {(pullDistance &gt; 0 || isRefreshing) &amp;&amp; (
+        &lt;PullIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} /&gt;
+      )}
+
       {/* ── HERO ── */}
-      &lt;div className="relative overflow-hidden bg-gradient-to-br from-BATAMART-primary via-BATAMART-primary to-BATAMART-dark"&gt;
+      &lt;div
+        className="relative overflow-hidden bg-gradient-to-br from-BATAMART-primary via-BATAMART-primary to-BATAMART-dark"
+        style={{
+          // Visually push the hero down while pulling, giving a satisfying elastic feel
+          transform: pullDistance &gt; 0
+            ? `translateY(${Math.min(pullDistance * 0.3, 28)}px)`
+            : undefined,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
+        }}
+      &gt;
         &lt;div className="absolute inset-0 pointer-events-none overflow-hidden"&gt;
           &lt;div className="absolute -top-24 -right-24 w-[500px] h-[500px] rounded-full bg-white/[0.06] blur-3xl" /&gt;
           &lt;div className="absolute top-1/2 -left-32 w-[400px] h-[400px] rounded-full bg-white/[0.04] blur-3xl" /&gt;
@@ -7132,7 +7271,7 @@ export default function MarketplacePage() {
           &lt;/div&gt;
 
         ) : viewMode === 'grid' ? (
-          /* ── GRID VIEW (flat, scored order) ── */
+          /* ── GRID VIEW ── */
           &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4"&gt;
             {allProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 30} /&gt;)}
           &lt;/div&gt;
@@ -7141,13 +7280,9 @@ export default function MarketplacePage() {
           /* ── PERSONALISED FEED VIEW ── */
           &lt;div className="space-y-8 sm:space-y-10"&gt;
 
-            {/* Interest category pills */}
             {interestCategories.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
-                &lt;SectionHeader
-                  title="Your Interests"
-                  icon={&lt;Eye className="w-5 h-5 text-violet-500" /&gt;}
-                /&gt;
+                &lt;SectionHeader title="Your Interests" icon={&lt;Eye className="w-5 h-5 text-violet-500" /&gt;} /&gt;
                 &lt;div className="flex flex-wrap gap-2"&gt;
                   {interestCategories.map((cat, i) =&gt; {
                     const catObj = CATEGORIES.find(c =&gt; c.name === cat)
@@ -7163,13 +7298,9 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {/* Recently Viewed */}
             {recentlyViewed.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
-                &lt;SectionHeader
-                  title="Recently Viewed"
-                  icon={&lt;Clock className="w-5 h-5 text-gray-400" /&gt;}
-                /&gt;
+                &lt;SectionHeader title="Recently Viewed" icon={&lt;Clock className="w-5 h-5 text-gray-400" /&gt;} /&gt;
                 &lt;div className="flex gap-3 overflow-x-auto no-scrollbar pb-2"&gt;
                   {recentlyViewed.slice(0, 8).map((p, i) =&gt; (
                     &lt;div key={p.id} onClick={() =&gt; handleProductClick(p.id)}
@@ -7188,7 +7319,6 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {/* For You — personalised products */}
             {forYouProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;SectionHeader
@@ -7203,39 +7333,27 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {/* Trending / Hot */}
             {trendingProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
-                &lt;SectionHeader
-                  title="Trending Right Now"
-                  icon={&lt;TrendingUp className="w-5 h-5 text-orange-500" /&gt;}
-                /&gt;
+                &lt;SectionHeader title="Trending Right Now" icon={&lt;TrendingUp className="w-5 h-5 text-orange-500" /&gt;} /&gt;
                 &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4"&gt;
                   {trendingProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 40} /&gt;)}
                 &lt;/div&gt;
               &lt;/div&gt;
             )}
 
-            {/* New Listings */}
             {newListings.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
-                &lt;SectionHeader
-                  title="New Listings"
-                  icon={&lt;Sparkles className="w-5 h-5 text-emerald-500" /&gt;}
-                /&gt;
+                &lt;SectionHeader title="New Listings" icon={&lt;Sparkles className="w-5 h-5 text-emerald-500" /&gt;} /&gt;
                 &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4"&gt;
                   {newListings.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 40} /&gt;)}
                 &lt;/div&gt;
               &lt;/div&gt;
             )}
 
-            {/* Discover — everything else, still sorted by score */}
             {discoverProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
-                &lt;SectionHeader
-                  title="Discover More"
-                  icon={&lt;ShoppingBag className="w-5 h-5 text-gray-400" /&gt;}
-                /&gt;
+                &lt;SectionHeader title="Discover More" icon={&lt;ShoppingBag className="w-5 h-5 text-gray-400" /&gt;} /&gt;
                 &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4"&gt;
                   {discoverProducts.map((p, i) =&gt; &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 25} /&gt;)}
                 &lt;/div&gt;
@@ -9831,10 +9949,18 @@ function SearchPage() {
 
   useEffect(() =&gt; { fetchAll() }, [])
 
+  // ✅ Fix: pass Authorization header so the API doesn't return 401
   const fetchAll = async () =&gt; {
     setLoading(true)
     try {
-      const res = await fetch('/api/products')
+      const token = localStorage.getItem('token')
+      if (!token) {
+        router.push('/login')
+        return
+      }
+      const res = await fetch('/api/products', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
       setProducts(data.products || [])
     } catch { }
@@ -9972,7 +10098,7 @@ function SearchPage() {
             {loading ? 'Searching...' : (
               &lt;&gt;
                 &lt;span className="font-black text-gray-900"&gt;{filtered.length}&lt;/span&gt; result{filtered.length !== 1 ? 's' : ''}
-                {query &amp;&amp; &lt;span className="text-gray-400"&gt; for "&lt;span className="text-gray-700"&gt;{query}&lt;/span&gt;"&lt;/span&gt;}
+                {query &amp;&amp; &lt;span className="text-gray-400"&gt; for &amp;quot;&lt;span className="text-gray-700"&gt;{query}&lt;/span&gt;&amp;quot;&lt;/span&gt;}
               &lt;/&gt;
             )}
           &lt;/p&gt;
@@ -10047,7 +10173,7 @@ function SearchPage() {
               &lt;Search className="w-7 h-7 text-BATAMART-primary" /&gt;
             &lt;/div&gt;
             &lt;h3 className="text-base font-black text-gray-800 mb-1"&gt;What are you looking for?&lt;/h3&gt;
-            &lt;p className="text-xs text-gray-400 max-w-xs"&gt;Try "iPhone 128GB", "Black hoodie", or "Used laptop"&lt;/p&gt;
+            &lt;p className="text-xs text-gray-400 max-w-xs"&gt;Try &amp;quot;iPhone 128GB&amp;quot;, &amp;quot;Black hoodie&amp;quot;, or &amp;quot;Used laptop&amp;quot;&lt;/p&gt;
           &lt;/div&gt;
         ) : filtered.length === 0 ? (
           &lt;div className="flex flex-col items-center justify-center py-20 text-center px-4"&gt;
@@ -10055,7 +10181,7 @@ function SearchPage() {
               &lt;Search className="w-7 h-7 text-gray-300" /&gt;
             &lt;/div&gt;
             &lt;h3 className="text-base font-black text-gray-800 mb-1"&gt;No results found&lt;/h3&gt;
-            &lt;p className="text-xs text-gray-400 max-w-xs mb-4"&gt;No products match "&lt;span className="font-semibold text-gray-600"&gt;{query}&lt;/span&gt;". Try fewer or different keywords.&lt;/p&gt;
+            &lt;p className="text-xs text-gray-400 max-w-xs mb-4"&gt;No products match &amp;quot;&lt;span className="font-semibold text-gray-600"&gt;{query}&lt;/span&gt;&amp;quot;. Try fewer or different keywords.&lt;/p&gt;
             &lt;button onClick={() =&gt; router.push('/marketplace')} className="inline-flex items-center gap-2 bg-BATAMART-primary text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md"&gt;
               Browse Marketplace &lt;ArrowRight className="w-4 h-4" /&gt;
             &lt;/button&gt;

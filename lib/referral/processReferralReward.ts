@@ -1,22 +1,30 @@
 // lib/referral/processReferralReward.ts
 // Called inside the confirm-delivery transaction when an order completes.
 // Returns silently on any error so it never blocks the main order flow.
+//
+// BATCH BEHAVIOUR:
+//   When an order belongs to a DeliveryBatch, the referral reward (₦120)
+//   fires only ONCE for the whole batch — regardless of how many orders
+//   are inside it. The DeliveryBatch.referralPaid flag is the atomic gate.
+//   This means the referrer gets ₦120 per checkout session, not per item.
 
 import { Prisma } from '@prisma/client'
 
-// ── Referral reward = ₦120 (50% of the ₦240 delivery platform cut) ────────────
-// The platform keeps its 5% product commission entirely.
-// ₦120 of the ₦240 delivery cut goes to the referrer (forever, every order).
+// ── Referral reward = ₦120 (50% of the ₦240 delivery platform cut) ──────────
+// Platform keeps its 5% product commission entirely.
+// ₦120 of the ₦240 delivery cut goes to the referrer (once per batch).
 // Only paid if the order had a rider (delivery orders only).
 const REFERRAL_DELIVERY_REWARD = 120
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx => ...) block.
  *
- * Checks if the buyer was referred. If so, credits the referrer ₦120
- * (50% of the delivery platform cut) for every completed delivery order — forever.
+ * For batched orders: credits the referrer ₦120 once per checkout batch.
+ * For legacy single orders: uses orderId uniqueness as before.
  *
- * The @unique constraint on ReferralReward.orderId guarantees idempotency.
+ * The DeliveryBatch.referralPaid flag guarantees idempotency even if
+ * confirm-delivery is called on multiple orders in the same batch
+ * concurrently.
  */
 export async function processReferralReward(
   tx: Prisma.TransactionClient,
@@ -25,79 +33,99 @@ export async function processReferralReward(
     orderNumber: string
     orderAmount: number
     buyerId:     string
-    hasRider:    boolean   // ← only pay if delivery order
+    hasRider:    boolean
+    batchId?:    string   // ← pass this when the order belongs to a DeliveryBatch
   }
 ) {
-  const { orderId, orderNumber, buyerId, hasRider } = params
+  const { orderId, orderNumber, buyerId, hasRider, batchId } = params
 
   // Only pay referral reward on delivery orders
   if (!hasRider) return
 
-  // 1. Check if buyer was referred
+  // ── Batch path: use referralPaid flag on batch ───────────────────────────
+  if (batchId) {
+    const batch = await tx.deliveryBatch.findUnique({
+      where:  { id: batchId },
+      select: { referralPaid: true },
+    })
+
+    // batch not found or reward already paid for this batch
+    if (!batch || batch.referralPaid) return
+
+    // Mark batch as referral-paid atomically inside this transaction
+    await tx.deliveryBatch.update({
+      where: { id: batchId },
+      data:  { referralPaid: true },
+    })
+  } else {
+    // ── Legacy single-order path: use orderId uniqueness guard ───────────
+    const existing = await tx.referralReward.findUnique({
+      where:  { orderId },
+      select: { id: true },
+    })
+    if (existing) return
+  }
+
+  // ── Check if buyer was referred ─────────────────────────────────────────
   const buyer = await tx.user.findUnique({
     where:  { id: buyerId },
     select: { referredById: true },
   })
 
-  if (!buyer?.referredById) return   // no referrer — nothing to do
+  if (!buyer?.referredById) return  // buyer was not referred — nothing to do
 
-  // 2. Guard: skip if reward already exists for this order
-  const existing = await tx.referralReward.findUnique({
-    where:  { orderId },
-    select: { id: true },
-  })
-  if (existing) return   // idempotency guard
-
-  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦120
-
-  // 3. Fetch referrer's current balance
+  // ── Fetch referrer ───────────────────────────────────────────────────────
   const referrer = await tx.user.findUnique({
     where:  { id: buyer.referredById },
     select: { id: true, availableBalance: true },
   })
   if (!referrer) return
 
-  const balanceBefore = referrer.availableBalance
-  const balanceAfter  = balanceBefore + reward
+  const balanceBefore = Number(referrer.availableBalance)
+  const balanceAfter  = balanceBefore + REFERRAL_DELIVERY_REWARD
 
-  // 4. Create ReferralReward record
+  // ── Create ReferralReward record (orderId is still recorded for traceability) ─
   await tx.referralReward.create({
     data: {
       referrerId:     referrer.id,
       referredUserId: buyerId,
-      orderId,
-      amount:         reward,
+      orderId,         // attached to the first order that triggered the reward
+      amount:          REFERRAL_DELIVERY_REWARD,
     },
   })
 
-  // 5. Credit referrer's wallet
+  // ── Credit referrer's wallet ─────────────────────────────────────────────
   await tx.user.update({
     where: { id: referrer.id },
-    data:  { availableBalance: { increment: reward } },
+    data:  { availableBalance: { increment: REFERRAL_DELIVERY_REWARD } },
   })
 
-  // 6. Create wallet transaction record
+  // ── Wallet transaction record ────────────────────────────────────────────
   await tx.transaction.create({
     data: {
       userId:        referrer.id,
       type:          'REFERRAL_REWARD',
-      amount:        reward,
-      description:   `Referral reward — delivery cut from order #${orderNumber}`,
+      amount:        REFERRAL_DELIVERY_REWARD,
+      description:   batchId
+        ? `Referral reward — batch delivery (order #${orderNumber})`
+        : `Referral reward — delivery cut from order #${orderNumber}`,
       reference:     `${orderNumber}-REFERRAL`,
       balanceBefore,
       balanceAfter,
     },
   })
 
-  // 7. Create in-app notification
+  // ── In-app notification ──────────────────────────────────────────────────
   await tx.notification.create({
     data: {
       userId:  referrer.id,
       type:    'REFERRAL_REWARD',
       title:   '🎁 Referral Reward!',
-      message: `You earned ₦120 delivery reward from order #${orderNumber}.`,
+      message: batchId
+        ? `You earned ₦120 referral reward from a batch delivery by your referral.`
+        : `You earned ₦120 delivery reward from order #${orderNumber}.`,
       orderId,
-      metadata: JSON.stringify({ reward, orderNumber }),
+      metadata: JSON.stringify({ reward: REFERRAL_DELIVERY_REWARD, orderNumber, batchId }),
     },
   })
 }
