@@ -12,8 +12,10 @@ import {
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
-const PULL_THRESHOLD = 72   // px of pull needed to trigger refresh
-const PULL_MAX       = 110  // px max rubber-band distance
+const PULL_THRESHOLD    = 130  // px the user must pull before release triggers refresh (long like TikTok)
+const PULL_MAX          = 175  // px max rubber-band travel
+const PULL_DEAD_ZONE    = 12   // px of downward movement before pull mode even activates
+const PULL_RESIST       = 0.38 // how much resistance to apply (lower = harder to pull)
 
 const ANIM_CSS = `
   @keyframes fadeSlideUp {
@@ -268,8 +270,8 @@ function PullIndicator({ pullDistance, isRefreshing }: { pullDistance: number; i
     <div
       className="ptr-indicator pointer-events-none fixed top-0 left-0 right-0 z-50 flex justify-center"
       style={{
-        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 56}px)`,
-        transition: isRefreshing ? 'transform 0.3s cubic-bezier(0.22,1,0.36,1)' : 'none',
+        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 64}px)`,
+        transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
         opacity: isRefreshing ? 1 : progress,
       }}
     >
@@ -315,10 +317,8 @@ export default function MarketplacePage() {
   const [universityShortName, setUniversityShortName] = useState<string>('')
 
   // ── Pull-to-refresh state ──
-  const [pullDistance, setPullDistance]   = useState(0)
-  const [isRefreshing, setIsRefreshing]   = useState(false)
-  const touchStartYRef                    = useRef<number | null>(null)
-  const isPullingRef                      = useRef(false)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const inputRef                = useRef<HTMLInputElement>(null)
   const searchRef               = useRef<HTMLDivElement>(null)
@@ -375,48 +375,71 @@ export default function MarketplacePage() {
 
   // ── Pull-to-refresh touch handlers ──
   useEffect(() => {
+    // We track these in refs so the listeners don't get stale
+    let startY        = 0
+    let latestDelta   = 0
+    let inPullMode    = false   // only true once user has passed dead-zone going downward from top
+
     const onTouchStart = (e: TouchEvent) => {
-      // Only activate when already scrolled to top
+      // Hard gate: page must be scrolled to the very top
       if (window.scrollY > 0) return
-      touchStartYRef.current = e.touches[0].clientY
-      isPullingRef.current   = false
+      if (isRefreshing) return
+      startY      = e.touches[0].clientY
+      latestDelta = 0
+      inPullMode  = false
     }
 
     const onTouchMove = (e: TouchEvent) => {
-      if (touchStartYRef.current === null) return
+      // Bail early if we never registered a valid start
+      if (startY === 0) return
       if (isRefreshing) return
-      if (window.scrollY > 0) { touchStartYRef.current = null; return }
 
-      const delta = e.touches[0].clientY - touchStartYRef.current
-      if (delta <= 0) return
+      // If user has scrolled down since touchstart, abandon
+      if (window.scrollY > 0) {
+        startY     = 0
+        inPullMode = false
+        setPullDistance(0)
+        return
+      }
 
-      // Rubber-band: sqrt easing so it gets progressively harder to pull
-      const rubberband = Math.sqrt(delta) * Math.sqrt(PULL_MAX)
-      const clamped    = Math.min(rubberband, PULL_MAX)
+      const delta = e.touches[0].clientY - startY
 
-      isPullingRef.current = true
-      setPullDistance(clamped)
+      // Must be a deliberate downward swipe past the dead-zone
+      if (!inPullMode) {
+        if (delta < PULL_DEAD_ZONE) return   // too small — normal scroll up or no movement
+        if (delta < 0) { startY = 0; return } // swiping up — ignore completely
+        inPullMode = true
+      }
 
-      // Prevent native scroll bounce while we're handling it
-      if (delta > 4) e.preventDefault()
+      latestDelta = delta
+
+      // Resistance curve: feels heavy to pull, like TikTok / Instagram
+      const visual = Math.min(delta * PULL_RESIST, PULL_MAX)
+      setPullDistance(visual)
+
+      // Block the browser's native overscroll/bounce while we handle it
+      e.preventDefault()
     }
 
     const onTouchEnd = async () => {
-      if (!isPullingRef.current) return
-      isPullingRef.current   = false
-      touchStartYRef.current = null
+      if (!inPullMode) return
 
-      if (pullDistance >= PULL_THRESHOLD) {
+      const triggered = latestDelta * PULL_RESIST >= PULL_THRESHOLD
+
+      inPullMode  = false
+      startY      = 0
+      latestDelta = 0
+
+      if (triggered) {
         setIsRefreshing(true)
-        setPullDistance(PULL_THRESHOLD + 8) // snap to "refreshing" position
+        setPullDistance(PULL_THRESHOLD)   // hold indicator at threshold while loading
 
         await fetchFeed()
 
         setIsRefreshing(false)
-        // Animate the indicator back up
         setPullDistance(0)
       } else {
-        // Didn't pull far enough — snap back
+        // Snap back — didn't pull far enough
         setPullDistance(0)
       }
     }
@@ -430,7 +453,8 @@ export default function MarketplacePage() {
       document.removeEventListener('touchmove',  onTouchMove)
       document.removeEventListener('touchend',   onTouchEnd)
     }
-  }, [pullDistance, isRefreshing])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRefreshing])  // only re-register when refreshing state flips
 
   const updateDropdownPos = useCallback(() => {
     if (!inputRef.current) return
