@@ -9428,37 +9428,45 @@ export default function ReportPage() {
     )
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/rider-dashboard/page.tsx</div><pre>// app/(marketplace)/rider-dashboard/page.tsx
-// ── FIX #7 (race condition): acceptOrder uses authFetch which handles 409
-//    conflict responses from the server. The server must use a DB transaction
-//    to atomically check + assign the order, so only one rider wins.
+// ── Batch delivery model:
+//    • Rider sees DeliveryBatches, not individual orders in the available section.
+//    • Each batch may contain 1-N orders (one per seller from buyer's cart).
+//    • Rider accepts the whole batch at once (one tap).
+//    • Inside My Active Batches, each order has its own status buttons.
+//    • Buyer gets notified PER ORDER as each one is picked up / delivered.
+//    • Rider earns ₦560 per order in the batch.
 //
-// ── FIX #8 (stock reservation): No change needed here — stock locking
-//    is handled server-side in the payment flow.
-//
-// ── FIX #10 (alert/confirm dialogs): All alert() and confirm() calls
-//    replaced with inline toast/banner UI. No more browser popups.
-//
-// ── FIX #6: Uses authFetch so expired tokens auto-redirect to /login.
-//
-// ── Rider availability: If the toggle API fails, the UI reverts to the
-//    previous state instead of staying optimistically wrong.
+// ── Race condition: accept uses batchId, server returns 409 if already taken.
+// ── Availability revert: optimistic UI rolls back if API fails.
+// ── No alert() / confirm() — all feedback via inline Toast.
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, AlertTriangle, MapPin, Phone, Package, CheckCircle, X } from 'lucide-react'
+import {
+  Loader2, AlertTriangle, MapPin, Phone, Package,
+  CheckCircle, X, ShoppingBag, ArrowRight, Bike,
+} from 'lucide-react'
 import { authFetch } from '@/lib/auth-client'
 
-// ── Simple inline toast — no alert() ─────────────────────────────────────────
-function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () =&gt; void }) {
+// ── Inline Toast ──────────────────────────────────────────────────────────────
+function Toast({
+  message,
+  type,
+  onClose,
+}: {
+  message: string
+  type:    'success' | 'error' | 'info'
+  onClose: () =&gt; void
+}) {
   const colors = {
     success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
     error:   'bg-red-50 border-red-200 text-red-800',
     info:    'bg-blue-50 border-blue-200 text-blue-800',
   }
   return (
-    &lt;div className={`fixed top-4 left-0 right-0 z-50 flex justify-center px-4`}&gt;
-      &lt;div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg max-w-sm w-full ${colors[type]}`}&gt;
+    &lt;div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"&gt;
+      &lt;div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-lg max-w-sm w-full pointer-events-auto ${colors[type]}`}&gt;
         &lt;p className="text-sm font-semibold flex-1"&gt;{message}&lt;/p&gt;
         &lt;button onClick={onClose} className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"&gt;
           &lt;X className="w-4 h-4" /&gt;
@@ -9468,17 +9476,32 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
   )
 }
 
+// ── Order status badge ────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const map: Record&lt;string, string&gt; = {
+    RIDER_ASSIGNED: 'bg-indigo-100 text-indigo-700',
+    PICKED_UP:      'bg-blue-100 text-blue-700',
+    ON_THE_WAY:     'bg-amber-100 text-amber-700',
+    DELIVERED:      'bg-emerald-100 text-emerald-700',
+  }
+  return (
+    &lt;span className={`text-[10px] font-bold px-2 py-1 rounded-full ${map[status] ?? 'bg-gray-100 text-gray-500'}`}&gt;
+      {status.replace(/_/g, ' ')}
+    &lt;/span&gt;
+  )
+}
+
 export default function RiderDashboardPage() {
   const router = useRouter()
-  const [rider, setRider] = useState&lt;any&gt;(null)
-  const [availableOrders, setAvailableOrders] = useState&lt;any[]&gt;([])
-  const [disputePickups, setDisputePickups] = useState&lt;any[]&gt;([])
-  const [myDeliveries, setMyDeliveries] = useState&lt;any[]&gt;([])
-  const [loading, setLoading] = useState(true)
-  const [isAvailable, setIsAvailable] = useState(true)
-  const [actionLoading, setActionLoading] = useState&lt;Record&lt;string, boolean&gt;&gt;({})
 
-  // ── FIX #10: Toast state instead of alert() ───────────────────────────────
+  const [rider,            setRider]            = useState&lt;any&gt;(null)
+  const [availableBatches, setAvailableBatches] = useState&lt;any[]&gt;([])
+  const [disputePickups,   setDisputePickups]   = useState&lt;any[]&gt;([])
+  const [myBatches,        setMyBatches]        = useState&lt;any[]&gt;([])
+  const [loading,          setLoading]          = useState(true)
+  const [isAvailable,      setIsAvailable]      = useState(true)
+  const [actionLoading,    setActionLoading]    = useState&lt;Record&lt;string, boolean&gt;&gt;({})
+
   const [toast, setToast] = useState&lt;{ message: string; type: 'success' | 'error' | 'info' } | null&gt;(null)
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') =&gt; {
     setToast({ message, type })
@@ -9489,24 +9512,25 @@ export default function RiderDashboardPage() {
     const token = localStorage.getItem('token')
     if (!token) { router.push('/login'); return }
     fetchRiderData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchRiderData = async () =&gt; {
     try {
-      const [profileRes, ordersRes, deliveriesRes] = await Promise.all([
+      const [profileRes, batchesRes, myBatchesRes] = await Promise.all([
         authFetch('/api/auth/me'),
         authFetch('/api/riders/available-orders'),
         authFetch('/api/riders/my-deliveries'),
       ])
 
-      const profileData    = await profileRes.json()
-      const ordersData     = await ordersRes.json()
-      const deliveriesData = await deliveriesRes.json()
+      const profileData   = await profileRes.json()
+      const batchesData   = await batchesRes.json()
+      const myBatchData   = await myBatchesRes.json()
 
       setRider(profileData.user)
-      setAvailableOrders(ordersData.orders || [])
-      setDisputePickups(ordersData.disputePickups || [])
-      setMyDeliveries(deliveriesData.deliveries || [])
+      setAvailableBatches(batchesData.batches        || [])
+      setDisputePickups(batchesData.disputePickups   || [])
+      setMyBatches(myBatchData.batches               || [])
       setIsAvailable(profileData.user.isAvailable)
     } catch (error) {
       console.error('Error fetching rider data:', error)
@@ -9515,20 +9539,17 @@ export default function RiderDashboardPage() {
     }
   }
 
-  // ── FIX (availability revert): Save previous state so we can roll back ────
+  // ── Toggle availability ───────────────────────────────────────────────────
   const toggleAvailability = async () =&gt; {
     if (actionLoading['toggle-availability']) return
     const previousState = isAvailable
     setActionLoading(prev =&gt; ({ ...prev, 'toggle-availability': true }))
-
-    // Optimistic update
-    setIsAvailable(!previousState)
+    setIsAvailable(!previousState) // optimistic
 
     try {
       const res = await authFetch('/api/riders/toggle-availability', { method: 'POST' })
       if (!res.ok) {
-        // Revert on failure instead of staying in wrong state
-        setIsAvailable(previousState)
+        setIsAvailable(previousState) // revert
         showToast('Failed to update availability. Please try again.', 'error')
       } else {
         showToast(`You are now ${!previousState ? 'available' : 'unavailable'} for orders.`, 'success')
@@ -9541,40 +9562,46 @@ export default function RiderDashboardPage() {
     }
   }
 
-  // ── FIX #7: Handle 409 conflict (another rider grabbed this order) ────────
-  const acceptOrder = async (orderId: string) =&gt; {
-    if (actionLoading[`accept-${orderId}`]) return
-    setActionLoading(prev =&gt; ({ ...prev, [`accept-${orderId}`]: true }))
+  // ── Accept a whole batch ──────────────────────────────────────────────────
+  const acceptBatch = async (batchId: string) =&gt; {
+    if (actionLoading[`accept-${batchId}`]) return
+    setActionLoading(prev =&gt; ({ ...prev, [`accept-${batchId}`]: true }))
+
     try {
-      const res = await authFetch('/api/riders/accept-order', {
+      const res  = await authFetch('/api/riders/accept-order', {
         method: 'POST',
-        body: JSON.stringify({ orderId }),
+        body:   JSON.stringify({ batchId }),
       })
       const data = await res.json()
+
       if (res.ok) {
-        showToast('Order accepted! Head to pickup location.', 'success')
+        showToast(
+          `Batch accepted! ${data.orderCount} order${data.orderCount &gt; 1 ? 's' : ''} to pick up. You'll earn ₦${data.riderFee.toLocaleString()}.`,
+          'success'
+        )
         await fetchRiderData()
       } else if (res.status === 409) {
-        // Race condition — another rider accepted first
-        showToast('Sorry, another rider just accepted this order. Refreshing available orders.', 'info')
+        showToast('Another rider just accepted this batch. Refreshing…', 'info')
         await fetchRiderData()
       } else {
-        showToast(data.error || 'Failed to accept order. Please try again.', 'error')
+        showToast(data.error || 'Failed to accept batch. Please try again.', 'error')
       }
     } catch {
       showToast('Network error. Please check your connection.', 'error')
     } finally {
-      setActionLoading(prev =&gt; ({ ...prev, [`accept-${orderId}`]: false }))
+      setActionLoading(prev =&gt; ({ ...prev, [`accept-${batchId}`]: false }))
     }
   }
 
+  // ── Update individual order status ────────────────────────────────────────
   const updateStatus = async (orderId: string, status: string) =&gt; {
     if (actionLoading[`status-${orderId}`]) return
     setActionLoading(prev =&gt; ({ ...prev, [`status-${orderId}`]: true }))
+
     try {
-      const res = await authFetch('/api/riders/update-status', {
+      const res  = await authFetch('/api/riders/update-status', {
         method: 'POST',
-        body: JSON.stringify({ orderId, status }),
+        body:   JSON.stringify({ orderId, status }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -9589,13 +9616,15 @@ export default function RiderDashboardPage() {
     }
   }
 
+  // ── Dispute pickup ────────────────────────────────────────────────────────
   const markDisputePickedUp = async (orderId: string) =&gt; {
     if (actionLoading[`dispute-pickup-${orderId}`]) return
     setActionLoading(prev =&gt; ({ ...prev, [`dispute-pickup-${orderId}`]: true }))
+
     try {
-      const res = await authFetch('/api/riders/dispute-picked-up', {
+      const res  = await authFetch('/api/riders/dispute-picked-up', {
         method: 'POST',
-        body: JSON.stringify({ orderId }),
+        body:   JSON.stringify({ orderId }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -9613,138 +9642,139 @@ export default function RiderDashboardPage() {
 
   const hasDisputePickupPending = disputePickups.length &gt; 0
 
+  // ── Active orders count across all batches ────────────────────────────────
+  const totalActiveOrders = myBatches.reduce((sum, b) =&gt; sum + b.orders.length, 0)
+
   if (loading) {
     return (
-      &lt;div className="min-h-screen flex items-center justify-center"&gt;
+      &lt;div className="min-h-screen flex items-center justify-center bg-gray-50"&gt;
         &lt;div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent" /&gt;
       &lt;/div&gt;
     )
   }
 
   return (
-    &lt;div className="min-h-screen bg-gray-50 py-8 px-4"&gt;
-      {/* ── FIX #10: Toast notification instead of alert() ── */}
+    &lt;div className="min-h-screen bg-gray-50 py-6 px-4 pb-24"&gt;
       {toast &amp;&amp; &lt;Toast message={toast.message} type={toast.type} onClose={() =&gt; setToast(null)} /&gt;}
 
-      &lt;div className="max-w-7xl mx-auto"&gt;
+      &lt;div className="max-w-2xl mx-auto space-y-6"&gt;
 
-        {/* Header */}
-        &lt;div className="bg-white rounded-xl shadow-md p-6 mb-8"&gt;
-          &lt;div className="flex justify-between items-center"&gt;
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        &lt;div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"&gt;
+          &lt;div className="flex justify-between items-start"&gt;
             &lt;div&gt;
-              &lt;h1 className="text-3xl font-bold text-gray-900"&gt;Rider Dashboard&lt;/h1&gt;
-              &lt;p className="text-gray-600 mt-1"&gt;Welcome, {rider?.name}!&lt;/p&gt;
+              &lt;div className="flex items-center gap-2 mb-1"&gt;
+                &lt;Bike className="w-5 h-5 text-BATAMART-primary" /&gt;
+                &lt;h1 className="text-xl font-black text-gray-900"&gt;Rider Dashboard&lt;/h1&gt;
+              &lt;/div&gt;
+              &lt;p className="text-sm text-gray-500"&gt;Welcome back, {rider?.name}!&lt;/p&gt;
             &lt;/div&gt;
             &lt;button
               onClick={toggleAvailability}
               disabled={actionLoading['toggle-availability']}
-              className={`px-6 py-3 rounded-lg font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isAvailable ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+              className={`px-4 py-2 rounded-xl font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isAvailable
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-200'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
               }`}
             &gt;
               {actionLoading['toggle-availability']
-                ? &lt;&gt;&lt;Loader2 className="w-5 h-5 animate-spin" /&gt; Updating...&lt;/&gt;
+                ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
                 : isAvailable ? '🟢 Available' : '⚫ Unavailable'
               }
             &lt;/button&gt;
           &lt;/div&gt;
 
-          &lt;div className="grid grid-cols-3 gap-4 mt-6"&gt;
-            &lt;div className="bg-green-50 p-4 rounded-lg"&gt;
-              &lt;p className="text-sm text-green-600"&gt;Completed&lt;/p&gt;
-              &lt;p className="text-2xl font-bold text-green-900"&gt;{rider?.completedOrders || 0}&lt;/p&gt;
+          &lt;div className="grid grid-cols-3 gap-3 mt-5"&gt;
+            &lt;div className="bg-emerald-50 p-3 rounded-xl text-center"&gt;
+              &lt;p className="text-2xl font-black text-emerald-700"&gt;{rider?.completedOrders || 0}&lt;/p&gt;
+              &lt;p className="text-xs font-semibold text-emerald-600 mt-0.5"&gt;Completed&lt;/p&gt;
             &lt;/div&gt;
-            &lt;div className="bg-blue-50 p-4 rounded-lg"&gt;
-              &lt;p className="text-sm text-blue-600"&gt;Active&lt;/p&gt;
-              &lt;p className="text-2xl font-bold text-blue-900"&gt;{myDeliveries.length}&lt;/p&gt;
+            &lt;div className="bg-blue-50 p-3 rounded-xl text-center"&gt;
+              &lt;p className="text-2xl font-black text-blue-700"&gt;{totalActiveOrders}&lt;/p&gt;
+              &lt;p className="text-xs font-semibold text-blue-600 mt-0.5"&gt;Active Orders&lt;/p&gt;
             &lt;/div&gt;
-            &lt;div className="bg-purple-50 p-4 rounded-lg"&gt;
-              &lt;p className="text-sm text-purple-600"&gt;Earnings&lt;/p&gt;
-              &lt;p className="text-2xl font-bold text-purple-900"&gt;₦{((rider?.completedOrders || 0) * 560).toLocaleString()}&lt;/p&gt;
+            &lt;div className="bg-violet-50 p-3 rounded-xl text-center"&gt;
+              &lt;p className="text-2xl font-black text-violet-700"&gt;
+                ₦{((rider?.completedOrders || 0) * 560).toLocaleString()}
+              &lt;/p&gt;
+              &lt;p className="text-xs font-semibold text-violet-600 mt-0.5"&gt;Earned&lt;/p&gt;
             &lt;/div&gt;
           &lt;/div&gt;
         &lt;/div&gt;
 
-        {/* Dispute Pickup Jobs */}
+        {/* ── Dispute Pickup Jobs ───────────────────────────────────────── */}
         {hasDisputePickupPending &amp;&amp; (
-          &lt;div className="mb-8"&gt;
-            &lt;div className="flex items-center gap-2 mb-4"&gt;
-              &lt;AlertTriangle className="w-5 h-5 text-red-500" /&gt;
-              &lt;h2 className="text-xl font-bold text-red-600"&gt;Return Pickup Required&lt;/h2&gt;
+          &lt;div&gt;
+            &lt;div className="flex items-center gap-2 mb-3"&gt;
+              &lt;AlertTriangle className="w-4 h-4 text-red-500" /&gt;
+              &lt;h2 className="text-base font-black text-red-600"&gt;Return Pickup Required&lt;/h2&gt;
               &lt;span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold"&gt;
                 {disputePickups.length} pending
               &lt;/span&gt;
             &lt;/div&gt;
 
-            &lt;div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 mb-4 flex items-start gap-2"&gt;
+            &lt;div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 mb-3 flex items-start gap-2"&gt;
               &lt;AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" /&gt;
               &lt;span&gt;
-                You must complete this return pickup before accepting new orders.
-                You will earn &lt;strong&gt;₦560&lt;/strong&gt; once the item is confirmed received.
+                Complete this return pickup before accepting new orders.
+                You will earn &lt;strong&gt;₦560&lt;/strong&gt; once confirmed.
               &lt;/span&gt;
             &lt;/div&gt;
 
-            &lt;div className="space-y-4"&gt;
+            &lt;div className="space-y-3"&gt;
               {disputePickups.map((order: any) =&gt; {
                 const pickup = order.dispute?.pickupAddress as any
                 return (
-                  &lt;div key={order.id} className="bg-white border-2 border-red-300 rounded-xl shadow-md p-6"&gt;
-                    &lt;div className="flex justify-between items-start mb-4"&gt;
+                  &lt;div key={order.id} className="bg-white border-2 border-red-300 rounded-2xl p-5"&gt;
+                    &lt;div className="flex justify-between items-start mb-3"&gt;
                       &lt;div&gt;
-                        &lt;span className="text-xs font-bold text-red-600 uppercase tracking-wide bg-red-50 px-2 py-1 rounded-full"&gt;
+                        &lt;span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full"&gt;
                           Dispute Return
                         &lt;/span&gt;
-                        &lt;p className="text-sm text-gray-500 mt-1"&gt;#{order.orderNumber}&lt;/p&gt;
+                        &lt;p className="text-xs text-gray-400 mt-1"&gt;#{order.orderNumber}&lt;/p&gt;
                         &lt;p className="font-bold text-gray-900 mt-0.5"&gt;{order.product.name}&lt;/p&gt;
                       &lt;/div&gt;
                       &lt;span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold"&gt;
-                        ₦560 on completion
+                        ₦560 on done
                       &lt;/span&gt;
                     &lt;/div&gt;
 
                     {order.dispute?.reason &amp;&amp; (
-                      &lt;div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600"&gt;
-                        &lt;p className="text-xs font-semibold text-gray-400 uppercase mb-1"&gt;Reason for return&lt;/p&gt;
+                      &lt;div className="mb-3 p-3 bg-gray-50 rounded-xl text-sm text-gray-600"&gt;
+                        &lt;p className="text-xs font-semibold text-gray-400 uppercase mb-1"&gt;Reason&lt;/p&gt;
                         &lt;p&gt;{order.dispute.reason}&lt;/p&gt;
                       &lt;/div&gt;
                     )}
 
-                    &lt;div className="mb-4 p-3 bg-blue-50 rounded-lg"&gt;
-                      &lt;div className="flex items-center gap-1.5 mb-2"&gt;
-                        &lt;MapPin className="w-4 h-4 text-blue-500" /&gt;
-                        &lt;p className="text-xs font-semibold text-blue-600 uppercase tracking-wide"&gt;Collect from buyer&lt;/p&gt;
+                    &lt;div className="mb-3 p-3 bg-blue-50 rounded-xl"&gt;
+                      &lt;div className="flex items-center gap-1.5 mb-1.5"&gt;
+                        &lt;MapPin className="w-3.5 h-3.5 text-blue-500" /&gt;
+                        &lt;p className="text-xs font-bold text-blue-600 uppercase"&gt;Collect from buyer&lt;/p&gt;
                       &lt;/div&gt;
                       {pickup ? (
                         &lt;div className="text-sm space-y-0.5"&gt;
-                          &lt;p className="text-gray-800 font-medium"&gt;{pickup.hostel}{pickup.room ? `, Room ${pickup.room}` : ''}&lt;/p&gt;
-                          {pickup.landmark &amp;&amp; &lt;p className="text-gray-500"&gt;{pickup.landmark}&lt;/p&gt;}
-                          &lt;p className="text-blue-700 font-medium flex items-center gap-1 mt-1"&gt;
+                          &lt;p className="font-semibold text-gray-800"&gt;{pickup.hostel}{pickup.room ? `, Room ${pickup.room}` : ''}&lt;/p&gt;
+                          {pickup.landmark &amp;&amp; &lt;p className="text-gray-500 text-xs"&gt;{pickup.landmark}&lt;/p&gt;}
+                          &lt;p className="text-blue-700 font-semibold flex items-center gap-1 mt-1"&gt;
                             &lt;Phone className="w-3 h-3" /&gt; {pickup.phone}
                           &lt;/p&gt;
                         &lt;/div&gt;
                       ) : (
                         &lt;div className="text-sm space-y-0.5"&gt;
-                          &lt;p className="text-gray-800 font-medium"&gt;{order.deliveryHostel}, Room {order.deliveryRoom}&lt;/p&gt;
-                          {order.deliveryLandmark &amp;&amp; &lt;p className="text-gray-500"&gt;{order.deliveryLandmark}&lt;/p&gt;}
-                          &lt;p className="text-blue-700 font-medium flex items-center gap-1 mt-1"&gt;
+                          &lt;p className="font-semibold text-gray-800"&gt;{order.deliveryHostel}, Room {order.deliveryRoom}&lt;/p&gt;
+                          {order.deliveryLandmark &amp;&amp; &lt;p className="text-gray-500 text-xs"&gt;{order.deliveryLandmark}&lt;/p&gt;}
+                          &lt;p className="text-blue-700 font-semibold flex items-center gap-1 mt-1"&gt;
                             &lt;Phone className="w-3 h-3" /&gt; {order.deliveryPhone}
                           &lt;/p&gt;
                         &lt;/div&gt;
                       )}
                     &lt;/div&gt;
 
-                    &lt;div className="mb-4 p-3 bg-orange-50 rounded-lg"&gt;
-                      &lt;div className="flex items-center gap-1.5 mb-1"&gt;
-                        &lt;Package className="w-4 h-4 text-orange-500" /&gt;
-                        &lt;p className="text-xs font-semibold text-orange-600 uppercase tracking-wide"&gt;Return item to admin / store&lt;/p&gt;
-                      &lt;/div&gt;
-                      &lt;p className="text-sm text-gray-600"&gt;Contact admin for drop-off location if unsure.&lt;/p&gt;
-                    &lt;/div&gt;
-
                     &lt;button
                       onClick={() =&gt; markDisputePickedUp(order.id)}
                       disabled={actionLoading[`dispute-pickup-${order.id}`]}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition-colors disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
                     &gt;
                       {actionLoading[`dispute-pickup-${order.id}`]
                         ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
@@ -9758,128 +9788,265 @@ export default function RiderDashboardPage() {
           &lt;/div&gt;
         )}
 
-        {/* Available Orders */}
-        &lt;div className="mb-8"&gt;
-          &lt;h2 className="text-2xl font-bold text-gray-900 mb-4"&gt;
-            Available Orders ({availableOrders.length})
+        {/* ── My Active Batches ─────────────────────────────────────────── */}
+        {myBatches.length &gt; 0 &amp;&amp; (
+          &lt;div&gt;
+            &lt;h2 className="text-base font-black text-gray-900 mb-3"&gt;
+              My Active Batch{myBatches.length &gt; 1 ? 'es' : ''}
+            &lt;/h2&gt;
+            &lt;div className="space-y-4"&gt;
+              {myBatches.map((batch: any) =&gt; {
+                const deliveredCount = batch.orders.filter((o: any) =&gt; o.status === 'DELIVERED').length
+                const totalCount     = batch.orders.length
+
+                return (
+                  &lt;div key={batch.id} className="bg-white rounded-2xl border-2 border-BATAMART-primary/20 shadow-sm overflow-hidden"&gt;
+                    {/* Batch header */}
+                    &lt;div className="bg-BATAMART-primary/5 px-5 py-3 flex items-center justify-between"&gt;
+                      &lt;div&gt;
+                        &lt;p className="text-xs font-black text-BATAMART-primary uppercase tracking-wide"&gt;
+                          Active Batch · {totalCount} order{totalCount &gt; 1 ? 's' : ''}
+                        &lt;/p&gt;
+                        &lt;p className="text-xs text-gray-400 mt-0.5"&gt;#{batch.batchNumber}&lt;/p&gt;
+                      &lt;/div&gt;
+                      &lt;div className="text-right"&gt;
+                        &lt;span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"&gt;
+                          {deliveredCount}/{totalCount} delivered
+                        &lt;/span&gt;
+                        &lt;p className="text-xs font-black text-BATAMART-primary mt-1"&gt;
+                          ₦{(totalCount * 560).toLocaleString()} total
+                        &lt;/p&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+
+                    {/* Delivery address (one buyer, same for all) */}
+                    &lt;div className="px-5 py-3 border-b border-gray-50"&gt;
+                      &lt;div className="flex items-start gap-2 bg-blue-50 rounded-xl p-3"&gt;
+                        &lt;MapPin className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" /&gt;
+                        &lt;div className="flex-1 min-w-0"&gt;
+                          &lt;p className="text-xs font-bold text-blue-700"&gt;
+                            {batch.buyer.hostelName}
+                            {batch.buyer.roomNumber ? ` — Room ${batch.buyer.roomNumber}` : ''}
+                          &lt;/p&gt;
+                          {batch.buyer.landmark &amp;&amp; (
+                            &lt;p className="text-xs text-blue-500 mt-0.5"&gt;{batch.buyer.landmark}&lt;/p&gt;
+                          )}
+                          &lt;div className="flex items-center gap-1 mt-1"&gt;
+                            &lt;Phone className="w-3 h-3 text-blue-400" /&gt;
+                            &lt;span className="text-xs font-semibold text-blue-600"&gt;{batch.buyer.phone}&lt;/span&gt;
+                          &lt;/div&gt;
+                        &lt;/div&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+
+                    {/* Individual orders */}
+                    &lt;div className="p-4 space-y-3"&gt;
+                      {batch.orders.map((order: any, idx: number) =&gt; (
+                        &lt;div key={order.id} className="border border-gray-100 rounded-xl overflow-hidden"&gt;
+                          {/* Order info row */}
+                          &lt;div className="flex items-center gap-3 p-3"&gt;
+                            {order.product.images?.[0] ? (
+                              &lt;img
+                                src={order.product.images[0]}
+                                alt={order.product.name}
+                                className="w-11 h-11 rounded-lg object-cover flex-shrink-0 bg-gray-100"
+                              /&gt;
+                            ) : (
+                              &lt;div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"&gt;
+                                &lt;ShoppingBag className="w-5 h-5 text-gray-400" /&gt;
+                              &lt;/div&gt;
+                            )}
+                            &lt;div className="flex-1 min-w-0"&gt;
+                              &lt;p className="text-xs font-bold text-gray-800 truncate"&gt;{order.product.name}&lt;/p&gt;
+                              &lt;p className="text-xs text-gray-400 truncate"&gt;
+                                Pickup from: &lt;span className="text-gray-600 font-semibold"&gt;{order.seller.name}&lt;/span&gt;
+                              &lt;/p&gt;
+                              {order.product.hostelName &amp;&amp; (
+                                &lt;p className="text-xs text-gray-400 truncate"&gt;{order.product.hostelName}&lt;/p&gt;
+                              )}
+                              {order.seller.phone &amp;&amp; (
+                                &lt;p className="text-xs text-gray-400 flex items-center gap-1"&gt;
+                                  &lt;Phone className="w-2.5 h-2.5" /&gt; {order.seller.phone}
+                                &lt;/p&gt;
+                              )}
+                            &lt;/div&gt;
+                            &lt;div className="flex flex-col items-end gap-1.5 flex-shrink-0"&gt;
+                              &lt;StatusBadge status={order.status} /&gt;
+                              &lt;span className="text-[10px] font-bold text-gray-400"&gt;#{idx + 1}&lt;/span&gt;
+                            &lt;/div&gt;
+                          &lt;/div&gt;
+
+                          {/* Status action buttons */}
+                          {order.status !== 'DELIVERED' &amp;&amp; (
+                            &lt;div className="px-3 pb-3"&gt;
+                              {order.status === 'RIDER_ASSIGNED' &amp;&amp; (
+                                &lt;button
+                                  onClick={() =&gt; updateStatus(order.id, 'PICKED_UP')}
+                                  disabled={actionLoading[`status-${order.id}`]}
+                                  className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold
+                                             flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+                                &gt;
+                                  {actionLoading[`status-${order.id}`]
+                                    ? &lt;&gt;&lt;Loader2 className="w-3.5 h-3.5 animate-spin" /&gt; Updating...&lt;/&gt;
+                                    : &lt;&gt;&lt;Package className="w-3.5 h-3.5" /&gt; Mark as Picked Up&lt;/&gt;
+                                  }
+                                &lt;/button&gt;
+                              )}
+                              {order.status === 'PICKED_UP' &amp;&amp; (
+                                &lt;button
+                                  onClick={() =&gt; updateStatus(order.id, 'ON_THE_WAY')}
+                                  disabled={actionLoading[`status-${order.id}`]}
+                                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold
+                                             flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+                                &gt;
+                                  {actionLoading[`status-${order.id}`]
+                                    ? &lt;&gt;&lt;Loader2 className="w-3.5 h-3.5 animate-spin" /&gt; Updating...&lt;/&gt;
+                                    : &lt;&gt;&lt;ArrowRight className="w-3.5 h-3.5" /&gt; On The Way&lt;/&gt;
+                                  }
+                                &lt;/button&gt;
+                              )}
+                              {order.status === 'ON_THE_WAY' &amp;&amp; (
+                                &lt;button
+                                  onClick={() =&gt; updateStatus(order.id, 'DELIVERED')}
+                                  disabled={actionLoading[`status-${order.id}`]}
+                                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold
+                                             flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+                                &gt;
+                                  {actionLoading[`status-${order.id}`]
+                                    ? &lt;&gt;&lt;Loader2 className="w-3.5 h-3.5 animate-spin" /&gt; Updating...&lt;/&gt;
+                                    : &lt;&gt;&lt;CheckCircle className="w-3.5 h-3.5" /&gt; Mark as Delivered&lt;/&gt;
+                                  }
+                                &lt;/button&gt;
+                              )}
+                            &lt;/div&gt;
+                          )}
+
+                          {order.status === 'DELIVERED' &amp;&amp; (
+                            &lt;div className="px-3 pb-3"&gt;
+                              &lt;div className="w-full py-2 bg-emerald-50 rounded-lg text-center text-xs font-bold text-emerald-600 flex items-center justify-center gap-1.5"&gt;
+                                &lt;CheckCircle className="w-3.5 h-3.5" /&gt; Delivered ✓
+                              &lt;/div&gt;
+                            &lt;/div&gt;
+                          )}
+                        &lt;/div&gt;
+                      ))}
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+                )
+              })}
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )}
+
+        {/* ── Available Batches ─────────────────────────────────────────── */}
+        &lt;div&gt;
+          &lt;h2 className="text-base font-black text-gray-900 mb-3"&gt;
+            Available Batches ({availableBatches.length})
           &lt;/h2&gt;
 
           {hasDisputePickupPending &amp;&amp; (
-            &lt;div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded-xl text-sm text-yellow-800 flex items-center gap-2"&gt;
+            &lt;div className="mb-3 p-3 bg-yellow-50 border border-yellow-300 rounded-xl text-sm text-yellow-800 flex items-center gap-2"&gt;
               &lt;AlertTriangle className="w-4 h-4 flex-shrink-0" /&gt;
-              New orders are locked until you complete the return pickup above.
+              New batches are locked until you complete the return pickup above.
             &lt;/div&gt;
           )}
 
-          {availableOrders.length === 0 ? (
-            &lt;div className="bg-white rounded-xl p-8 text-center"&gt;
-              &lt;p className="text-gray-500"&gt;No available orders at the moment&lt;/p&gt;
-            &lt;/div&gt;
-          ) : (
-            &lt;div className="grid md:grid-cols-2 gap-4"&gt;
-              {availableOrders.map((order: any) =&gt; (
-                &lt;div key={order.id} className={`bg-white rounded-xl shadow-md p-6 ${hasDisputePickupPending ? 'opacity-50 pointer-events-none' : ''}`}&gt;
-                  &lt;div className="flex justify-between items-start mb-4"&gt;
-                    &lt;div&gt;
-                      &lt;p className="text-sm text-gray-500"&gt;#{order.orderNumber}&lt;/p&gt;
-                      &lt;p className="font-bold text-gray-900 mt-1"&gt;{order.product.name}&lt;/p&gt;
-                    &lt;/div&gt;
-                    &lt;span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold"&gt;NEW&lt;/span&gt;
-                  &lt;/div&gt;
-
-                  &lt;div className="space-y-2 text-sm"&gt;
-                    &lt;p className="text-gray-600"&gt;&lt;strong&gt;Pickup:&lt;/strong&gt; {order.product.hostelName}&lt;/p&gt;
-                    &lt;p className="text-gray-600"&gt;&lt;strong&gt;Delivery:&lt;/strong&gt; {order.deliveryHostel}&lt;/p&gt;
-                    &lt;p className="text-green-600 font-bold"&gt;Earn: ₦560&lt;/p&gt;
-                  &lt;/div&gt;
-
-                  &lt;button
-                    onClick={() =&gt; acceptOrder(order.id)}
-                    disabled={actionLoading[`accept-${order.id}`] || hasDisputePickupPending}
-                    className="w-full mt-4 bg-BATAMART-primary hover:bg-BATAMART-dark text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  &gt;
-                    {actionLoading[`accept-${order.id}`]
-                      ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Accepting...&lt;/&gt;
-                      : 'Accept Order'
-                    }
-                  &lt;/button&gt;
-                &lt;/div&gt;
-              ))}
-            &lt;/div&gt;
-          )}
-        &lt;/div&gt;
-
-        {/* My Active Deliveries */}
-        &lt;div&gt;
-          &lt;h2 className="text-2xl font-bold text-gray-900 mb-4"&gt;My Active Deliveries&lt;/h2&gt;
-          {myDeliveries.length === 0 ? (
-            &lt;div className="bg-white rounded-xl p-8 text-center"&gt;
-              &lt;p className="text-gray-500"&gt;No active deliveries&lt;/p&gt;
+          {availableBatches.length === 0 ? (
+            &lt;div className="bg-white rounded-2xl border border-gray-100 p-8 text-center"&gt;
+              &lt;Bike className="w-10 h-10 text-gray-200 mx-auto mb-2" /&gt;
+              &lt;p className="text-gray-400 font-semibold text-sm"&gt;No available batches right now&lt;/p&gt;
+              &lt;p className="text-gray-300 text-xs mt-1"&gt;Check back soon&lt;/p&gt;
             &lt;/div&gt;
           ) : (
             &lt;div className="space-y-4"&gt;
-              {myDeliveries.map((delivery: any) =&gt; (
-                &lt;div key={delivery.id} className="bg-white rounded-xl shadow-md p-6"&gt;
-                  &lt;div className="flex justify-between items-start mb-4"&gt;
+              {availableBatches.map((batch: any) =&gt; (
+                &lt;div
+                  key={batch.id}
+                  className={`bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden ${
+                    hasDisputePickupPending ? 'opacity-50 pointer-events-none' : ''
+                  }`}
+                &gt;
+                  {/* Batch header */}
+                  &lt;div className="bg-gray-50 px-5 py-3 flex items-center justify-between border-b border-gray-100"&gt;
                     &lt;div&gt;
-                      &lt;p className="text-sm text-gray-500"&gt;#{delivery.orderNumber}&lt;/p&gt;
-                      &lt;p className="font-bold text-gray-900 mt-1"&gt;{delivery.product.name}&lt;/p&gt;
+                      &lt;span className="text-xs font-black text-BATAMART-primary bg-BATAMART-primary/10 px-2.5 py-1 rounded-full"&gt;
+                        {batch.orders.length} ORDER{batch.orders.length &gt; 1 ? 'S' : ''} · 1 BATCH
+                      &lt;/span&gt;
+                      &lt;p className="text-xs text-gray-400 mt-1"&gt;#{batch.batchNumber}&lt;/p&gt;
                     &lt;/div&gt;
-                    &lt;span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold"&gt;
-                      {delivery.status.replace('_', ' ')}
-                    &lt;/span&gt;
-                  &lt;/div&gt;
-
-                  &lt;div className="grid md:grid-cols-2 gap-4 mb-4 text-sm"&gt;
-                    &lt;div&gt;
-                      &lt;p className="text-gray-600"&gt;&lt;strong&gt;Pickup:&lt;/strong&gt;&lt;/p&gt;
-                      &lt;p&gt;{delivery.product.hostelName}&lt;/p&gt;
-                      &lt;p className="text-sm text-gray-500"&gt;{delivery.seller.phone}&lt;/p&gt;
-                    &lt;/div&gt;
-                    &lt;div&gt;
-                      &lt;p className="text-gray-600"&gt;&lt;strong&gt;Delivery:&lt;/strong&gt;&lt;/p&gt;
-                      &lt;p&gt;{delivery.deliveryHostel}, {delivery.deliveryRoom}&lt;/p&gt;
-                      &lt;p className="text-sm text-gray-500"&gt;{delivery.deliveryPhone}&lt;/p&gt;
+                    &lt;div className="text-right"&gt;
+                      &lt;p className="text-sm font-black text-emerald-600"&gt;
+                        ₦{(batch.orders.length * 560).toLocaleString()}
+                      &lt;/p&gt;
+                      &lt;p className="text-[10px] text-gray-400"&gt;you earn&lt;/p&gt;
                     &lt;/div&gt;
                   &lt;/div&gt;
 
-                  &lt;div className="flex gap-2"&gt;
-                    {delivery.status === 'RIDER_ASSIGNED' &amp;&amp; (
-                      &lt;button
-                        onClick={() =&gt; updateStatus(delivery.id, 'PICKED_UP')}
-                        disabled={actionLoading[`status-${delivery.id}`]}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      &gt;
-                        {actionLoading[`status-${delivery.id}`]
-                          ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
-                          : 'Mark as Picked Up'
-                        }
-                      &lt;/button&gt;
-                    )}
-                    {delivery.status === 'PICKED_UP' &amp;&amp; (
-                      &lt;button
-                        onClick={() =&gt; updateStatus(delivery.id, 'ON_THE_WAY')}
-                        disabled={actionLoading[`status-${delivery.id}`]}
-                        className="flex-1 bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      &gt;
-                        {actionLoading[`status-${delivery.id}`]
-                          ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
-                          : 'On The Way'
-                        }
-                      &lt;/button&gt;
-                    )}
-                    {delivery.status === 'ON_THE_WAY' &amp;&amp; (
-                      &lt;button
-                        onClick={() =&gt; updateStatus(delivery.id, 'DELIVERED')}
-                        disabled={actionLoading[`status-${delivery.id}`]}
-                        className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      &gt;
-                        {actionLoading[`status-${delivery.id}`]
-                          ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
-                          : 'Mark as Delivered'
-                        }
-                      &lt;/button&gt;
-                    )}
+                  {/* Delivery address */}
+                  &lt;div className="px-5 py-3 border-b border-gray-50"&gt;
+                    &lt;div className="flex items-start gap-2"&gt;
+                      &lt;MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" /&gt;
+                      &lt;div&gt;
+                        &lt;p className="text-xs font-bold text-gray-700"&gt;
+                          Deliver to: {batch.buyer.hostelName}
+                          {batch.buyer.roomNumber ? ` — Room ${batch.buyer.roomNumber}` : ''}
+                        &lt;/p&gt;
+                        {batch.buyer.landmark &amp;&amp; (
+                          &lt;p className="text-xs text-gray-400"&gt;{batch.buyer.landmark}&lt;/p&gt;
+                        )}
+                        &lt;div className="flex items-center gap-1 mt-0.5"&gt;
+                          &lt;Phone className="w-2.5 h-2.5 text-gray-400" /&gt;
+                          &lt;span className="text-xs text-gray-500"&gt;{batch.buyer.phone}&lt;/span&gt;
+                        &lt;/div&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+
+                  {/* Orders list */}
+                  &lt;div className="px-5 py-3 space-y-2"&gt;
+                    {batch.orders.map((order: any, idx: number) =&gt; (
+                      &lt;div key={order.id} className="flex items-center gap-3"&gt;
+                        {order.product.images?.[0] ? (
+                          &lt;img
+                            src={order.product.images[0]}
+                            alt={order.product.name}
+                            className="w-9 h-9 rounded-lg object-cover flex-shrink-0 bg-gray-100"
+                          /&gt;
+                        ) : (
+                          &lt;div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"&gt;
+                            &lt;Package className="w-4 h-4 text-gray-400" /&gt;
+                          &lt;/div&gt;
+                        )}
+                        &lt;div className="flex-1 min-w-0"&gt;
+                          &lt;p className="text-xs font-bold text-gray-800 truncate"&gt;{order.product.name}&lt;/p&gt;
+                          &lt;p className="text-xs text-gray-400"&gt;
+                            From: {order.seller.name}
+                            {order.product.hostelName ? ` · ${order.product.hostelName}` : ''}
+                          &lt;/p&gt;
+                        &lt;/div&gt;
+                        &lt;span className="text-xs font-bold text-gray-400 flex-shrink-0"&gt;#{idx + 1}&lt;/span&gt;
+                      &lt;/div&gt;
+                    ))}
+                  &lt;/div&gt;
+
+                  {/* Accept button */}
+                  &lt;div className="px-5 pb-5"&gt;
+                    &lt;button
+                      onClick={() =&gt; acceptBatch(batch.id)}
+                      disabled={actionLoading[`accept-${batch.id}`] || hasDisputePickupPending}
+                      className="w-full py-3 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-xl
+                                 font-bold text-sm shadow-md shadow-BATAMART-primary/20
+                                 flex items-center justify-center gap-2
+                                 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    &gt;
+                      {actionLoading[`accept-${batch.id}`]
+                        ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Accepting...&lt;/&gt;
+                        : &lt;&gt;
+                            Accept Batch · ₦{(batch.orders.length * 560).toLocaleString()}
+                            &lt;ArrowRight className="w-4 h-4" /&gt;
+                          &lt;/&gt;
+                      }
+                    &lt;/button&gt;
                   &lt;/div&gt;
                 &lt;/div&gt;
               ))}
@@ -22264,18 +22431,28 @@ export const dynamic = 'force-dynamic'
 // STANDARDIZED FEE STRUCTURE
 // calculateFees is imported by the verify route — both sides
 // must always compute fees identically from the same function.
+//
+// DELIVERY MODEL (batch):
+//   Each order in the cart gets its own full ₦800 delivery fee.
+//   Buyer pays ₦800 × number_of_orders (one per seller).
+//   Rider gets ₦560 per order = ₦560 × N total.
+//   Platform keeps ₦240 per order from delivery.
+//   Referral reward (₦120) fires ONCE per batch (not per order).
+//   The remaining ₦120 per order stays with the platform.
 // ============================================================
 export function calculateFees(subtotal: number, deliveryFee: number = 800) {
-  const PLATFORM_RATE = 0.05
-  const RIDER_SHARE = 560
-  // ₦120 goes to referrer (50% of old ₦240), ₦120 stays with platform
-  const PLATFORM_DELIVERY_CUT = 120
+  const PLATFORM_RATE         = 0.05
+  const RIDER_SHARE           = 560
+  // Platform keeps full ₦240 delivery cut per order.
+  // Referral (₦120) is deducted at batch level in processReferralReward,
+  // not here — so platformTotal here reflects the gross delivery cut.
+  const PLATFORM_DELIVERY_CUT = 240
 
   const platformFeeFromProducts = subtotal * PLATFORM_RATE
-  const sellerShare = subtotal - platformFeeFromProducts
-  const riderShare = RIDER_SHARE
-  const platformTotal = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
-  const totalAmount = subtotal + deliveryFee
+  const sellerShare             = subtotal - platformFeeFromProducts
+  const riderShare              = RIDER_SHARE
+  const platformTotal           = platformFeeFromProducts + PLATFORM_DELIVERY_CUT
+  const totalAmount             = subtotal + deliveryFee
 
   return {
     subtotal,
@@ -22297,15 +22474,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { productId, cartItems, deliveryFee = 800 } = body
+    const { productId, cartItems } = body
 
     type CartItem = {
-      productId: string
-      name: string
-      price: number
-      quantity: number
-      category: string
-      sellerId: string
+      productId:  string
+      name:       string
+      price:      number
+      quantity:   number
+      category:   string
+      sellerId:   string
       sellerName: string
       orderNote?: string
     }
@@ -22316,7 +22493,7 @@ export async function POST(request: NextRequest) {
       // Server always re-fetches price from DB — client-supplied price is IGNORED
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
-          where: { id: item.productId },
+          where:   { id: item.productId },
           include: { seller: true },
         })
         if (!product) {
@@ -22325,24 +22502,23 @@ export async function POST(request: NextRequest) {
         if (!product.isActive || product.quantity &lt; item.quantity) {
           return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 })
         }
-        // Input length guard on order notes
         if (item.orderNote &amp;&amp; String(item.orderNote).length &gt; 300) {
           return NextResponse.json({ error: 'Order note must be under 300 characters' }, { status: 400 })
         }
         items.push({
-          productId: product.id,
-          name: product.name,
-          price: product.price, // ← always from DB, never from client
-          quantity: item.quantity,
-          category: product.category,
-          sellerId: product.sellerId,
+          productId:  product.id,
+          name:       product.name,
+          price:      product.price, // ← always from DB, never from client
+          quantity:   item.quantity,
+          category:   product.category,
+          sellerId:   product.sellerId,
           sellerName: product.seller.name,
-          orderNote: item.orderNote,
+          orderNote:  item.orderNote,
         })
       }
     } else if (productId) {
       const product = await prisma.product.findUnique({
-        where: { id: productId },
+        where:   { id: productId },
         include: { seller: true },
       })
       if (!product) {
@@ -22352,14 +22528,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Product unavailable' }, { status: 400 })
       }
       items = [{
-        productId: product.id,
-        name: product.name,
-        price: product.price,
-        quantity: 1,
-        category: product.category,
-        sellerId: product.sellerId,
+        productId:  product.id,
+        name:       product.name,
+        price:      product.price,
+        quantity:   1,
+        category:   product.category,
+        sellerId:   product.sellerId,
         sellerName: product.seller.name,
-        orderNote: body.orderNote,
+        orderNote:  body.orderNote,
       }]
     } else {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
@@ -22371,9 +22547,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You cannot buy your own product' }, { status: 400 })
     }
 
-    // Calculate totals
-    const subtotal = items.reduce((sum, item) =&gt; sum + item.price * item.quantity, 0)
-    const fees = calculateFees(subtotal, deliveryFee)
+    // ── Calculate totals ──────────────────────────────────────────────────────
+    // Count distinct sellers = number of orders = number of ₦800 delivery fees
+    const distinctSellers  = new Set(items.map(i =&gt; i.sellerId)).size
+    const perOrderDelivery = 800
+    const totalDelivery    = perOrderDelivery * distinctSellers
+    const subtotal         = items.reduce((sum, item) =&gt; sum + item.price * item.quantity, 0)
+
+    // fees here represent the TOTAL for Paystack (all orders combined)
+    const totalSubtotal = subtotal
+    const totalAmount   = totalSubtotal + totalDelivery
 
     // APP_URL required
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL
@@ -22385,27 +22568,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const reference = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
+    const reference   = `BATAMART-${Date.now()}-${user.id.substring(0, 8)}`
     const callbackUrl = `${APP_URL.replace(/\/$/, '')}/api/payments/verify`
 
     console.log('💳 Initializing Paystack — reference:', reference, '| callback:', callbackUrl)
+    console.log(`🛒 Cart: ${items.length} item(s), ${distinctSellers} seller(s), total delivery ₦${totalDelivery}`)
 
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST',
+      method:  'POST',
       headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        Authorization:  `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: user.email || `${user.id}@batamart.app`,
-        amount: fees.totalAmount * 100, // kobo
+        email:        user.email || `${user.id}@batamart.app`,
+        amount:       totalAmount * 100, // kobo
         reference,
         callback_url: callbackUrl,
         metadata: {
-          userId: user.id,
-          cartItems: items,
-          deliveryFee,
-          fees,
+          userId:            user.id,
+          cartItems:         items,
+          perOrderDelivery,  // ← ₦800 per order, createOrders uses this per seller group
+          distinctSellers,
         },
       }),
     })
@@ -22423,11 +22607,11 @@ export async function POST(request: NextRequest) {
     console.log('✅ Paystack initialized — reference:', reference)
 
     return NextResponse.json({
-      success: true,
+      success:           true,
       authorization_url: paystackData.data.authorization_url,
-      reference: paystackData.data.reference,
-      deliveryFee: fees.deliveryFee,
-      totalAmount: fees.totalAmount,
+      reference:         paystackData.data.reference,
+      deliveryFee:       totalDelivery,
+      totalAmount,
     })
   } catch (error) {
     console.error('Payment init error:', error)
@@ -22439,33 +22623,50 @@ export async function POST(request: NextRequest) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// createOrders — called ONLY from the verify route after Paystack confirms
-// the payment. Never call this directly from any other route.
+// createOrders — called ONLY from the verify route after Paystack confirms.
+// Creates ONE DeliveryBatch then one Order per seller group.
+// Each order carries a full ₦800 delivery fee — NOT split.
 // ══════════════════════════════════════════════════════════════════════════════
 export async function createOrders(
   items: {
-    productId: string
-    name: string
-    price: number
-    quantity: number
-    category: string
-    sellerId: string
+    productId:  string
+    name:       string
+    price:      number
+    quantity:   number
+    category:   string
+    sellerId:   string
     sellerName: string
     orderNote?: string
   }[],
   user: {
-    id: string
-    hostelName?: string | null
-    roomNumber?: string | null
-    phone?: string | null
-    landmark?: string | null
+    id:           string
+    hostelName?:  string | null
+    roomNumber?:  string | null
+    phone?:       string | null
+    landmark?:    string | null
+    universityId?: string | null
   },
-  fees: ReturnType&lt;typeof calculateFees&gt;,
   paymentReference: string
 ) {
   console.log('📝 createOrders called — reference:', paymentReference)
 
-  // Group items by seller so each seller gets their own Order record
+  // ── STEP 1: Create the DeliveryBatch FIRST ──────────────────────────────────
+  // One batch per checkout session. All orders in this cart link to it.
+  const batchNumber = `BATCH-${crypto.randomUUID().replace(/-/g, '').substring(0, 12).toUpperCase()}`
+
+  const batch = await prisma.deliveryBatch.create({
+    data: {
+      batchNumber,
+      buyerId:          user.id,
+      universityId:     user.universityId ?? '',
+      paymentReference,
+      status:           'PENDING',
+    },
+  })
+
+  console.log('📦 DeliveryBatch created:', batchNumber)
+
+  // ── STEP 2: Group items by seller ───────────────────────────────────────────
   const sellerGroups = items.reduce&lt;Record&lt;string, typeof items&gt;&gt;((acc, item) =&gt; {
     if (!acc[item.sellerId]) acc[item.sellerId] = []
     acc[item.sellerId].push(item)
@@ -22475,38 +22676,35 @@ export async function createOrders(
   const createdOrders: Awaited&lt;ReturnType&lt;typeof prisma.order.create&gt;&gt;[] = []
 
   const notificationQueue: Array&lt;{
-    orderId: string
-    buyerId: string
-    sellerId: string
+    orderId:     string
+    buyerId:     string
+    sellerId:    string
     orderNumber: string
-    itemsList: string
+    itemsList:   string
   }&gt; = []
 
   const outOfStockAlerts: Array&lt;{
-    sellerId: string
-    productId: string
+    sellerId:    string
+    productId:   string
     productName: string
   }&gt; = []
 
+  // Each order gets a FULL ₦800 delivery fee (not split, not proportional)
+  const perOrderDelivery = 800
+
   for (const [sellerId, sellerItems] of Object.entries(sellerGroups)) {
     const orderSubtotal = sellerItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const proportion = fees.subtotal &gt; 0 ? orderSubtotal / fees.subtotal : 1
-    const orderFees = calculateFees(orderSubtotal, Math.round(fees.deliveryFee * proportion))
+    const orderFees     = calculateFees(orderSubtotal, perOrderDelivery)
 
-    // FIX 1: Use crypto.randomUUID() instead of Date.now() + random suffix.
-    // Date.now() has millisecond resolution — two sellers processing in the same
-    // createOrders call can produce an identical timestamp, causing a unique
-    // constraint violation on orderNumber. UUID is globally unique by design.
     const orderNumber = `BATAMART-${crypto.randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase()}`
-    const itemsList = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
+    const itemsList   = sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', ')
 
     console.log('🔨 Creating order:', orderNumber, 'for seller:', sellerId)
 
     try {
       const order = await prisma.$transaction(async (tx) =&gt; {
-        // FIX 2: Only fetch pendingBalance — availableBalance was dead data here.
         const seller = await tx.user.findUnique({
-          where: { id: sellerId },
+          where:  { id: sellerId },
           select: { pendingBalance: true },
         })
         if (!seller) throw new Error(`Seller not found: ${sellerId}`)
@@ -22519,103 +22717,94 @@ export async function createOrders(
         const newOrder = await tx.order.create({
           data: {
             orderNumber,
-            buyerId: user.id,
+            buyerId:            user.id,
             sellerId,
-            productId: sellerItems[0].productId,
-            productPrice: Number(orderSubtotal),
-            deliveryFee: Number(orderFees.deliveryFee),
-            totalAmount: Number(orderFees.totalAmount),
+            batchId:            batch.id,   // ← link to the batch
+            productId:          sellerItems[0].productId,
+            productPrice:       Number(orderSubtotal),
+            deliveryFee:        Number(orderFees.deliveryFee),
+            totalAmount:        Number(orderFees.totalAmount),
             platformCommission: Number(orderFees.platformTotal),
-            quantity: Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
-            deliveryHostel: String(user.hostelName ?? ''),
-            deliveryRoom: String(user.roomNumber ?? ''),
-            deliveryPhone: String(user.phone ?? ''),
-            deliveryLandmark: String(user.landmark ?? ''),
-            isPaid: true,
-            status: 'PENDING' as const,
+            quantity:           Number(sellerItems.reduce((sum, i) =&gt; sum + i.quantity, 0)),
+            deliveryHostel:     String(user.hostelName  ?? ''),
+            deliveryRoom:       String(user.roomNumber  ?? ''),
+            deliveryPhone:      String(user.phone       ?? ''),
+            deliveryLandmark:   String(user.landmark    ?? ''),
+            isPaid:             true,
+            status:             'PENDING' as const,
             orderNote,
             payment: {
               create: {
-                amount: Number(orderFees.totalAmount),
-                method: 'CARD' as const,
-                status: 'COMPLETED' as const,
+                amount:        Number(orderFees.totalAmount),
+                method:        'CARD' as const,
+                status:        'COMPLETED' as const,
                 transactionId: paymentReference,
-                paidAt: new Date(),
+                paidAt:        new Date(),
               },
             },
           },
         })
 
-        // FIX 3: TOCTOU-safe stock decrement.
-        // The verify route checks stock BEFORE calling createOrders, but two
-        // concurrent buyers could both pass that check for the last unit and
-        // then both enter this transaction. We guard against that by including
-        // a `where` filter that only matches rows with sufficient stock.
-        // If the updateMany affects 0 rows, the item was already snapped up —
-        // we throw immediately so Prisma rolls back the whole transaction and
-        // the second buyer gets a clean error rather than negative inventory.
+        // TOCTOU-safe stock decrement
         for (const item of sellerItems) {
           const updated = await tx.product.updateMany({
             where: {
-              id: item.productId,
-              quantity: { gte: Number(item.quantity) }, // only proceed if stock is still sufficient
+              id:       item.productId,
+              quantity: { gte: Number(item.quantity) },
             },
             data: { quantity: { decrement: Number(item.quantity) } },
           })
 
           if (updated.count === 0) {
-            // Stock was snatched between the pre-check and this transaction.
             throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
           }
 
-          // Check if stock just hit zero and deactivate if so.
-          // We re-fetch only the fields we need — updateMany doesn't return rows.
           const afterUpdate = await tx.product.findUnique({
-            where: { id: item.productId },
+            where:  { id: item.productId },
             select: { id: true, name: true, quantity: true },
           })
 
           if (afterUpdate &amp;&amp; afterUpdate.quantity &lt;= 0) {
             await tx.product.update({
               where: { id: item.productId },
-              data: { isActive: false },
+              data:  { isActive: false },
             })
             outOfStockAlerts.push({
               sellerId,
-              productId: afterUpdate.id,
+              productId:   afterUpdate.id,
               productName: afterUpdate.name,
             })
           }
         }
 
         // Credit seller's pending (escrow) balance
-        const sellerShare = Number(orderFees.sellerShare)
+        const sellerShare        = Number(orderFees.sellerShare)
         const sellerPendingBalance = Number(seller.pendingBalance ?? 0)
 
         await tx.user.update({
           where: { id: sellerId },
-          data: { pendingBalance: { increment: sellerShare } },
+          data:  { pendingBalance: { increment: sellerShare } },
         })
 
         await tx.transaction.createMany({
           data: [
             {
-              userId: sellerId,
-              type: 'ESCROW',
-              amount: sellerShare,
-              description: `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
-              reference: `${orderNumber}-SELLER-ESCROW`,
+              userId:        sellerId,
+              type:          'ESCROW',
+              amount:        sellerShare,
+              description:   `Escrow held for: ${itemsList} (Order: ${orderNumber})`,
+              reference:     `${orderNumber}-SELLER-ESCROW`,
               balanceBefore: sellerPendingBalance,
-              balanceAfter: sellerPendingBalance + sellerShare,
+              balanceAfter:  sellerPendingBalance + sellerShare,
             },
             {
-              userId: user.id,
-              type: 'DEBIT',
-              amount: Number(orderFees.totalAmount),
-              description: `Payment for ${itemsList} (Order: ${orderNumber})`,
-              reference: `${orderNumber}-BUYER-PAYMENT`,
+              userId:        user.id,
+              type:          'DEBIT',
+              amount:        Number(orderFees.totalAmount),
+              description:   `Payment for ${itemsList} (Order: ${orderNumber})`,
+              reference:     `${orderNumber}-BUYER-PAYMENT`,
               balanceBefore: 0,
-              balanceAfter: 0,
+              balanceAfter:  0,
             },
           ],
         })
@@ -22625,8 +22814,8 @@ export async function createOrders(
 
       createdOrders.push(order)
       notificationQueue.push({
-        orderId: order.id,
-        buyerId: user.id,
+        orderId:     order.id,
+        buyerId:     user.id,
         sellerId,
         orderNumber,
         itemsList,
@@ -22645,7 +22834,6 @@ export async function createOrders(
       .catch(err =&gt; console.error(`⚠️  Notification failed for ${n.orderNumber}:`, err))
   }
 
-  // Fire out-of-stock alerts — non-blocking
   if (outOfStockAlerts.length &gt; 0) {
     Promise.allSettled(
       outOfStockAlerts.map(alert =&gt;
@@ -22654,7 +22842,7 @@ export async function createOrders(
     ).catch(() =&gt; { })
   }
 
-  console.log('🎉 All orders created:', createdOrders.length)
+  console.log('🎉 All orders created:', createdOrders.length, '| Batch:', batchNumber)
   return createdOrders
 }
 
@@ -22670,9 +22858,9 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-      where: { id: sellerId },
-      select: { email: true, name: true },
-    }).catch(() =&gt; null)
+        where:  { id: sellerId },
+        select: { email: true, name: true },
+      }).catch(() =&gt; null)
     : null
 
   const tasks: Promise&lt;any&gt;[] = []
@@ -22680,10 +22868,10 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId: sellerId,
-        type: 'ORDER_PLACED',
-        title: '⚠️ Product Out of Stock',
-        message: `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
+        userId:   sellerId,
+        type:     'ORDER_PLACED',
+        title:    '⚠️ Product Out of Stock',
+        message:  `"${productName}" has sold out and been hidden from the marketplace. Restock it to make it visible again.`,
         metadata: { productId, productName },
       })
     )
@@ -22693,7 +22881,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
     const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to: seller.email,
+        to:      seller.email,
         subject: `⚠️ "${productName}" is out of stock — BATAMART`,
         html: `
 &lt;!DOCTYPE html&gt;
@@ -22707,7 +22895,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
           &lt;tr&gt;
             &lt;td align="center" style="padding-bottom:24px;"&gt;
               &lt;span style="font-size:28px;font-weight:800;color:#111827;letter-spacing:-1px;"&gt;BATAMART&lt;/span&gt;
-              &lt;span style="font-size:12px;color:#6b7280;display:block;margin-top:2px;"&gt;UNIZIK Campus Marketplace&lt;/span&gt;
+              &lt;span style="font-size:12px;color:#6b7280;display:block;margin-top:2px;"&gt;Campus Marketplace&lt;/span&gt;
             &lt;/td&gt;
           &lt;/tr&gt;
           &lt;tr&gt;
@@ -22723,7 +22911,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
                 &lt;/p&gt;
               &lt;/div&gt;
               &lt;p style="font-size:14px;color:#6b7280;margin:0 0 24px;"&gt;
-                To start selling again, go to your shop and restock this product. It will become visible again automatically once you add more quantity.
+                To start selling again, go to your shop and restock this product.
               &lt;/p&gt;
               &lt;a href="${APP_URL}/my-shop"
                  style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;font-size:15px;font-weight:600;border-radius:10px;text-decoration:none;"&gt;
@@ -22733,9 +22921,7 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
           &lt;/tr&gt;
           &lt;tr&gt;
             &lt;td align="center" style="padding-top:24px;"&gt;
-              &lt;p style="font-size:12px;color:#9ca3af;margin:0;"&gt;
-                BATAMART — UNIZIK Campus Marketplace · Awka, Anambra State
-              &lt;/p&gt;
+              &lt;p style="font-size:12px;color:#9ca3af;margin:0;"&gt;BATAMART — Campus Marketplace&lt;/p&gt;
             &lt;/td&gt;
           &lt;/tr&gt;
         &lt;/table&gt;
@@ -22822,7 +23008,7 @@ export async function GET(request: NextRequest) {
     console.log('\n🔄 STEP 2: Idempotency check')
 
     const existingPayment = await prisma.payment.findFirst({
-      where: { transactionId: reference },
+      where:   { transactionId: reference },
       include: { order: { select: { id: true, orderNumber: true } } },
     })
 
@@ -22837,21 +23023,21 @@ export async function GET(request: NextRequest) {
     console.log('\n📋 STEP 3: Extracting Metadata')
 
     type CartItem = {
-      productId: string
-      name: string
-      price: number
-      quantity: number
-      category: string
-      sellerId: string
+      productId:  string
+      name:       string
+      price:      number
+      quantity:   number
+      category:   string
+      sellerId:   string
       sellerName: string
       orderNote?: string
     }
 
     const meta = verifyData.data.metadata as {
-      userId: string
-      cartItems: CartItem[]
-      deliveryFee: number
-      fees: ReturnType&lt;typeof calculateFees&gt;
+      userId:           string
+      cartItems:        CartItem[]
+      perOrderDelivery: number
+      distinctSellers:  number
     }
 
     if (!meta?.userId || !Array.isArray(meta?.cartItems) || meta.cartItems.length === 0) {
@@ -22861,15 +23047,16 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Metadata OK — User:', meta.userId, '| Items:', meta.cartItems.length)
 
-    // STEP 4: Fetch buyer
+    // STEP 4: Fetch buyer (include universityId for batch campus-scoping)
     console.log('\n👤 STEP 4: Fetching Buyer')
 
     const buyer = await prisma.user.findUnique({
-      where: { id: meta.userId },
+      where:  { id: meta.userId },
       select: {
         id: true, name: true, email: true,
         hostelName: true, roomNumber: true,
         phone: true, landmark: true,
+        universityId: true,
       },
     })
 
@@ -22889,7 +23076,7 @@ export async function GET(request: NextRequest) {
 
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
-        where: { id: item.productId },
+        where:  { id: item.productId },
         select: { id: true, name: true, quantity: true, isActive: true },
       })
 
@@ -22905,23 +23092,18 @@ export async function GET(request: NextRequest) {
       console.log(`✅ ${item.name}: OK (stock: ${product.quantity})`)
     }
 
-    // STEP 6: Create orders
-    // createOrders runs each seller's work inside a Prisma $transaction and uses
-    // updateMany with a `quantity &gt;= required` guard to atomically claim stock.
-    // If two buyers race for the last unit, the second one gets STOCK_GONE thrown
-    // from inside the transaction, which we catch and redirect cleanly below.
-    console.log('\n💰 STEP 6: Creating Orders')
-
-    const subtotal = meta.cartItems.reduce((sum, i) =&gt; sum + i.price * i.quantity, 0)
-    const fees = meta.fees ?? calculateFees(subtotal, meta.deliveryFee ?? 800)
+    // STEP 6: Create orders + DeliveryBatch
+    // createOrders creates ONE DeliveryBatch then one Order per seller group.
+    // Each order carries a full ₦800 delivery fee.
+    // updateMany with quantity &gt;= guard atomically claims stock.
+    // If two buyers race for the last unit, the second gets STOCK_GONE thrown.
+    console.log('\n💰 STEP 6: Creating Orders + DeliveryBatch')
 
     let orders: Awaited&lt;ReturnType&lt;typeof createOrders&gt;&gt;
     try {
-      orders = await createOrders(meta.cartItems, buyer, fees, reference)
+      orders = await createOrders(meta.cartItems, buyer, reference)
     } catch (createErr) {
-      // FIX 3 (continued): Handle the STOCK_GONE error thrown by the
-      // TOCTOU-safe updateMany guard inside createOrders. We extract the
-      // product name from the error message and redirect with a friendly error.
+      // Handle the STOCK_GONE error thrown by the TOCTOU-safe updateMany guard.
       if (createErr instanceof Error &amp;&amp; createErr.message.startsWith('STOCK_GONE:')) {
         const [, , productName] = createErr.message.split(':')
         console.error('❌ Stock claimed by concurrent buyer for:', productName)
@@ -22941,20 +23123,20 @@ export async function GET(request: NextRequest) {
     console.log('\n🔔 STEP 7: Queueing Notifications')
 
     const sellerMap = new Map&lt;string, {
-      orderId: string
+      orderId:     string
       orderNumber: string
-      orderNote?: string
-      itemsList: string
+      orderNote?:  string
+      itemsList:   string
     }&gt;()
 
     for (const order of orders) {
       if (order.sellerId &amp;&amp; !sellerMap.has(order.sellerId)) {
         const sellerItems = meta.cartItems.filter(i =&gt; i.sellerId === order.sellerId)
         sellerMap.set(order.sellerId, {
-          orderId: order.id,
+          orderId:     order.id,
           orderNumber: order.orderNumber,
-          orderNote: sellerItems[0]?.orderNote,
-          itemsList: sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
+          orderNote:   sellerItems[0]?.orderNote,
+          itemsList:   sellerItems.map(i =&gt; `${i.name} (x${i.quantity})`).join(', '),
         })
       }
     }
@@ -23016,15 +23198,17 @@ export async function GET(request: NextRequest) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Seller notification helper — all imports are dynamic so a missing module
-// never crashes the verify route
+// never crashes the verify route.
+// Restored exactly from original: in-app bell, note notification, push,
+// and full email template (only when buyer left a note).
 // ─────────────────────────────────────────────────────────────────────────────
 async function notifySellerOfNewOrder(
-  sellerId: string,
-  orderId: string,
+  sellerId:    string,
+  orderId:     string,
   orderNumber: string,
-  orderNote: string | undefined,
-  buyerName: string,
-  itemsList: string,
+  orderNote:   string | undefined,
+  buyerName:   string,
+  itemsList:   string,
 ) {
   const hasNote = Boolean(orderNote?.trim())
 
@@ -23037,9 +23221,9 @@ async function notifySellerOfNewOrder(
 
   const seller = prismaMod
     ? await prismaMod.prisma.user.findUnique({
-      where: { id: sellerId },
-      select: { email: true },
-    }).catch(() =&gt; null)
+        where:  { id: sellerId },
+        select: { email: true },
+      }).catch(() =&gt; null)
     : null
 
   const tasks: Promise&lt;any&gt;[] = []
@@ -23047,21 +23231,22 @@ async function notifySellerOfNewOrder(
   if (notifMod?.createNotification) {
     tasks.push(
       notifMod.createNotification({
-        userId: sellerId,
-        type: 'ORDER_PLACED',
-        title: '🛒 New Order Received!',
+        userId:  sellerId,
+        type:    'ORDER_PLACED',
+        title:   '🛒 New Order Received!',
         message: `You have a new order (#${orderNumber}) for ${itemsList}`,
         orderId,
         metadata: { orderNumber, buyerName, itemsList },
       })
     )
 
+    // Separate in-app notification for the buyer's note
     if (hasNote) {
       tasks.push(
         notifMod.createNotification({
-          userId: sellerId,
-          type: 'ORDER_PLACED',
-          title: '📝 Note from Buyer',
+          userId:  sellerId,
+          type:    'ORDER_PLACED',
+          title:   '📝 Note from Buyer',
           message: `For order #${orderNumber}: "${orderNote}"`,
           orderId,
           metadata: { orderNumber, orderNote },
@@ -23074,11 +23259,12 @@ async function notifySellerOfNewOrder(
     tasks.push(pushMod.notifyNewOrder(sellerId, orderNumber))
   }
 
+  // Email only fires when the buyer left a note (same as original)
   if (hasNote &amp;&amp; seller?.email &amp;&amp; emailMod?.sendEmail) {
     const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://batamart.com').replace(/\/$/, '')
     tasks.push(
       emailMod.sendEmail({
-        to: seller.email,
+        to:      seller.email,
         subject: `🎉 New Order #${orderNumber} — BATAMART`,
         html: `
 &lt;!DOCTYPE html&gt;
@@ -24308,10 +24494,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { orderId } = await request.json()
+    const { batchId } = await request.json()
 
-    if (!orderId) {
-      return NextResponse.json({ error: 'Order ID required' }, { status: 400 })
+    if (!batchId) {
+      return NextResponse.json({ error: 'Batch ID required' }, { status: 400 })
     }
 
     // ── Block if rider has a pending dispute pickup ───────────────────────
@@ -24334,118 +24520,139 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // ── Block if rider has any other active delivery ──────────────────────
-    const activeDelivery = await prisma.order.findFirst({
+    // ── Block if rider already has an active batch ────────────────────────
+    const activeBatch = await prisma.deliveryBatch.findFirst({
       where: {
         riderId: user.id,
-        status:  { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] },
-        isDisputed: false,
+        status:  { in: ['RIDER_ASSIGNED', 'IN_PROGRESS'] },
       },
-      select: { orderNumber: true, status: true },
+      select: { batchNumber: true },
     })
 
-    if (activeDelivery) {
+    if (activeBatch) {
       return NextResponse.json({
-        error:       `You still have an active delivery (Order #${activeDelivery.orderNumber} — ${activeDelivery.status.replace('_', ' ')}). Complete it first.`,
+        error:       `You still have an active batch (${activeBatch.batchNumber}). Complete it first.`,
         blockReason: 'ACTIVE_DELIVERY',
       }, { status: 400 })
     }
 
-    // ── Fetch order ───────────────────────────────────────────────────────
-    const order = await prisma.order.findUnique({
-      where:   { id: orderId },
+    // ── Fetch the batch with all its orders ───────────────────────────────
+    const batch = await prisma.deliveryBatch.findUnique({
+      where:   { id: batchId },
       include: {
-        product: true,
-        buyer:   { select: { name: true, phone: true, universityId: true } },
-        seller:  { select: { name: true, phone: true } },
+        orders: {
+          select: {
+            id:          true,
+            orderNumber: true,
+            status:      true,
+            buyerId:     true,
+            sellerId:    true,
+            product:     { select: { name: true } },
+          },
+        },
+        buyer: { select: { universityId: true } },
       },
     })
 
-    if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    if (!batch) {
+      return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
     }
 
-    // ── University cross-check — rider can only take orders from same campus ─
-    // We check buyer's universityId as the authoritative scope on the order.
-    if (user.universityId &amp;&amp; order.buyer.universityId !== user.universityId) {
+    // Race condition: another rider accepted between the findFirst check and here
+    if (batch.riderId) {
+      return NextResponse.json({ error: 'Batch already assigned to another rider' }, { status: 409 })
+    }
+
+    if (batch.status !== 'PENDING') {
+      return NextResponse.json({ error: 'Batch is no longer available' }, { status: 409 })
+    }
+
+    // ── University cross-check ────────────────────────────────────────────
+    if (user.universityId &amp;&amp; batch.buyer.universityId !== user.universityId) {
       return NextResponse.json(
-        { error: 'This order is outside your campus area.' },
+        { error: 'This batch is outside your campus area.' },
         { status: 403 }
       )
     }
 
-    if (order.status !== 'PENDING') {
-      return NextResponse.json({ error: 'Order already assigned or completed' }, { status: 400 })
-    }
+    const riderSharePerOrder = 560
+    const totalRiderEscrow   = riderSharePerOrder * batch.orders.length
 
-    if (order.riderId) {
-      return NextResponse.json({ error: 'Order already has a rider' }, { status: 400 })
-    }
+    // ── Atomic assignment ─────────────────────────────────────────────────
+    await prisma.$transaction(async (tx) =&gt; {
+      // Assign rider to the batch
+      await tx.deliveryBatch.update({
+        where: { id: batchId },
+        data:  {
+          riderId: user.id,
+          status:  'RIDER_ASSIGNED',
+        },
+      })
 
-    const riderShare = 560
+      // Assign rider to every order in the batch + flip to RIDER_ASSIGNED
+      await tx.order.updateMany({
+        where: { batchId },
+        data:  {
+          riderId:         user.id,
+          status:          'RIDER_ASSIGNED',
+          riderAssignedAt: new Date(),
+        },
+      })
 
-    await prisma.$transaction(
-      async (tx) =&gt; {
-        await tx.order.update({
-          where: { id: orderId },
-          data: {
-            riderId:         user.id,
-            status:          'RIDER_ASSIGNED',
-            riderAssignedAt: new Date(),
-          },
-        })
+      // Escrow the full rider share for all orders at once
+      const rider = await tx.user.findUnique({
+        where:  { id: user.id },
+        select: { pendingBalance: true },
+      })
+      const balBefore = Number(rider?.pendingBalance ?? 0)
 
-        const rider = await tx.user.findUnique({
-          where:  { id: user.id },
-          select: { pendingBalance: true },
-        })
+      await tx.user.update({
+        where: { id: user.id },
+        data:  { pendingBalance: { increment: totalRiderEscrow } },
+      })
 
-        await tx.transaction.create({
-          data: {
-            userId:        user.id,
-            type:          'ESCROW',
-            amount:        riderShare,
-            description:   `Escrow for delivery: ${order.product.name} (Order: ${order.orderNumber})`,
-            reference:     `${order.orderNumber}-RIDER-ESCROW`,
-            balanceBefore: rider?.pendingBalance || 0,
-            balanceAfter:  (rider?.pendingBalance || 0) + riderShare,
-          },
-        })
+      await tx.transaction.create({
+        data: {
+          userId:        user.id,
+          type:          'ESCROW',
+          amount:        totalRiderEscrow,
+          description:   `Escrow for batch: ${batch.batchNumber} (${batch.orders.length} order${batch.orders.length &gt; 1 ? 's' : ''})`,
+          reference:     `${batch.batchNumber}-RIDER-ESCROW`,
+          balanceBefore: balBefore,
+          balanceAfter:  balBefore + totalRiderEscrow,
+        },
+      })
+    }, { timeout: 15000, maxWait: 20000 })
 
-        await tx.user.update({
-          where: { id: user.id },
-          data:  { pendingBalance: { increment: riderShare } },
-        })
-      },
-      { timeout: 15000, maxWait: 20000 }
+    // ── Notify buyer + sellers (fire-and-forget) ──────────────────────────
+    Promise.allSettled(
+      batch.orders.map(order =&gt;
+        import('@/lib/notification')
+          .then(({ notifyRiderAssigned }) =&gt;
+            notifyRiderAssigned(
+              order.id,
+              order.buyerId,
+              order.sellerId,
+              user.id,
+              user.name,
+              order.orderNumber
+            )
+          )
+          .catch(err =&gt; console.error(`Rider-assigned notification failed for ${order.orderNumber}:`, err))
+      )
     )
 
-    Promise.allSettled([
-      import('@/lib/notification').then(({ notifyRiderAssigned }) =&gt;
-        notifyRiderAssigned(
-          order.id,
-          order.buyerId,
-          order.sellerId,
-          user.id,
-          user.name,
-          order.orderNumber
-        )
-      ),
-    ]).then(results =&gt; {
-      results.forEach(r =&gt; {
-        if (r.status === 'rejected') console.error('Rider assigned notification failed:', r.reason)
-      })
-    })
-
     return NextResponse.json({
-      success:  true,
-      message:  'Order accepted successfully',
-      riderFee: riderShare,
+      success:   true,
+      message:   `Batch accepted! ${batch.orders.length} order${batch.orders.length &gt; 1 ? 's' : ''} to pick up.`,
+      riderFee:  totalRiderEscrow,
+      batchNumber: batch.batchNumber,
+      orderCount:  batch.orders.length,
     })
   } catch (error) {
-    console.error('Accept order error:', error)
+    console.error('Accept batch error:', error)
     return NextResponse.json({
-      error:   'Failed to accept order',
+      error:   'Failed to accept batch',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
@@ -24465,30 +24672,46 @@ export async function GET(request: NextRequest) {
     }
 
     if (!user.universityId) {
-      return NextResponse.json({ orders: [], disputePickups: [] })
+      return NextResponse.json({ batches: [], disputePickups: [] })
     }
 
-    // ── Regular pending orders — scoped to rider's university ──────────────
-    // Orders inherit universityId from the buyer who placed them.
-    // A rider only sees orders from buyers in their own university.
-    const orders = await prisma.order.findMany({
+    // ── Available batches ──────────────────────────────────────────────────
+    // A batch is available when:
+    //   • status is PENDING (no rider yet)
+    //   • riderId is null
+    //   • all orders inside belong to the rider's campus
+    const batches = await prisma.deliveryBatch.findMany({
       where: {
-        status:      'PENDING',
-        riderId:     null,
-        isDisputed:  false,
-        buyer: {
-          universityId: user.universityId,
-        },
+        status:       'PENDING',
+        riderId:      null,
+        universityId: user.universityId,
       },
       include: {
-        product: true,
-        seller:  { select: { name: true, phone: true } },
-        buyer:   { select: { name: true, phone: true } },
+        buyer: {
+          select: {
+            name:      true,
+            phone:     true,
+            hostelName: true,
+            roomNumber: true,
+            landmark:  true,
+          },
+        },
+        orders: {
+          include: {
+            product: {
+              select: { name: true, images: true, hostelName: true },
+            },
+            seller: {
+              select: { name: true, phone: true },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    // ── Dispute pickup jobs assigned specifically to this rider ────────────
+    // ── Dispute pickup jobs assigned to this rider ─────────────────────────
     const disputePickups = await prisma.order.findMany({
       where: {
         riderId:    user.id,
@@ -24504,16 +24727,17 @@ export async function GET(request: NextRequest) {
         buyer:   { select: { name: true, phone: true } },
         dispute: {
           select: {
-            id:             true,
-            reason:         true,
-            pickupAddress:  true,
+            id:            true,
+            reason:        true,
+            pickupAddress: true,
           },
         },
       },
     })
 
-    return NextResponse.json({ orders, disputePickups })
+    return NextResponse.json({ batches, disputePickups })
   } catch (error) {
+    console.error('available-orders error:', error)
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
   }
 }</pre></div>
@@ -24653,8 +24877,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/riders/my-deliveries/route.ts</div><pre>export const dynamic = 'force-dynamic'
-// app/api/riders/my-deliveries/route.ts
+<div class='file-block'><div class='file-header'>app/api/riders/my-deliveries/route.ts</div><pre>// app/api/riders/my-deliveries/route.ts
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -24666,25 +24891,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const deliveries = await prisma.order.findMany({
-      where: { 
+    // Return all active batches this rider has accepted,
+    // with their orders nested inside (ordered oldest first so
+    // the rider naturally works through them in order).
+    const batches = await prisma.deliveryBatch.findMany({
+      where: {
         riderId: user.id,
-        status: { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'] },
+        status:  { in: ['RIDER_ASSIGNED', 'IN_PROGRESS'] },
       },
       include: {
-        product: true,
-        seller: { select: { name: true, phone: true } },
-        buyer: { select: { name: true, phone: true } },
+        buyer: {
+          select: {
+            name:       true,
+            phone:      true,
+            hostelName: true,
+            roomNumber: true,
+            landmark:   true,
+          },
+        },
+        orders: {
+          include: {
+            product: {
+              select: { name: true, images: true, hostelName: true },
+            },
+            seller: {
+              select: { name: true, phone: true },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ deliveries })
+    return NextResponse.json({ batches })
   } catch (error) {
+    console.error('my-deliveries error:', error)
     return NextResponse.json({ error: 'Failed to fetch deliveries' }, { status: 500 })
   }
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/riders/register/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/riders/register/route.ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -24901,11 +25146,12 @@ export async function POST(request: NextRequest) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       select: {
-        id: true,
-        riderId: true,
-        buyerId: true,
-        sellerId: true,
+        id:          true,
+        riderId:     true,
+        buyerId:     true,
+        sellerId:    true,
         orderNumber: true,
+        batchId:     true,
       },
     })
 
@@ -24918,32 +25164,61 @@ export async function POST(request: NextRequest) {
     }
 
     const updateData: any = { status }
-    if (status === 'DELIVERED') {
-      updateData.deliveredAt = new Date()
-    }
+    if (status === 'PICKED_UP') updateData.pickedUpAt  = new Date()
+    if (status === 'DELIVERED') updateData.deliveredAt = new Date()
 
-    // ── Database transaction only ─────────────────────────────────────────
+    // ── Database transaction ──────────────────────────────────────────────
     const updatedOrder = await prisma.$transaction(async (tx) =&gt; {
       const updated = await tx.order.update({
         where: { id: orderId },
-        data: updateData,
+        data:  updateData,
       })
 
+      // Increment rider completed count when an order is delivered
       if (status === 'DELIVERED') {
         await tx.user.update({
           where: { id: user.id },
-          data: { completedOrders: { increment: 1 } },
+          data:  { completedOrders: { increment: 1 } },
         })
+      }
+
+      // ── Update batch status based on all orders ───────────────────────
+      if (order.batchId) {
+        if (status === 'DELIVERED') {
+          // Check if every other order in the batch is also DELIVERED
+          const batchOrders = await tx.order.findMany({
+            where:  { batchId: order.batchId },
+            select: { id: true, status: true },
+          })
+
+          const allDelivered = batchOrders.every(o =&gt;
+            o.id === orderId
+              ? true               // this is the one we just set to DELIVERED
+              : o.status === 'DELIVERED'
+          )
+
+          await tx.deliveryBatch.update({
+            where: { id: order.batchId },
+            data:  { status: allDelivered ? 'COMPLETED' : 'IN_PROGRESS' },
+          })
+        } else if (status === 'PICKED_UP' || status === 'ON_THE_WAY') {
+          // At least one order is moving — batch is IN_PROGRESS
+          await tx.deliveryBatch.update({
+            where: { id: order.batchId },
+            data:  { status: 'IN_PROGRESS' },
+          })
+        }
       }
 
       return updated
     }, {
       timeout: 15000,
-      maxWait: 20000,
+      maxWait:  20000,
     })
 
     // ── Fire notifications after transaction (non-blocking) ───────────────
-    const riderName = user.name || 'Your rider'
+    // Buyer gets notified per individual order — intentional behaviour.
+    const riderName   = user.name || 'Your rider'
     const orderNumber = order.orderNumber
 
     Promise.allSettled([
@@ -24955,7 +25230,7 @@ export async function POST(request: NextRequest) {
         } = await import('@/lib/notification')
 
         const {
-          notifyOrderOnTheWay: pushOnTheWay,
+          notifyOrderOnTheWay:  pushOnTheWay,
           notifyOrderDelivered: pushDelivered,
         } = await import('@/lib/push/sendPushNotification')
 
@@ -24988,7 +25263,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Update status error:', error)
     return NextResponse.json({
-      error: 'Failed to update status',
+      error:   'Failed to update status',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
@@ -28526,22 +28801,30 @@ export async function generateUniqueReferralCode(): Promise&lt;string&gt; {
 <div class='file-block'><div class='file-header'>lib/referral/processReferralReward.ts</div><pre>// lib/referral/processReferralReward.ts
 // Called inside the confirm-delivery transaction when an order completes.
 // Returns silently on any error so it never blocks the main order flow.
+//
+// BATCH BEHAVIOUR:
+//   When an order belongs to a DeliveryBatch, the referral reward (₦120)
+//   fires only ONCE for the whole batch — regardless of how many orders
+//   are inside it. The DeliveryBatch.referralPaid flag is the atomic gate.
+//   This means the referrer gets ₦120 per checkout session, not per item.
 
 import { Prisma } from '@prisma/client'
 
-// ── Referral reward = ₦120 (50% of the ₦240 delivery platform cut) ────────────
-// The platform keeps its 5% product commission entirely.
-// ₦120 of the ₦240 delivery cut goes to the referrer (forever, every order).
+// ── Referral reward = ₦120 (50% of the ₦240 delivery platform cut) ──────────
+// Platform keeps its 5% product commission entirely.
+// ₦120 of the ₦240 delivery cut goes to the referrer (once per batch).
 // Only paid if the order had a rider (delivery orders only).
 const REFERRAL_DELIVERY_REWARD = 120
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx =&gt; ...) block.
  *
- * Checks if the buyer was referred. If so, credits the referrer ₦120
- * (50% of the delivery platform cut) for every completed delivery order — forever.
+ * For batched orders: credits the referrer ₦120 once per checkout batch.
+ * For legacy single orders: uses orderId uniqueness as before.
  *
- * The @unique constraint on ReferralReward.orderId guarantees idempotency.
+ * The DeliveryBatch.referralPaid flag guarantees idempotency even if
+ * confirm-delivery is called on multiple orders in the same batch
+ * concurrently.
  */
 export async function processReferralReward(
   tx: Prisma.TransactionClient,
@@ -28550,79 +28833,99 @@ export async function processReferralReward(
     orderNumber: string
     orderAmount: number
     buyerId:     string
-    hasRider:    boolean   // ← only pay if delivery order
+    hasRider:    boolean
+    batchId?:    string   // ← pass this when the order belongs to a DeliveryBatch
   }
 ) {
-  const { orderId, orderNumber, buyerId, hasRider } = params
+  const { orderId, orderNumber, buyerId, hasRider, batchId } = params
 
   // Only pay referral reward on delivery orders
   if (!hasRider) return
 
-  // 1. Check if buyer was referred
+  // ── Batch path: use referralPaid flag on batch ───────────────────────────
+  if (batchId) {
+    const batch = await tx.deliveryBatch.findUnique({
+      where:  { id: batchId },
+      select: { referralPaid: true },
+    })
+
+    // batch not found or reward already paid for this batch
+    if (!batch || batch.referralPaid) return
+
+    // Mark batch as referral-paid atomically inside this transaction
+    await tx.deliveryBatch.update({
+      where: { id: batchId },
+      data:  { referralPaid: true },
+    })
+  } else {
+    // ── Legacy single-order path: use orderId uniqueness guard ───────────
+    const existing = await tx.referralReward.findUnique({
+      where:  { orderId },
+      select: { id: true },
+    })
+    if (existing) return
+  }
+
+  // ── Check if buyer was referred ─────────────────────────────────────────
   const buyer = await tx.user.findUnique({
     where:  { id: buyerId },
     select: { referredById: true },
   })
 
-  if (!buyer?.referredById) return   // no referrer — nothing to do
+  if (!buyer?.referredById) return  // buyer was not referred — nothing to do
 
-  // 2. Guard: skip if reward already exists for this order
-  const existing = await tx.referralReward.findUnique({
-    where:  { orderId },
-    select: { id: true },
-  })
-  if (existing) return   // idempotency guard
-
-  const reward = REFERRAL_DELIVERY_REWARD   // flat ₦120
-
-  // 3. Fetch referrer's current balance
+  // ── Fetch referrer ───────────────────────────────────────────────────────
   const referrer = await tx.user.findUnique({
     where:  { id: buyer.referredById },
     select: { id: true, availableBalance: true },
   })
   if (!referrer) return
 
-  const balanceBefore = referrer.availableBalance
-  const balanceAfter  = balanceBefore + reward
+  const balanceBefore = Number(referrer.availableBalance)
+  const balanceAfter  = balanceBefore + REFERRAL_DELIVERY_REWARD
 
-  // 4. Create ReferralReward record
+  // ── Create ReferralReward record (orderId is still recorded for traceability) ─
   await tx.referralReward.create({
     data: {
       referrerId:     referrer.id,
       referredUserId: buyerId,
-      orderId,
-      amount:         reward,
+      orderId,         // attached to the first order that triggered the reward
+      amount:          REFERRAL_DELIVERY_REWARD,
     },
   })
 
-  // 5. Credit referrer's wallet
+  // ── Credit referrer's wallet ─────────────────────────────────────────────
   await tx.user.update({
     where: { id: referrer.id },
-    data:  { availableBalance: { increment: reward } },
+    data:  { availableBalance: { increment: REFERRAL_DELIVERY_REWARD } },
   })
 
-  // 6. Create wallet transaction record
+  // ── Wallet transaction record ────────────────────────────────────────────
   await tx.transaction.create({
     data: {
       userId:        referrer.id,
       type:          'REFERRAL_REWARD',
-      amount:        reward,
-      description:   `Referral reward — delivery cut from order #${orderNumber}`,
+      amount:        REFERRAL_DELIVERY_REWARD,
+      description:   batchId
+        ? `Referral reward — batch delivery (order #${orderNumber})`
+        : `Referral reward — delivery cut from order #${orderNumber}`,
       reference:     `${orderNumber}-REFERRAL`,
       balanceBefore,
       balanceAfter,
     },
   })
 
-  // 7. Create in-app notification
+  // ── In-app notification ──────────────────────────────────────────────────
   await tx.notification.create({
     data: {
       userId:  referrer.id,
       type:    'REFERRAL_REWARD',
       title:   '🎁 Referral Reward!',
-      message: `You earned ₦120 delivery reward from order #${orderNumber}.`,
+      message: batchId
+        ? `You earned ₦120 referral reward from a batch delivery by your referral.`
+        : `You earned ₦120 delivery reward from order #${orderNumber}.`,
       orderId,
-      metadata: JSON.stringify({ reward, orderNumber }),
+      metadata: JSON.stringify({ reward: REFERRAL_DELIVERY_REWARD, orderNumber, batchId }),
     },
   })
 }</pre></div>
@@ -28940,6 +29243,15 @@ enum OrderStatus {
   @@schema("public")
 }
 
+enum BatchStatus {
+  PENDING
+  RIDER_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+
+  @@schema("public")
+}
+
 enum TransactionType {
   CREDIT
   DEBIT
@@ -29175,6 +29487,10 @@ model User {
   sellerOrders    Order[]  @relation("SellerOrders")
   riderDeliveries Order[]  @relation("RiderDeliveries")
 
+  // DeliveryBatch relations
+  buyerBatches    DeliveryBatch[] @relation("BuyerBatches")
+  riderBatches    DeliveryBatch[] @relation("RiderBatches")
+
   reviewsGiven    Review[] @relation("UserReviewsGiven")
   reviewsReceived Review[] @relation("UserReviewsReceived")
 
@@ -29211,6 +29527,40 @@ model User {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([referralCode])
+  @@index([universityId])
+  @@schema("public")
+}
+
+// ── NEW: DeliveryBatch groups multiple orders from one checkout ──────────────
+// One batch per Paystack payment session. The rider accepts a whole batch
+// and gets ₦560 per order inside it. Referral fires once per batch.
+model DeliveryBatch {
+  id           String      @id @default(cuid())
+  batchNumber  String      @unique
+
+  buyerId      String
+  buyer        User        @relation("BuyerBatches", fields: [buyerId], references: [id])
+
+  riderId      String?
+  rider        User?       @relation("RiderBatches", fields: [riderId], references: [id])
+
+  universityId String
+
+  paymentReference String?
+
+  // Prevents referral reward from firing more than once per checkout session
+  referralPaid Boolean     @default(false)
+
+  status       BatchStatus @default(PENDING)
+
+  orders       Order[]
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([buyerId])
+  @@index([riderId])
+  @@index([status])
   @@index([universityId])
   @@schema("public")
 }
@@ -29276,6 +29626,10 @@ model Order {
   riderId String?
   rider   User?   @relation("RiderDeliveries", fields: [riderId], references: [id])
 
+  // ── NEW: link to the DeliveryBatch this order belongs to ──────────────────
+  batchId String?
+  batch   DeliveryBatch? @relation(fields: [batchId], references: [id])
+
   productPrice       Float
   deliveryFee        Float
   totalAmount        Float
@@ -29314,6 +29668,7 @@ model Order {
   @@index([buyerId])
   @@index([sellerId])
   @@index([riderId])
+  @@index([batchId])
   @@index([status])
   @@index([createdAt])
   @@index([orderedAt])

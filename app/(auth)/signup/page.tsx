@@ -77,10 +77,9 @@ function SignupForm() {
   const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null)
   const [uniLoading, setUniLoading]                 = useState(true)
 
-  const [email, setEmail]           = useState('')
-  const [name, setName]             = useState('')
-  const [phone, setPhone]           = useState('')
-  const [wantToSell, setWantToSell] = useState(false)
+  const [email, setEmail] = useState('')
+  const [name, setName]   = useState('')
+  const [phone, setPhone] = useState('')
 
   const [otp, setOtp]                         = useState(['', '', '', '', '', ''])
   const [otpSessionToken, setOtpSessionToken] = useState('')
@@ -218,7 +217,7 @@ function SignupForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email, name, phone, password, otpSessionToken,
-          role:         wantToSell ? 'SELLER' : 'BUYER',
+          role:         'BUYER', // ← Always sign up as BUYER. Upgrade to SELLER via become-seller flow.
           referralCode: referralCode || undefined,
           universityId: selectedUniversity!.id,
           hostelName:   hostelName.trim(),
@@ -370,18 +369,9 @@ function SignupForm() {
               />
             </div>
 
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl">
-              <input
-                type="checkbox"
-                id="wantToSell"
-                checked={wantToSell}
-                onChange={e => setWantToSell(e.target.checked)}
-                className="w-4 h-4 rounded accent-blue-600"
-              />
-              <label htmlFor="wantToSell" className="text-sm text-gray-700">
-                I also want to sell on {selectedUniversity?.shortName}
-              </label>
-            </div>
+            {/* ── REMOVED: "I also want to sell" checkbox ── */}
+            {/* Everyone signs up as a BUYER. To sell, they click "Sell Product"
+                which redirects them to /become-seller to upgrade their account. */}
 
             <button
               type="submit"

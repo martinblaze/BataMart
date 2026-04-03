@@ -143,12 +143,45 @@ function ConfirmListingModal({
   )
 }
 
+// ── Become Seller Gate ────────────────────────────────────────────────────────
+// Shown to BUYER role users who land on /sell.
+// They must upgrade to SELLER before they can list products.
+function BecomeSellerGate({ appMode }: { appMode: boolean }) {
+  const router = useRouter()
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+        <div className="text-6xl mb-4">🛍️</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-3">Want to sell on BataMart?</h1>
+        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+          You're currently signed in as a buyer. To list products, you need to upgrade your account to a seller account — it's free and takes 10 seconds.
+        </p>
+        <button
+          onClick={() => router.push(appMode ? '/become-seller?app=true' : '/become-seller')}
+          className="w-full py-3.5 rounded-xl font-bold text-white text-base shadow-lg mb-3"
+          style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+        >
+          Become a Seller →
+        </button>
+        <button
+          onClick={() => router.push(appMode ? '/marketplace?app=true' : '/marketplace')}
+          className="w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition"
+        >
+          Back to Marketplace
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SellPage() {
   const router = useRouter()
   const [loading, setLoading]                   = useState(false)
   const [checkingAuth, setCheckingAuth]         = useState(true)
+  const [isBuyer, setIsBuyer]                   = useState(false)   // ← new: gate for buyers
+  const [appMode, setAppMode]                   = useState(false)
   const [error, setError]                       = useState('')
   const [images, setImages]                     = useState<{ preview: string; url: string; uploading: boolean }[]>([])
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -168,9 +201,25 @@ export default function SellPage() {
   })
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) router.push('/login')
-    else setCheckingAuth(false)
+    const token    = localStorage.getItem('token')
+    const userRole = localStorage.getItem('userRole')
+    const params   = new URLSearchParams(window.location.search)
+    setAppMode(params.get('app') === 'true')
+
+    if (!token) {
+      router.push('/login')
+      return
+    }
+
+    // ── Role gate: buyers get redirected to become-seller UI ──────────────
+    // Only SELLER (and ADMIN) roles may access the listing form.
+    if (userRole === 'BUYER') {
+      setIsBuyer(true)
+      setCheckingAuth(false)
+      return
+    }
+
+    setCheckingAuth(false)
   }, [router])
 
   if (checkingAuth) {
@@ -182,6 +231,11 @@ export default function SellPage() {
         </div>
       </div>
     )
+  }
+
+  // ── Show become-seller gate to buyers ─────────────────────────────────────
+  if (isBuyer) {
+    return <BecomeSellerGate appMode={appMode} />
   }
 
   const addTag = (value: string) => {
@@ -312,7 +366,7 @@ export default function SellPage() {
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <Link
-            href={typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('app') === 'true' ? '/marketplace?app=true' : '/marketplace'}
+            href={appMode ? '/marketplace?app=true' : '/marketplace'}
             className="text-BATAMART-primary hover:underline mb-4 inline-block"
           >
             ← Back to Marketplace

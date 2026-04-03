@@ -14,7 +14,9 @@ export async function POST(request: NextRequest) {
       name,
       password,
       otpSessionToken,
-      role,
+      // NOTE: `role` from the request body is intentionally ignored.
+      // All new users are created as BUYER. They can upgrade to SELLER
+      // only via the /become-seller flow (POST /api/auth/become-seller).
       phone,
       referralCode,
       universityId,
@@ -109,13 +111,16 @@ export async function POST(request: NextRequest) {
     const hashedPassword  = await hashPassword(password)
     const newReferralCode = await generateUniqueReferralCode()
 
+    // ── Always create as BUYER ─────────────────────────────────────────────
+    // Sellers are created exclusively via POST /api/auth/become-seller.
+    // This prevents confusion where buyers accidentally got seller accounts.
     const user = await prisma.user.create({
       data: {
         email,
         name:         name.trim(),
         phone,
         password:     hashedPassword,
-        role:         role || 'BUYER',
+        role:         'BUYER',
         referralCode: newReferralCode,
         universityId: university.id,
         // ── Delivery location ────────────────────────────────────────────
