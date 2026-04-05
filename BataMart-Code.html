@@ -1277,16 +1277,197 @@ export default function AdminDashboardPage() {
 // app/(admin)/admin/analytics/page.tsx
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, Users, Package, ShoppingBag, DollarSign, CheckCircle, Gift, Store, Bike } from 'lucide-react'
+import {
+  TrendingUp, TrendingDown, Users, Package, ShoppingBag, DollarSign,
+  CheckCircle, Gift, Store, Bike, Activity, BarChart2, Target,
+  AlertTriangle, Clock, RefreshCw, ArrowUpRight, ArrowDownRight,
+  Layers, Zap, Shield, CreditCard, UserCheck, Repeat
+} from 'lucide-react'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AnalyticsData {
+  // Growth
+  newUsers: number
+  totalUsers: number
+  newSellers: number
+  newRiders: number
+  newProducts: number
+  totalProducts: number
+  totalOrders: number
+  completedOrders: number
+  completionRate: number
+  revenue: number
+  platformCommission: number
+
+  // Engagement
+  dau: number
+  wau: number
+  mau: number
+  retentionDay1: number
+  retentionDay7: number
+  repeatBuyerPct: number
+
+  // Funnel
+  appOpens: number
+  productViews: number
+  addToCart: number
+  checkoutSuccessPct: number
+
+  // Marketplace Health
+  activeSellers: number
+  ordersPerSeller: number
+  listingGrowthPct: number
+
+  // Logistics
+  avgDeliveryMinutes: number
+  riderCompletionRate: number
+  failedDeliveryPct: number
+
+  // Money
+  gmv: number
+  netRevenue: number
+  cac: number
+  ltv: number
+
+  // Existing
+  topCategories: { category: string; count: number }[]
+  referrals: { newRewards: number; totalPaidOut: number }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (n: number) =&gt; n.toLocaleString()
+const fmtNgn = (n: number) =&gt; `₦${fmt(Math.round(n))}`
+const fmtPct = (n: number) =&gt; `${n.toFixed(1)}%`
+const fmtMin = (n: number) =&gt;
+  n &gt;= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`
+
+function delta(val: number, good: 'up' | 'down' = 'up') {
+  const isPositive = val &gt;= 0
+  const isGood = good === 'up' ? isPositive : !isPositive
+  return { isPositive, isGood }
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SectionHeader({ label, icon }: { label: string; icon: React.ReactNode }) {
+  return (
+    &lt;div className="flex items-center gap-3 mb-4"&gt;
+      &lt;div className="text-red-500"&gt;{icon}&lt;/div&gt;
+      &lt;span className="text-[11px] font-bold tracking-[0.2em] uppercase text-gray-400"&gt;{label}&lt;/span&gt;
+      &lt;div className="flex-1 h-px bg-gray-700/60" /&gt;
+    &lt;/div&gt;
+  )
+}
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+  trend,
+  trendGood = 'up',
+  accent = 'red',
+}: {
+  label: string
+  value: string | number
+  sub?: string
+  icon: React.ReactNode
+  trend?: number
+  trendGood?: 'up' | 'down'
+  accent?: 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'cyan' | 'pink'
+}) {
+  const accentMap: Record&lt;string, string&gt; = {
+    red:    'border-red-500/30 bg-red-500/5',
+    blue:   'border-blue-500/30 bg-blue-500/5',
+    green:  'border-emerald-500/30 bg-emerald-500/5',
+    yellow: 'border-yellow-500/30 bg-yellow-500/5',
+    purple: 'border-purple-500/30 bg-purple-500/5',
+    orange: 'border-orange-500/30 bg-orange-500/5',
+    cyan:   'border-cyan-500/30 bg-cyan-500/5',
+    pink:   'border-pink-500/30 bg-pink-500/5',
+  }
+  const iconMap: Record&lt;string, string&gt; = {
+    red:    'text-red-400',
+    blue:   'text-blue-400',
+    green:  'text-emerald-400',
+    yellow: 'text-yellow-400',
+    purple: 'text-purple-400',
+    orange: 'text-orange-400',
+    cyan:   'text-cyan-400',
+    pink:   'text-pink-400',
+  }
+
+  const hasTrend = trend !== undefined
+  const { isPositive, isGood } = hasTrend ? delta(trend!, trendGood) : { isPositive: true, isGood: true }
+
+  return (
+    &lt;div className={`border ${accentMap[accent]} rounded-lg p-4 flex flex-col gap-2 relative overflow-hidden`}&gt;
+      {/* top row */}
+      &lt;div className="flex items-start justify-between"&gt;
+        &lt;span className="text-[10px] font-semibold tracking-widest uppercase text-gray-500"&gt;{label}&lt;/span&gt;
+        &lt;span className={iconMap[accent]}&gt;{icon}&lt;/span&gt;
+      &lt;/div&gt;
+      {/* value */}
+      &lt;p className="text-2xl font-black text-white font-mono leading-none tracking-tight"&gt;{value}&lt;/p&gt;
+      {/* bottom row */}
+      &lt;div className="flex items-center justify-between mt-auto"&gt;
+        {sub &amp;&amp; &lt;span className="text-[11px] text-gray-500"&gt;{sub}&lt;/span&gt;}
+        {hasTrend &amp;&amp; (
+          &lt;span className={`flex items-center gap-0.5 text-[11px] font-bold ml-auto ${isGood ? 'text-emerald-400' : 'text-red-400'}`}&gt;
+            {isPositive ? &lt;ArrowUpRight className="w-3 h-3" /&gt; : &lt;ArrowDownRight className="w-3 h-3" /&gt;}
+            {Math.abs(trend!).toFixed(1)}%
+          &lt;/span&gt;
+        )}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+function FunnelBar({ label, value, max, pct }: { label: string; value: number; max: number; pct: number }) {
+  const width = max &gt; 0 ? (value / max) * 100 : 0
+  return (
+    &lt;div className="space-y-1.5"&gt;
+      &lt;div className="flex justify-between items-baseline"&gt;
+        &lt;span className="text-[11px] text-gray-400 font-mono uppercase tracking-wider"&gt;{label}&lt;/span&gt;
+        &lt;div className="flex items-baseline gap-3"&gt;
+          &lt;span className="text-white font-bold font-mono text-sm"&gt;{fmt(value)}&lt;/span&gt;
+          &lt;span className="text-gray-600 text-[10px]"&gt;{fmtPct(pct)}&lt;/span&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div className="h-1.5 bg-gray-800 rounded-full overflow-hidden"&gt;
+        &lt;div
+          className="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full transition-all duration-700"
+          style={{ width: `${width}%` }}
+        /&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+function DataRow({ label, value, sub, flag }: { label: string; value: string; sub?: string; flag?: 'ok' | 'warn' | 'danger' }) {
+  const flagColor = flag === 'ok' ? 'bg-emerald-500' : flag === 'warn' ? 'bg-yellow-400' : flag === 'danger' ? 'bg-red-500' : 'bg-transparent'
+  return (
+    &lt;div className="flex items-center justify-between py-2.5 border-b border-gray-800/60 last:border-0"&gt;
+      &lt;div className="flex items-center gap-2"&gt;
+        {flag &amp;&amp; &lt;span className={`w-1.5 h-1.5 rounded-full ${flagColor} flex-shrink-0`} /&gt;}
+        &lt;span className="text-[11px] text-gray-400 uppercase tracking-wider font-mono"&gt;{label}&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;div className="text-right"&gt;
+        &lt;p className="text-white font-bold font-mono text-sm"&gt;{value}&lt;/p&gt;
+        {sub &amp;&amp; &lt;p className="text-gray-600 text-[10px]"&gt;{sub}&lt;/p&gt;}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const [analytics, setAnalytics] = useState&lt;any&gt;(null)
+  const [analytics, setAnalytics] = useState&lt;AnalyticsData | null&gt;(null)
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('7days')
+  const [lastRefresh, setLastRefresh] = useState&lt;Date&gt;(new Date())
 
-  useEffect(() =&gt; {
-    fetchAnalytics()
-  }, [timeRange])
+  useEffect(() =&gt; { fetchAnalytics() }, [timeRange])
 
   const fetchAnalytics = async () =&gt; {
     setLoading(true)
@@ -1298,6 +1479,7 @@ export default function AnalyticsPage() {
       if (response.ok) {
         const data = await response.json()
         setAnalytics(data.analytics)
+        setLastRefresh(new Date())
       }
     } catch (error) {
       console.error('Failed to fetch analytics:', error)
@@ -1306,173 +1488,337 @@ export default function AnalyticsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      &lt;div className="flex justify-center py-12"&gt;
-        &lt;div className="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent" /&gt;
-      &lt;/div&gt;
-    )
-  }
+  const a = analytics
 
   const rangeLabel: Record&lt;string, string&gt; = {
-    '7days': 'Last 7 Days',
-    '30days': 'Last 30 Days',
-    '90days': 'Last 90 Days',
-    'all': 'All Time',
+    '7days': '7D', '30days': '30D', '90days': '90D', 'all': 'ALL',
   }
 
   return (
-    &lt;div className="space-y-6"&gt;
-
-      {/* Time Range Selector */}
-      &lt;div className="flex gap-2 flex-wrap"&gt;
-        {['7days', '30days', '90days', 'all'].map((range) =&gt; (
-          &lt;button
-            key={range}
-            onClick={() =&gt; setTimeRange(range)}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-              timeRange === range
-                ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg'
-                : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
-            }`}
-          &gt;
-            {rangeLabel[range]}
-          &lt;/button&gt;
-        ))}
-      &lt;/div&gt;
-
-      {/* Primary Stats */}
-      &lt;div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"&gt;
-        &lt;StatCard
-          icon={&lt;Users className="w-6 h-6 text-blue-400" /&gt;}
-          iconBg="bg-blue-500/10"
-          label="New Buyers"
-          value={analytics?.newUsers || 0}
-          sub={`+${analytics?.newSellers || 0} sellers  +${analytics?.newRiders || 0} riders`}
-        /&gt;
-        &lt;StatCard
-          icon={&lt;Package className="w-6 h-6 text-green-400" /&gt;}
-          iconBg="bg-green-500/10"
-          label="New Products"
-          value={analytics?.newProducts || 0}
-          sub={`${analytics?.totalProducts || 0} total listed`}
-        /&gt;
-        &lt;StatCard
-          icon={&lt;ShoppingBag className="w-6 h-6 text-purple-400" /&gt;}
-          iconBg="bg-purple-500/10"
-          label="Orders Placed"
-          value={analytics?.totalOrders || 0}
-          sub={`${analytics?.completedOrders || 0} completed (${analytics?.completionRate || 0}%)`}
-        /&gt;
-        &lt;StatCard
-          icon={&lt;DollarSign className="w-6 h-6 text-yellow-400" /&gt;}
-          iconBg="bg-yellow-500/10"
-          label="GMV (Sales Volume)"
-          value={`₦${(analytics?.revenue || 0).toLocaleString()}`}
-          sub={`₦${(analytics?.platformCommission || 0).toLocaleString()} platform commission`}
-        /&gt;
-      &lt;/div&gt;
-
-      {/* Secondary Stats Row */}
-      &lt;div className="grid grid-cols-1 md:grid-cols-3 gap-4"&gt;
-        &lt;StatCard
-          icon={&lt;CheckCircle className="w-6 h-6 text-emerald-400" /&gt;}
-          iconBg="bg-emerald-500/10"
-          label="Order Completion Rate"
-          value={`${analytics?.completionRate || 0}%`}
-          sub={`${analytics?.completedOrders || 0} of ${analytics?.totalOrders || 0} orders`}
-        /&gt;
-        &lt;StatCard
-          icon={&lt;Gift className="w-6 h-6 text-pink-400" /&gt;}
-          iconBg="bg-pink-500/10"
-          label="Referral Rewards Paid"
-          value={`₦${(analytics?.referrals?.totalPaidOut || 0).toLocaleString()}`}
-          sub={`${analytics?.referrals?.newRewards || 0} rewards in period`}
-        /&gt;
-        &lt;StatCard
-          icon={&lt;TrendingUp className="w-6 h-6 text-orange-400" /&gt;}
-          iconBg="bg-orange-500/10"
-          label="Avg Order Value"
-          value={`₦${analytics?.totalOrders
-            ? Math.round((analytics.revenue || 0) / analytics.totalOrders).toLocaleString()
-            : 0}`}
-          sub="Per completed order"
-        /&gt;
-      &lt;/div&gt;
-
-      {/* User Breakdown */}
-      &lt;div className="bg-gray-800 border border-gray-700 rounded-2xl p-6"&gt;
-        &lt;h2 className="text-xl font-bold text-white mb-4"&gt;New User Breakdown&lt;/h2&gt;
-        &lt;div className="grid grid-cols-3 gap-4"&gt;
-          &lt;div className="text-center p-4 bg-gray-700/40 rounded-xl"&gt;
-            &lt;Users className="w-8 h-8 text-blue-400 mx-auto mb-2" /&gt;
-            &lt;p className="text-3xl font-bold text-white"&gt;{analytics?.newUsers || 0}&lt;/p&gt;
-            &lt;p className="text-gray-400 text-sm mt-1"&gt;Buyers&lt;/p&gt;
+    &lt;div className="min-h-screen bg-gray-950 text-white"&gt;
+      {/* ── Top Bar ── */}
+      &lt;div className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10"&gt;
+        &lt;div className="flex items-center justify-between px-6 py-3"&gt;
+          &lt;div className="flex items-center gap-4"&gt;
+            &lt;div className="flex items-center gap-2"&gt;
+              &lt;Activity className="w-4 h-4 text-red-500" /&gt;
+              &lt;span className="text-[11px] font-bold tracking-[0.25em] uppercase text-gray-300"&gt;BataMart Analytics&lt;/span&gt;
+              &lt;span className="text-[10px] text-gray-600 font-mono"&gt;/ COMMAND CENTER&lt;/span&gt;
+            &lt;/div&gt;
           &lt;/div&gt;
-          &lt;div className="text-center p-4 bg-gray-700/40 rounded-xl"&gt;
-            &lt;Store className="w-8 h-8 text-green-400 mx-auto mb-2" /&gt;
-            &lt;p className="text-3xl font-bold text-white"&gt;{analytics?.newSellers || 0}&lt;/p&gt;
-            &lt;p className="text-gray-400 text-sm mt-1"&gt;Sellers&lt;/p&gt;
-          &lt;/div&gt;
-          &lt;div className="text-center p-4 bg-gray-700/40 rounded-xl"&gt;
-            &lt;Bike className="w-8 h-8 text-purple-400 mx-auto mb-2" /&gt;
-            &lt;p className="text-3xl font-bold text-white"&gt;{analytics?.newRiders || 0}&lt;/p&gt;
-            &lt;p className="text-gray-400 text-sm mt-1"&gt;Riders&lt;/p&gt;
+          &lt;div className="flex items-center gap-3"&gt;
+            {/* Range Tabs */}
+            &lt;div className="flex items-center bg-gray-800 rounded-md p-0.5 gap-0.5"&gt;
+              {['7days', '30days', '90days', 'all'].map((r) =&gt; (
+                &lt;button
+                  key={r}
+                  onClick={() =&gt; setTimeRange(r)}
+                  className={`px-3 py-1 rounded text-[11px] font-bold transition-all tracking-wider ${
+                    timeRange === r
+                      ? 'bg-red-600 text-white'
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                &gt;
+                  {rangeLabel[r]}
+                &lt;/button&gt;
+              ))}
+            &lt;/div&gt;
+            {/* Refresh */}
+            &lt;button
+              onClick={fetchAnalytics}
+              className="p-1.5 rounded bg-gray-800 text-gray-500 hover:text-white hover:bg-gray-700 transition-all"
+            &gt;
+              &lt;RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-red-500' : ''}`} /&gt;
+            &lt;/button&gt;
+            &lt;span className="text-[10px] text-gray-700 font-mono"&gt;
+              {lastRefresh.toLocaleTimeString()}
+            &lt;/span&gt;
           &lt;/div&gt;
         &lt;/div&gt;
       &lt;/div&gt;
 
-      {/* Top Categories */}
-      &lt;div className="bg-gray-800 border border-gray-700 rounded-2xl p-6"&gt;
-        &lt;h2 className="text-xl font-bold text-white mb-6"&gt;Top Product Categories&lt;/h2&gt;
-        &lt;div className="space-y-4"&gt;
-          {analytics?.topCategories?.length &gt; 0 ? (
-            analytics.topCategories.map((cat: any, index: number) =&gt; {
-              const pct = analytics.totalProducts
-                ? Math.round((cat.count / analytics.totalProducts) * 100)
-                : 0
-              return (
-                &lt;div key={index}&gt;
-                  &lt;div className="flex items-center justify-between mb-1"&gt;
-                    &lt;span className="text-white font-medium"&gt;{cat.category || 'Uncategorized'}&lt;/span&gt;
-                    &lt;span className="text-gray-400 text-sm"&gt;{cat.count} products ({pct}%)&lt;/span&gt;
-                  &lt;/div&gt;
-                  &lt;div className="w-full bg-gray-700 rounded-full h-2"&gt;
-                    &lt;div
-                      className="bg-gradient-to-r from-red-500 to-red-600 h-2 rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%` }}
-                    /&gt;
-                  &lt;/div&gt;
+      {/* ── Body ── */}
+      &lt;div className="px-6 py-6 space-y-8 max-w-screen-2xl mx-auto"&gt;
+
+        {loading &amp;&amp; (
+          &lt;div className="flex items-center justify-center py-20"&gt;
+            &lt;div className="text-center space-y-3"&gt;
+              &lt;div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" /&gt;
+              &lt;p className="text-[11px] text-gray-600 tracking-widest uppercase"&gt;Fetching data...&lt;/p&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )}
+
+        {!loading &amp;&amp; a &amp;&amp; (
+          &lt;&gt;
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* SECTION 1 · GROWTH                                            */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            &lt;section&gt;
+              &lt;SectionHeader label="§01 · Growth" icon={&lt;TrendingUp className="w-4 h-4" /&gt;} /&gt;
+              &lt;div className="grid grid-cols-2 md:grid-cols-4 gap-3"&gt;
+                &lt;KpiCard
+                  label="New Users"
+                  value={fmt(a.newUsers)}
+                  sub={`+${a.newSellers} sellers · +${a.newRiders} riders`}
+                  icon={&lt;Users className="w-4 h-4" /&gt;}
+                  accent="blue"
+                /&gt;
+                &lt;KpiCard
+                  label="Total Users"
+                  value={fmt(a.totalUsers)}
+                  sub="All-time registered"
+                  icon={&lt;UserCheck className="w-4 h-4" /&gt;}
+                  accent="cyan"
+                /&gt;
+                &lt;KpiCard
+                  label="Orders Placed"
+                  value={fmt(a.totalOrders)}
+                  sub={`${a.completedOrders} completed`}
+                  icon={&lt;ShoppingBag className="w-4 h-4" /&gt;}
+                  accent="purple"
+                /&gt;
+                &lt;KpiCard
+                  label="Revenue (GMV)"
+                  value={fmtNgn(a.revenue)}
+                  sub={`${fmtNgn(a.platformCommission)} commission`}
+                  icon={&lt;DollarSign className="w-4 h-4" /&gt;}
+                  accent="green"
+                /&gt;
+              &lt;/div&gt;
+            &lt;/section&gt;
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* SECTION 2 · ENGAGEMENT                                        */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            &lt;section&gt;
+              &lt;SectionHeader label="§02 · Engagement" icon={&lt;Zap className="w-4 h-4" /&gt;} /&gt;
+              &lt;div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3"&gt;
+                &lt;KpiCard label="DAU" value={fmt(a.dau)} sub="Daily active users" icon={&lt;Activity className="w-4 h-4" /&gt;} accent="orange" /&gt;
+                &lt;KpiCard label="WAU" value={fmt(a.wau)} sub="Weekly active users" icon={&lt;Activity className="w-4 h-4" /&gt;} accent="orange" /&gt;
+                &lt;KpiCard label="MAU" value={fmt(a.mau)} sub="Monthly active users" icon={&lt;Activity className="w-4 h-4" /&gt;} accent="orange" /&gt;
+                &lt;KpiCard label="Day 1 Retention" value={fmtPct(a.retentionDay1)} sub="Return next day" icon={&lt;RefreshCw className="w-4 h-4" /&gt;} accent="cyan" /&gt;
+                &lt;KpiCard label="Day 7 Retention" value={fmtPct(a.retentionDay7)} sub="Return after 7 days" icon={&lt;RefreshCw className="w-4 h-4" /&gt;} accent="cyan" /&gt;
+                &lt;KpiCard label="Repeat Buyers" value={fmtPct(a.repeatBuyerPct)} sub="Bought 2+ times" icon={&lt;Repeat className="w-4 h-4" /&gt;} accent="pink" /&gt;
+              &lt;/div&gt;
+            &lt;/section&gt;
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* SECTION 3 · CONVERSION FUNNEL                                 */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            &lt;section&gt;
+              &lt;SectionHeader label="§03 · Conversion Funnel" icon={&lt;Target className="w-4 h-4" /&gt;} /&gt;
+              &lt;div className="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-4"&gt;
+                &lt;FunnelBar
+                  label="App Opens"
+                  value={a.appOpens}
+                  max={a.appOpens}
+                  pct={100}
+                /&gt;
+                &lt;FunnelBar
+                  label="Product Views"
+                  value={a.productViews}
+                  max={a.appOpens}
+                  pct={a.appOpens &gt; 0 ? (a.productViews / a.appOpens) * 100 : 0}
+                /&gt;
+                &lt;FunnelBar
+                  label="Add to Cart"
+                  value={a.addToCart}
+                  max={a.appOpens}
+                  pct={a.appOpens &gt; 0 ? (a.addToCart / a.appOpens) * 100 : 0}
+                /&gt;
+                &lt;FunnelBar
+                  label="Checkout Success"
+                  value={a.completedOrders}
+                  max={a.appOpens}
+                  pct={a.checkoutSuccessPct}
+                /&gt;
+                {/* Drop-off annotation */}
+                &lt;div className="pt-3 border-t border-gray-800 flex items-center justify-between"&gt;
+                  &lt;span className="text-[10px] text-gray-600 uppercase tracking-widest"&gt;Overall Conversion Rate&lt;/span&gt;
+                  &lt;span className={`font-black font-mono text-lg ${a.checkoutSuccessPct &gt;= 10 ? 'text-emerald-400' : a.checkoutSuccessPct &gt;= 5 ? 'text-yellow-400' : 'text-red-400'}`}&gt;
+                    {fmtPct(a.checkoutSuccessPct)}
+                  &lt;/span&gt;
                 &lt;/div&gt;
-              )
-            })
-          ) : (
-            &lt;p className="text-gray-400 text-center py-4"&gt;No data available&lt;/p&gt;
-          )}
-        &lt;/div&gt;
-      &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/section&gt;
 
-    &lt;/div&gt;
-  )
-}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* SECTION 4 + 5 · MARKETPLACE HEALTH + LOGISTICS (side by side) */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            &lt;div className="grid grid-cols-1 lg:grid-cols-2 gap-6"&gt;
 
-function StatCard({
-  icon, iconBg, label, value, sub,
-}: {
-  icon: React.ReactNode
-  iconBg: string
-  label: string
-  value: string | number
-  sub?: string
-}) {
-  return (
-    &lt;div className="bg-gray-800 border border-gray-700 rounded-2xl p-6"&gt;
-      &lt;div className="flex items-center justify-between mb-4"&gt;
-        &lt;div className={`p-3 ${iconBg} rounded-xl`}&gt;{icon}&lt;/div&gt;
+              {/* Marketplace Health */}
+              &lt;section&gt;
+                &lt;SectionHeader label="§04 · Marketplace Health" icon={&lt;Store className="w-4 h-4" /&gt;} /&gt;
+                &lt;div className="bg-gray-900 border border-gray-800 rounded-lg p-5"&gt;
+                  &lt;DataRow
+                    label="Active Sellers"
+                    value={fmt(a.activeSellers)}
+                    sub={`${fmt(a.newSellers)} joined this period`}
+                    flag="ok"
+                  /&gt;
+                  &lt;DataRow
+                    label="Orders per Seller"
+                    value={a.ordersPerSeller.toFixed(1)}
+                    sub="Avg in period"
+                    flag={a.ordersPerSeller &gt;= 2 ? 'ok' : a.ordersPerSeller &gt;= 1 ? 'warn' : 'danger'}
+                  /&gt;
+                  &lt;DataRow
+                    label="Listing Growth"
+                    value={fmtPct(a.listingGrowthPct)}
+                    sub={`${fmt(a.newProducts)} new / ${fmt(a.totalProducts)} total`}
+                    flag={a.listingGrowthPct &gt;= 5 ? 'ok' : 'warn'}
+                  /&gt;
+                  &lt;DataRow
+                    label="Completion Rate"
+                    value={fmtPct(a.completionRate)}
+                    sub={`${a.completedOrders} of ${a.totalOrders} orders`}
+                    flag={a.completionRate &gt;= 80 ? 'ok' : a.completionRate &gt;= 60 ? 'warn' : 'danger'}
+                  /&gt;
+                  &lt;DataRow
+                    label="Avg Order Value"
+                    value={fmtNgn(a.totalOrders &gt; 0 ? a.revenue / a.totalOrders : 0)}
+                    sub="Per completed order"
+                  /&gt;
+                &lt;/div&gt;
+              &lt;/section&gt;
+
+              {/* Logistics */}
+              &lt;section&gt;
+                &lt;SectionHeader label="§05 · Logistics" icon={&lt;Bike className="w-4 h-4" /&gt;} /&gt;
+                &lt;div className="bg-gray-900 border border-gray-800 rounded-lg p-5"&gt;
+                  &lt;DataRow
+                    label="Avg Delivery Time"
+                    value={fmtMin(a.avgDeliveryMinutes)}
+                    sub="Campus delivery"
+                    flag={a.avgDeliveryMinutes &lt;= 30 ? 'ok' : a.avgDeliveryMinutes &lt;= 60 ? 'warn' : 'danger'}
+                  /&gt;
+                  &lt;DataRow
+                    label="Rider Completion Rate"
+                    value={fmtPct(a.riderCompletionRate)}
+                    sub="Deliveries fulfilled"
+                    flag={a.riderCompletionRate &gt;= 90 ? 'ok' : a.riderCompletionRate &gt;= 75 ? 'warn' : 'danger'}
+                  /&gt;
+                  &lt;DataRow
+                    label="Failed Deliveries"
+                    value={fmtPct(a.failedDeliveryPct)}
+                    sub="Of attempted deliveries"
+                    flag={a.failedDeliveryPct &lt;= 5 ? 'ok' : a.failedDeliveryPct &lt;= 15 ? 'warn' : 'danger'}
+                  /&gt;
+                  &lt;DataRow
+                    label="Active Riders"
+                    value={fmt(a.newRiders)}
+                    sub="Joined this period"
+                  /&gt;
+                  &lt;DataRow
+                    label="Referral Rewards Paid"
+                    value={fmtNgn(a.referrals.totalPaidOut)}
+                    sub={`${a.referrals.newRewards} rewards`}
+                  /&gt;
+                &lt;/div&gt;
+              &lt;/section&gt;
+            &lt;/div&gt;
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* SECTION 6 · MONEY METRICS                                     */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            &lt;section&gt;
+              &lt;SectionHeader label="§06 · Money Metrics" icon={&lt;CreditCard className="w-4 h-4" /&gt;} /&gt;
+              &lt;div className="grid grid-cols-2 md:grid-cols-4 gap-3"&gt;
+                &lt;KpiCard
+                  label="GMV"
+                  value={fmtNgn(a.gmv)}
+                  sub="Gross merchandise value"
+                  icon={&lt;BarChart2 className="w-4 h-4" /&gt;}
+                  accent="green"
+                /&gt;
+                &lt;KpiCard
+                  label="Net Revenue"
+                  value={fmtNgn(a.netRevenue)}
+                  sub="After costs &amp; rewards"
+                  icon={&lt;Shield className="w-4 h-4" /&gt;}
+                  accent="yellow"
+                /&gt;
+                &lt;KpiCard
+                  label="CAC"
+                  value={fmtNgn(a.cac)}
+                  sub="Cost to acquire user"
+                  icon={&lt;Target className="w-4 h-4" /&gt;}
+                  accent="red"
+                /&gt;
+                &lt;KpiCard
+                  label="LTV"
+                  value={fmtNgn(a.ltv)}
+                  sub="Lifetime value"
+                  icon={&lt;TrendingUp className="w-4 h-4" /&gt;}
+                  accent="purple"
+                /&gt;
+              &lt;/div&gt;
+              {/* LTV:CAC Ratio */}
+              &lt;div className="mt-3 bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between"&gt;
+                &lt;div&gt;
+                  &lt;p className="text-[10px] text-gray-600 uppercase tracking-widest font-mono"&gt;LTV : CAC Ratio&lt;/p&gt;
+                  &lt;p className="text-gray-400 text-xs mt-0.5"&gt;Target ≥ 3× for healthy unit economics&lt;/p&gt;
+                &lt;/div&gt;
+                &lt;div className="text-right"&gt;
+                  &lt;p className={`text-3xl font-black font-mono ${
+                    a.cac &gt; 0 &amp;&amp; a.ltv / a.cac &gt;= 3
+                      ? 'text-emerald-400'
+                      : a.cac &gt; 0 &amp;&amp; a.ltv / a.cac &gt;= 1.5
+                      ? 'text-yellow-400'
+                      : 'text-red-400'
+                  }`}&gt;
+                    {a.cac &gt; 0 ? (a.ltv / a.cac).toFixed(2) : '—'}×
+                  &lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/section&gt;
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* TOP CATEGORIES                                                  */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            &lt;section&gt;
+              &lt;SectionHeader label="§07 · Category Breakdown" icon={&lt;Layers className="w-4 h-4" /&gt;} /&gt;
+              &lt;div className="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-4"&gt;
+                {a.topCategories?.length &gt; 0 ? (
+                  a.topCategories.map((cat, index) =&gt; {
+                    const pct = a.totalProducts
+                      ? (cat.count / a.totalProducts) * 100
+                      : 0
+                    return (
+                      &lt;div key={index}&gt;
+                        &lt;div className="flex items-center justify-between mb-1.5"&gt;
+                          &lt;span className="text-[11px] font-mono font-semibold text-gray-300 uppercase tracking-wider"&gt;
+                            {cat.category || 'Uncategorized'}
+                          &lt;/span&gt;
+                          &lt;div className="flex items-baseline gap-3"&gt;
+                            &lt;span className="text-white font-bold font-mono text-sm"&gt;{cat.count}&lt;/span&gt;
+                            &lt;span className="text-gray-600 text-[10px]"&gt;{fmtPct(pct)}&lt;/span&gt;
+                          &lt;/div&gt;
+                        &lt;/div&gt;
+                        &lt;div className="h-1 bg-gray-800 rounded-full overflow-hidden"&gt;
+                          &lt;div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{
+                              width: `${pct}%`,
+                              background: `hsl(${200 + index * 30}, 70%, 55%)`,
+                            }}
+                          /&gt;
+                        &lt;/div&gt;
+                      &lt;/div&gt;
+                    )
+                  })
+                ) : (
+                  &lt;p className="text-gray-600 text-center py-6 text-sm font-mono"&gt;NO DATA AVAILABLE&lt;/p&gt;
+                )}
+              &lt;/div&gt;
+            &lt;/section&gt;
+
+          &lt;/&gt;
+        )}
       &lt;/div&gt;
-      &lt;p className="text-3xl font-bold text-white mb-1"&gt;{value}&lt;/p&gt;
-      &lt;p className="text-gray-400 text-sm"&gt;{label}&lt;/p&gt;
-      {sub &amp;&amp; &lt;p className="text-gray-500 text-xs mt-1"&gt;{sub}&lt;/p&gt;}
     &lt;/div&gt;
   )
 }</pre></div>
@@ -4248,10 +4594,9 @@ function SignupForm() {
   const [selectedUniversity, setSelectedUniversity] = useState&lt;University | null&gt;(null)
   const [uniLoading, setUniLoading]                 = useState(true)
 
-  const [email, setEmail]           = useState('')
-  const [name, setName]             = useState('')
-  const [phone, setPhone]           = useState('')
-  const [wantToSell, setWantToSell] = useState(false)
+  const [email, setEmail] = useState('')
+  const [name, setName]   = useState('')
+  const [phone, setPhone] = useState('')
 
   const [otp, setOtp]                         = useState(['', '', '', '', '', ''])
   const [otpSessionToken, setOtpSessionToken] = useState('')
@@ -4389,7 +4734,7 @@ function SignupForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email, name, phone, password, otpSessionToken,
-          role:         wantToSell ? 'SELLER' : 'BUYER',
+          role:         'BUYER', // ← Always sign up as BUYER. Upgrade to SELLER via become-seller flow.
           referralCode: referralCode || undefined,
           universityId: selectedUniversity!.id,
           hostelName:   hostelName.trim(),
@@ -4541,18 +4886,9 @@ function SignupForm() {
               /&gt;
             &lt;/div&gt;
 
-            &lt;div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl"&gt;
-              &lt;input
-                type="checkbox"
-                id="wantToSell"
-                checked={wantToSell}
-                onChange={e =&gt; setWantToSell(e.target.checked)}
-                className="w-4 h-4 rounded accent-blue-600"
-              /&gt;
-              &lt;label htmlFor="wantToSell" className="text-sm text-gray-700"&gt;
-                I also want to sell on {selectedUniversity?.shortName}
-              &lt;/label&gt;
-            &lt;/div&gt;
+            {/* ── REMOVED: "I also want to sell" checkbox ── */}
+            {/* Everyone signs up as a BUYER. To sell, they click "Sell Product"
+                which redirects them to /become-seller to upgrade their account. */}
 
             &lt;button
               type="submit"
@@ -10560,12 +10896,45 @@ function ConfirmListingModal({
   )
 }
 
+// ── Become Seller Gate ────────────────────────────────────────────────────────
+// Shown to BUYER role users who land on /sell.
+// They must upgrade to SELLER before they can list products.
+function BecomeSellerGate({ appMode }: { appMode: boolean }) {
+  const router = useRouter()
+  return (
+    &lt;div className="min-h-screen bg-gray-50 flex items-center justify-center px-4"&gt;
+      &lt;div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center"&gt;
+        &lt;div className="text-6xl mb-4"&gt;🛍️&lt;/div&gt;
+        &lt;h1 className="text-2xl font-bold text-gray-900 mb-3"&gt;Want to sell on BataMart?&lt;/h1&gt;
+        &lt;p className="text-gray-500 text-sm mb-6 leading-relaxed"&gt;
+          You're currently signed in as a buyer. To list products, you need to upgrade your account to a seller account — it's free and takes 10 seconds.
+        &lt;/p&gt;
+        &lt;button
+          onClick={() =&gt; router.push(appMode ? '/become-seller?app=true' : '/become-seller')}
+          className="w-full py-3.5 rounded-xl font-bold text-white text-base shadow-lg mb-3"
+          style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
+        &gt;
+          Become a Seller →
+        &lt;/button&gt;
+        &lt;button
+          onClick={() =&gt; router.push(appMode ? '/marketplace?app=true' : '/marketplace')}
+          className="w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition"
+        &gt;
+          Back to Marketplace
+        &lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SellPage() {
   const router = useRouter()
   const [loading, setLoading]                   = useState(false)
   const [checkingAuth, setCheckingAuth]         = useState(true)
+  const [isBuyer, setIsBuyer]                   = useState(false)   // ← new: gate for buyers
+  const [appMode, setAppMode]                   = useState(false)
   const [error, setError]                       = useState('')
   const [images, setImages]                     = useState&lt;{ preview: string; url: string; uploading: boolean }[]&gt;([])
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -10585,9 +10954,25 @@ export default function SellPage() {
   })
 
   useEffect(() =&gt; {
-    const token = localStorage.getItem('token')
-    if (!token) router.push('/login')
-    else setCheckingAuth(false)
+    const token    = localStorage.getItem('token')
+    const userRole = localStorage.getItem('userRole')
+    const params   = new URLSearchParams(window.location.search)
+    setAppMode(params.get('app') === 'true')
+
+    if (!token) {
+      router.push('/login')
+      return
+    }
+
+    // ── Role gate: buyers get redirected to become-seller UI ──────────────
+    // Only SELLER (and ADMIN) roles may access the listing form.
+    if (userRole === 'BUYER') {
+      setIsBuyer(true)
+      setCheckingAuth(false)
+      return
+    }
+
+    setCheckingAuth(false)
   }, [router])
 
   if (checkingAuth) {
@@ -10599,6 +10984,11 @@ export default function SellPage() {
         &lt;/div&gt;
       &lt;/div&gt;
     )
+  }
+
+  // ── Show become-seller gate to buyers ─────────────────────────────────────
+  if (isBuyer) {
+    return &lt;BecomeSellerGate appMode={appMode} /&gt;
   }
 
   const addTag = (value: string) =&gt; {
@@ -10729,7 +11119,7 @@ export default function SellPage() {
       &lt;div className="max-w-3xl mx-auto"&gt;
         &lt;div className="mb-8"&gt;
           &lt;Link
-            href={typeof window !== 'undefined' &amp;&amp; new URLSearchParams(window.location.search).get('app') === 'true' ? '/marketplace?app=true' : '/marketplace'}
+            href={appMode ? '/marketplace?app=true' : '/marketplace'}
             className="text-BATAMART-primary hover:underline mb-4 inline-block"
           &gt;
             ← Back to Marketplace
@@ -18927,6 +19317,7 @@ module.exports = {
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/admin/analytics/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/admin/analytics/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import { prisma } from '@/lib/prisma'
@@ -18946,9 +19337,7 @@ async function verifyAdmin(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const admin = await verifyAdmin(req)
-  if (!admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const { searchParams } = new URL(req.url)
@@ -18960,78 +19349,272 @@ export async function GET(req: NextRequest) {
     else if (range === '90days') startDate.setDate(startDate.getDate() - 90)
     else startDate = new Date(0)
 
+    // ── Previous period for retention calculations ──────────────────────────
+    const periodMs = Date.now() - startDate.getTime()
+    const prevStart = new Date(startDate.getTime() - periodMs)
+
+    // ── All Queries in parallel ─────────────────────────────────────────────
     const [
+      // Growth
       newUsers,
+      newSellers,
+      newRiders,
       newProducts,
       totalOrders,
       completedOrders,
-      revenue,
+      revenueAgg,
       topCategories,
       totalProducts,
+      totalUsers,
+
+      // Engagement
+      dauUsers,
+      wauUsers,
+      mauUsers,
+
+      // Marketplace Health
+      activeSellers,
       referralData,
-      newSellers,
-      newRiders,
+
+      // Logistics — delivery times from completed orders
+      deliveryStats,
+      failedOrders,
+
+      // Money — previous period for trend comparisons
+      prevRevenueAgg,
+
+      // Repeat buyers: users who have more than 1 completed order
+      repeatBuyers,
+
+      // Retention Day 1: users created yesterday who came back today
+      // Approximated by: new users in period who placed ≥1 order
+      engagedNewUsers,
     ] = await Promise.all([
+
+      // ── Growth ──────────────────────────────────────────────────────────────
       prisma.user.count({ where: { createdAt: { gte: startDate }, role: 'BUYER' } }),
-
+      prisma.user.count({ where: { createdAt: { gte: startDate }, role: 'SELLER' } }),
+      prisma.user.count({ where: { createdAt: { gte: startDate }, role: 'RIDER' } }),
       prisma.product.count({ where: { createdAt: { gte: startDate } } }),
-
       prisma.order.count({ where: { createdAt: { gte: startDate } } }),
-
-      prisma.order.count({
-        where: { createdAt: { gte: startDate }, status: 'COMPLETED' },
-      }),
-
+      prisma.order.count({ where: { createdAt: { gte: startDate }, status: 'COMPLETED' } }),
       prisma.order.aggregate({
         where: { createdAt: { gte: startDate }, status: 'COMPLETED' },
         _sum: { totalAmount: true, platformCommission: true },
       }),
-
       prisma.product.groupBy({
         by: ['category'],
         _count: true,
         orderBy: { _count: { category: 'desc' } },
-        take: 5,
+        take: 7,
+      }),
+      prisma.product.count(),
+      prisma.user.count(),
+
+      // ── Engagement (active = placed ≥1 order OR logged any session) ─────────
+      // Approximation: users who placed orders in last 1 day / 7 days / 30 days
+      prisma.user.count({
+        where: {
+          orders: {
+            some: { createdAt: { gte: new Date(Date.now() - 86400000) } },
+          },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          orders: {
+            some: { createdAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+          },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          orders: {
+            some: { createdAt: { gte: new Date(Date.now() - 30 * 86400000) } },
+          },
+        },
       }),
 
-      prisma.product.count(),
+      // ── Marketplace Health ──────────────────────────────────────────────────
+      prisma.user.count({
+        where: {
+          role: 'SELLER',
+          products: { some: { createdAt: { gte: startDate } } },
+        },
+      }),
 
-      // Referral stats for period
       prisma.referralReward.aggregate({
         where: { createdAt: { gte: startDate } },
         _sum: { amount: true },
         _count: true,
       }).catch(() =&gt; ({ _sum: { amount: 0 }, _count: 0 })),
 
-      prisma.user.count({ where: { createdAt: { gte: startDate }, role: 'SELLER' } }),
+      // ── Logistics ───────────────────────────────────────────────────────────
+      // Average delivery time: difference between order created and COMPLETED status
+      // Using deliveredAt if available, otherwise updatedAt as proxy
+      prisma.order.findMany({
+        where: {
+          status: 'COMPLETED',
+          createdAt: { gte: startDate },
+        },
+        select: { createdAt: true, updatedAt: true },
+        take: 200,
+      }),
 
-      prisma.user.count({ where: { createdAt: { gte: startDate }, role: 'RIDER' } }),
+      prisma.order.count({
+        where: {
+          createdAt: { gte: startDate },
+          status: { in: ['CANCELLED', 'DISPUTED'] },
+        },
+      }),
+
+      // ── Money: previous period revenue for trend ─────────────────────────
+      prisma.order.aggregate({
+        where: { createdAt: { gte: prevStart, lt: startDate }, status: 'COMPLETED' },
+        _sum: { totalAmount: true, platformCommission: true },
+      }),
+
+      // ── Repeat buyers (bought more than once ever) ───────────────────────
+      prisma.user.count({
+        where: {
+          role: 'BUYER',
+          orders: { some: { status: 'COMPLETED' } },
+        },
+      }),
+
+      // ── Engaged new users (new in period who placed any order) ───────────
+      prisma.user.count({
+        where: {
+          createdAt: { gte: startDate },
+          orders: { some: {} },
+        },
+      }),
     ])
 
-    // Completion rate
+    // ── Derived Metrics ───────────────────────────────────────────────────────
+
     const completionRate = totalOrders &gt; 0
       ? Math.round((completedOrders / totalOrders) * 100)
       : 0
 
+    const gmv = revenueAgg._sum.totalAmount || 0
+    const platformCommission = revenueAgg._sum.platformCommission || 0
+    const referralsPaid = referralData._sum?.amount || 0
+
+    // Net revenue = commission earned - referral rewards paid out
+    const netRevenue = platformCommission - referralsPaid
+
+    // Average delivery time in minutes (updatedAt - createdAt for completed orders)
+    const avgDeliveryMinutes = deliveryStats.length &gt; 0
+      ? Math.round(
+          deliveryStats.reduce((sum, o) =&gt; {
+            return sum + (o.updatedAt.getTime() - o.createdAt.getTime())
+          }, 0) / deliveryStats.length / 60000
+        )
+      : 0
+
+    const riderCompletionRate = totalOrders &gt; 0
+      ? Math.round((completedOrders / totalOrders) * 100)
+      : 0
+
+    const failedDeliveryPct = totalOrders &gt; 0
+      ? parseFloat(((failedOrders / totalOrders) * 100).toFixed(1))
+      : 0
+
+    // Orders per active seller
+    const ordersPerSeller = activeSellers &gt; 0
+      ? parseFloat((totalOrders / activeSellers).toFixed(1))
+      : 0
+
+    // Listing growth % over period
+    const listingGrowthPct = totalProducts &gt; newProducts &amp;&amp; totalProducts &gt; 0
+      ? parseFloat(((newProducts / (totalProducts - newProducts)) * 100).toFixed(1))
+      : 0
+
+    // CAC: referral payout per new user (simplified)
+    const newTotalUsers = newUsers + newSellers + newRiders
+    const cac = newTotalUsers &gt; 0 ? referralsPaid / newTotalUsers : 0
+
+    // LTV: average revenue per buyer (total GMV / total buyers ever)
+    const totalBuyers = await prisma.user.count({ where: { role: 'BUYER' } })
+    const ltv = totalBuyers &gt; 0 ? gmv / totalBuyers : 0
+
+    // Retention approximations
+    const retentionDay1 = newUsers &gt; 0
+      ? parseFloat(((engagedNewUsers / newUsers) * 100).toFixed(1))
+      : 0
+    const retentionDay7 = mauUsers &gt; 0
+      ? parseFloat(((wauUsers / mauUsers) * 100).toFixed(1))
+      : 0
+
+    // Repeat buyer %
+    const repeatBuyerPct = totalBuyers &gt; 0
+      ? parseFloat(((repeatBuyers / totalBuyers) * 100).toFixed(1))
+      : 0
+
+    // Funnel (app opens not tracked yet → use a proxy or 0 until instrumented)
+    const appOpens = 0   // Wire up when you add analytics events
+    const productViews = 0 // Wire up when you add analytics events
+    const addToCart = 0    // Wire up when you add analytics events
+    const checkoutSuccessPct = totalOrders &gt; 0
+      ? parseFloat(((completedOrders / totalOrders) * 100).toFixed(1))
+      : 0
+
     return NextResponse.json({
       analytics: {
+        // Growth
         newUsers,
+        totalUsers,
         newSellers,
         newRiders,
         newProducts,
+        totalProducts,
         totalOrders,
         completedOrders,
         completionRate,
-        revenue: revenue._sum.totalAmount || 0,
-        platformCommission: revenue._sum.platformCommission || 0,
-        totalProducts,
+        revenue: gmv,
+        platformCommission,
+
+        // Engagement
+        dau: dauUsers,
+        wau: wauUsers,
+        mau: mauUsers,
+        retentionDay1,
+        retentionDay7,
+        repeatBuyerPct,
+
+        // Funnel
+        appOpens,
+        productViews,
+        addToCart,
+        checkoutSuccessPct,
+
+        // Marketplace
+        activeSellers,
+        ordersPerSeller,
+        listingGrowthPct,
+
+        // Logistics
+        avgDeliveryMinutes,
+        riderCompletionRate,
+        failedDeliveryPct,
+
+        // Money
+        gmv,
+        netRevenue,
+        cac,
+        ltv,
+
+        // Categories
         topCategories: topCategories.map((c) =&gt; ({
           category: c.category,
           count: c._count,
         })),
+
+        // Referrals
         referrals: {
           newRewards: referralData._count,
-          totalPaidOut: referralData._sum.amount || 0,
+          totalPaidOut: referralsPaid,
         },
       },
     })
@@ -20845,7 +21428,9 @@ export async function POST(request: NextRequest) {
       name,
       password,
       otpSessionToken,
-      role,
+      // NOTE: `role` from the request body is intentionally ignored.
+      // All new users are created as BUYER. They can upgrade to SELLER
+      // only via the /become-seller flow (POST /api/auth/become-seller).
       phone,
       referralCode,
       universityId,
@@ -20940,13 +21525,16 @@ export async function POST(request: NextRequest) {
     const hashedPassword  = await hashPassword(password)
     const newReferralCode = await generateUniqueReferralCode()
 
+    // ── Always create as BUYER ─────────────────────────────────────────────
+    // Sellers are created exclusively via POST /api/auth/become-seller.
+    // This prevents confusion where buyers accidentally got seller accounts.
     const user = await prisma.user.create({
       data: {
         email,
         name:         name.trim(),
         phone,
         password:     hashedPassword,
-        role:         role || 'BUYER',
+        role:         'BUYER',
         referralCode: newReferralCode,
         universityId: university.id,
         // ── Delivery location ────────────────────────────────────────────

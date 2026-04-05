@@ -2,7 +2,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Shield, CheckCircle, XCircle, ChevronLeft, ChevronRight, X, UserPlus, Eye, EyeOff, Copy, Check } from 'lucide-react'
+import {
+  Search, Shield, CheckCircle, XCircle,
+  ChevronLeft, ChevronRight, X, UserPlus,
+  Eye, EyeOff, Copy, Check, Building2,
+} from 'lucide-react'
 
 interface User {
   id: string
@@ -14,7 +18,7 @@ interface User {
   isSuspended: boolean
   penaltyPoints: number
   createdAt: string
-  university?: { shortName: string; name: string } | null
+  university?: { id: string; shortName: string; name: string } | null
   _count: {
     ordersAsBuyer: number
     ordersAsSeller: number
@@ -47,63 +51,70 @@ interface CreateRiderForm {
 const PAGE_SIZE = 50
 
 export default function UsersPage() {
-  const [users, setUsers]           = useState<User[]>([])
-  const [total, setTotal]           = useState(0)
-  const [page, setPage]             = useState(1)
-  const [loading, setLoading]       = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterRole, setFilterRole] = useState<string>('ALL')
+  const [users, setUsers]               = useState<User[]>([])
+  const [total, setTotal]               = useState(0)
+  const [page, setPage]                 = useState(1)
+  const [loading, setLoading]           = useState(true)
+  const [searchQuery, setSearchQuery]   = useState('')
+  const [filterRole, setFilterRole]     = useState<string>('ALL')
+  const [selectedUni, setSelectedUni]   = useState('all')
+  const [universities, setUniversities] = useState<University[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 5000)
   }
 
-  // Suspend / unsuspend dialogs
   const [suspendDialog, setSuspendDialog]     = useState<SuspendDialogState | null>(null)
   const [unsuspendTarget, setUnsuspendTarget] = useState<{ userId: string; userName: string } | null>(null)
 
-  // ── Create Rider modal ────────────────────────────────────────────────────
-  const [showCreateRider, setShowCreateRider] = useState(false)
-  const [universities, setUniversities]       = useState<University[]>([])
-  const [showPassword, setShowPassword]       = useState(false)
-  const [createLoading, setCreateLoading]     = useState(false)
-  const [createError, setCreateError]         = useState('')
-  const [createdCredentials, setCreatedCredentials] = useState<{ name: string; email: string; password: string; university: string } | null>(null)
-  const [copiedField, setCopiedField]         = useState<string | null>(null)
+  const [showCreateRider, setShowCreateRider]     = useState(false)
+  const [showPassword, setShowPassword]           = useState(false)
+  const [createLoading, setCreateLoading]         = useState(false)
+  const [createError, setCreateError]             = useState('')
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    name: string; email: string; password: string; university: string
+  } | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
   const [riderForm, setRiderForm] = useState<CreateRiderForm>({
-    name:         '',
-    phone:        '',
-    email:        '',
-    password:     '',
-    universityId: '',
+    name: '', phone: '', email: '', password: '', universityId: '',
   })
 
-  useEffect(() => { fetchUsers(page) }, [page])
-
-  // Fetch universities once when modal opens
+  // Load universities once
   useEffect(() => {
-    if (showCreateRider && universities.length === 0) {
-      const token = localStorage.getItem('adminToken')
-      fetch('/api/universities', { headers: { 'Authorization': `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(data => setUniversities(data.universities ?? []))
-        .catch(() => {})
-    }
-  }, [showCreateRider])
+    const token = localStorage.getItem('adminToken')
+    fetch('/api/universities', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => setUniversities(data.universities ?? []))
+      .catch(() => {})
+  }, [])
+
+  // Refetch when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [selectedUni, filterRole, searchQuery])
+
+  useEffect(() => {
+    fetchUsers(page)
+  }, [page, selectedUni, filterRole])
 
   const fetchUsers = async (p: number) => {
     setLoading(true)
     try {
       const token = localStorage.getItem('adminToken')
-      const response = await fetch(
-        `/api/admin/users?page=${p}&limit=${PAGE_SIZE}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      )
+      const qs = new URLSearchParams({
+        page:    String(p),
+        limit:   String(PAGE_SIZE),
+        ...(selectedUni !== 'all' ? { universityId: selectedUni } : {}),
+        ...(filterRole !== 'ALL'  ? { role: filterRole }          : {}),
+        ...(searchQuery.trim()    ? { search: searchQuery.trim() } : {}),
+      })
+      const response = await fetch(`/api/admin/users?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       if (response.ok) {
         const data = await response.json()
         setUsers(data.users)
@@ -118,34 +129,28 @@ export default function UsersPage() {
     }
   }
 
-  // ── Create Rider submit ───────────────────────────────────────────────────
+  // Search on Enter
+  const handleSearchKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') fetchUsers(1)
+  }
+
+  // ── Create Rider ──────────────────────────────────────────────────────────
   const handleCreateRider = async (e: React.FormEvent) => {
     e.preventDefault()
     setCreateError('')
-
-    if (!riderForm.universityId) {
-      setCreateError('Please select a university')
-      return
-    }
-    if (riderForm.password.length < 8) {
-      setCreateError('Password must be at least 8 characters')
-      return
-    }
-    if (!/\d/.test(riderForm.password)) {
-      setCreateError('Password must contain at least one number')
-      return
-    }
+    if (!riderForm.universityId)   { setCreateError('Please select a university'); return }
+    if (riderForm.password.length < 8) { setCreateError('Password must be at least 8 characters'); return }
+    if (!/\d/.test(riderForm.password)) { setCreateError('Password must contain at least one number'); return }
 
     setCreateLoading(true)
     try {
       const token = localStorage.getItem('adminToken')
       const res   = await fetch('/api/admin/riders/create', {
         method:  'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body:    JSON.stringify(riderForm),
       })
       const data = await res.json()
-
       if (res.ok) {
         const uni = universities.find(u => u.id === riderForm.universityId)
         setCreatedCredentials({
@@ -189,486 +194,413 @@ export default function UsersPage() {
     setSuspendDialog(null)
     try {
       const token = localStorage.getItem('adminToken')
-      const response = await fetch(`/api/admin/users/${userId}/suspend`, {
+      const res = await fetch(`/api/admin/users/${userId}/suspend`, {
         method:  'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ reason: reason.trim() || 'Administrative action', days: parsedDays }),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ reason, days: parsedDays }),
       })
-      const data = await response.json()
-      if (response.ok) { showToast('User suspended successfully'); fetchUsers(page) }
-      else showToast(`Failed: ${data.error || 'Unknown error'}`, 'error')
+      if (res.ok) {
+        showToast('User suspended successfully')
+        fetchUsers(page)
+      } else {
+        const data = await res.json()
+        showToast(data.error || 'Failed to suspend user', 'error')
+      }
     } catch {
-      showToast('Network error. Please try again.', 'error')
+      showToast('Network error', 'error')
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleUnsuspendConfirm = async () => {
+  const handleUnsuspend = async () => {
     if (!unsuspendTarget) return
     const { userId } = unsuspendTarget
     setActionLoading(userId)
     setUnsuspendTarget(null)
     try {
       const token = localStorage.getItem('adminToken')
-      const response = await fetch(`/api/admin/users/${userId}/unsuspend`, {
+      const res = await fetch(`/api/admin/users/${userId}/unsuspend`, {
         method:  'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({}),
+        headers: { Authorization: `Bearer ${token}` },
       })
-      const data = await response.json()
-      if (response.ok) { showToast('User unsuspended successfully'); fetchUsers(page) }
-      else showToast(`Failed: ${data.error || 'Unknown error'}`, 'error')
+      if (res.ok) {
+        showToast('User unsuspended successfully')
+        fetchUsers(page)
+      } else {
+        showToast('Failed to unsuspend user', 'error')
+      }
     } catch {
-      showToast('Network error. Please try again.', 'error')
+      showToast('Network error', 'error')
     } finally {
       setActionLoading(null)
     }
   }
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesRole = filterRole === 'ALL' || user.role === filterRole
-    return matchesSearch && matchesRole
-  })
-
   const totalPages = Math.ceil(total / PAGE_SIZE)
+  const selectedUniName = selectedUni === 'all'
+    ? 'All Universities'
+    : universities.find(u => u.id === selectedUni)?.shortName ?? ''
 
   return (
     <div className="space-y-6">
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-semibold ${
-          toast.type === 'success'
-            ? 'bg-emerald-900/90 border-emerald-700 text-emerald-200'
-            : 'bg-red-900/90 border-red-700 text-red-200'
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl text-white text-sm font-medium shadow-lg ${
+          toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {toast.message}
-          <button onClick={() => setToast(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
 
-      {/* ── Create Rider Modal ─────────────────────────────────────────────── */}
-      {showCreateRider && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
-
-            {/* Modal header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-700">
-              <div>
-                <h3 className="text-white font-bold text-lg">Create Rider Account</h3>
-                <p className="text-gray-400 text-sm mt-0.5">Credentials will be shared with the rider manually</p>
-              </div>
-              <button
-                onClick={closeCreateRider}
-                className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Success — show credentials */}
-            {createdCredentials ? (
-              <div className="p-6 space-y-4">
-                <div className="flex items-center gap-3 p-4 bg-emerald-900/30 border border-emerald-700/50 rounded-xl">
-                  <CheckCircle className="w-6 h-6 text-emerald-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-emerald-300 font-bold">Rider account created!</p>
-                    <p className="text-emerald-400 text-sm">Share these credentials with the rider</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { label: 'Name',       value: createdCredentials.name,       field: 'name' },
-                    { label: 'University', value: createdCredentials.university,  field: 'uni' },
-                    { label: 'Email',      value: createdCredentials.email,       field: 'email' },
-                    { label: 'Password',   value: createdCredentials.password,    field: 'password' },
-                  ].map(({ label, value, field }) => (
-                    <div key={field} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-xl border border-gray-600">
-                      <div>
-                        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">{label}</p>
-                        <p className="text-white font-mono text-sm mt-0.5">{value}</p>
-                      </div>
-                      <button
-                        onClick={() => copyToClipboard(value, field)}
-                        className="p-2 rounded-lg hover:bg-gray-600 text-gray-400 hover:text-white transition-colors"
-                      >
-                        {copiedField === field
-                          ? <Check className="w-4 h-4 text-emerald-400" />
-                          : <Copy className="w-4 h-4" />
-                        }
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="p-3 bg-yellow-900/20 border border-yellow-700/40 rounded-xl">
-                  <p className="text-yellow-400 text-xs font-semibold">⚠️ Important</p>
-                  <p className="text-yellow-300/80 text-xs mt-1">
-                    This password will not be shown again. Make sure to share it with the rider now.
-                    They can log in at <span className="font-mono font-bold">/rider/login</span>
-                  </p>
-                </div>
-
-                <button
-                  onClick={closeCreateRider}
-                  className="w-full py-3 rounded-xl bg-gray-700 text-white font-semibold hover:bg-gray-600 transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-
-            ) : (
-              /* Form */
-              <form onSubmit={handleCreateRider} className="p-6 space-y-4">
-
-                {/* Name */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={riderForm.name}
-                    onChange={e => setRiderForm(f => ({ ...f, name: e.target.value }))}
-                    required
-                    placeholder="Rider's full name"
-                    className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
-                  />
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                    Phone Number *
-                  </label>
-                  <input
-                    type="tel"
-                    value={riderForm.phone}
-                    onChange={e => setRiderForm(f => ({ ...f, phone: e.target.value }))}
-                    required
-                    placeholder="08012345678"
-                    className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Buyers will call this for delivery</p>
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                    Email Address *
-                  </label>
-                  <input
-                    type="email"
-                    value={riderForm.email}
-                    onChange={e => setRiderForm(f => ({ ...f, email: e.target.value }))}
-                    required
-                    placeholder="rider@email.com"
-                    className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Used to log in</p>
-                </div>
-
-                {/* University */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                    University *
-                  </label>
-                  <select
-                    value={riderForm.universityId}
-                    onChange={e => setRiderForm(f => ({ ...f, universityId: e.target.value }))}
-                    required
-                    className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select university...</option>
-                    {universities.map(uni => (
-                      <option key={uni.id} value={uni.id}>
-                        {uni.shortName} — {uni.location}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Rider will only see orders from this campus</p>
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                    Temporary Password *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={riderForm.password}
-                      onChange={e => setRiderForm(f => ({ ...f, password: e.target.value }))}
-                      required
-                      placeholder="Min 8 chars, must include a number"
-                      className="w-full px-4 py-2.5 pr-11 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(s => !s)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Share this with the rider — they can change it later</p>
-                </div>
-
-                {createError && (
-                  <div className="p-3 bg-red-900/30 border border-red-700/50 rounded-xl text-red-400 text-sm">
-                    {createError}
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={closeCreateRider}
-                    className="flex-1 py-2.5 rounded-xl bg-gray-700 text-gray-300 text-sm font-semibold hover:bg-gray-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={createLoading}
-                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {createLoading
-                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
-                      : 'Create Rider'
-                    }
-                  </button>
-                </div>
-              </form>
-            )}
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Users</h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {total.toLocaleString()} users · <span className="text-white font-medium">{selectedUniName}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* University switcher */}
+          <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2">
+            <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <select
+              value={selectedUni}
+              onChange={e => setSelectedUni(e.target.value)}
+              className="bg-transparent text-white text-sm font-medium focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Universities</option>
+              {universities.map(u => (
+                <option key={u.id} value={u.id}>{u.shortName}</option>
+              ))}
+            </select>
           </div>
-        </div>
-      )}
-
-      {/* ── Suspend Dialog ─────────────────────────────────────────────────── */}
-      {suspendDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-white font-bold text-lg mb-1">Suspend User</h3>
-            <p className="text-gray-400 text-sm mb-5">{suspendDialog.userName}</p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wider">Reason (optional)</label>
-                <input
-                  type="text"
-                  value={suspendDialog.reason}
-                  onChange={e => setSuspendDialog(d => d ? { ...d, reason: e.target.value } : d)}
-                  placeholder="e.g. Fraudulent activity"
-                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wider">Duration in days — enter 0 for permanent</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={suspendDialog.days}
-                  onChange={e => setSuspendDialog(d => d ? { ...d, days: e.target.value } : d)}
-                  className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setSuspendDialog(null)} className="flex-1 px-4 py-2.5 rounded-lg bg-gray-700 text-gray-300 text-sm font-semibold hover:bg-gray-600 transition-colors">Cancel</button>
-              <button onClick={handleSuspendSubmit} className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors">Suspend</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Unsuspend Confirm ──────────────────────────────────────────────── */}
-      {unsuspendTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 className="text-white font-bold text-lg mb-2">Unsuspend User?</h3>
-            <p className="text-gray-400 text-sm mb-6">
-              This will restore full access for <strong className="text-white">{unsuspendTarget.userName}</strong>.
-            </p>
-            <div className="flex gap-3">
-              <button onClick={() => setUnsuspendTarget(null)} className="flex-1 px-4 py-2.5 rounded-lg bg-gray-700 text-gray-300 text-sm font-semibold hover:bg-gray-600 transition-colors">Cancel</button>
-              <button onClick={handleUnsuspendConfirm} className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors">Unsuspend</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Header row: search + filter + Create Rider button ─────────────── */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search users..."
-            className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-          />
-        </div>
-        <div className="flex gap-3">
-          <select
-            value={filterRole}
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-          >
-            <option value="ALL">All Roles</option>
-            <option value="BUYER">Buyers</option>
-            <option value="SELLER">Sellers</option>
-            <option value="RIDER">Riders</option>
-          </select>
-
-          {/* ── Create Rider button ── */}
           <button
             onClick={() => setShowCreateRider(true)}
-            className="flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors text-sm whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             <UserPlus className="w-4 h-4" />
-            Create Rider
+            Add Rider
           </button>
         </div>
       </div>
 
-      {/* ── Users Table ───────────────────────────────────────────────────── */}
+      {/* ── Filters ── */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by name, email, or phone…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKey}
+            className="w-full pl-9 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500"
+          />
+        </div>
+        <select
+          value={filterRole}
+          onChange={e => setFilterRole(e.target.value)}
+          className="px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white text-sm focus:outline-none cursor-pointer"
+        >
+          <option value="ALL">All Roles</option>
+          <option value="BUYER">Buyers</option>
+          <option value="SELLER">Sellers</option>
+          <option value="RIDER">Riders</option>
+        </select>
+        <button
+          onClick={() => fetchUsers(1)}
+          className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-xl transition-colors"
+        >
+          Search
+        </button>
+      </div>
+
+      {/* ── Table ── */}
       <div className="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-900/50 border-b border-gray-700">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase">User</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase">Role</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase">Trust</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase">Activity</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase">Status</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <div className="flex justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-4 border-red-500 border-t-transparent" />
-                    </div>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-red-500 border-t-transparent" />
+          </div>
+        ) : users.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">No users found</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">User</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">University</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Trust</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Activity</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">No users found</td>
-                </tr>
-              ) : (
-                filteredUsers.map((user) => (
+              </thead>
+              <tbody className="divide-y divide-gray-700/50">
+                {users.map(user => (
                   <tr key={user.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div>
-                        <p className="text-white font-medium">{user.name}</p>
-                        <p className="text-sm text-gray-400">{user.email}</p>
-                        <p className="text-xs text-gray-500">{user.phone}</p>
-                        {user.university && (
-                          <p className="text-xs text-blue-400 mt-0.5">{user.university.shortName}</p>
-                        )}
+                        <p className="text-white font-medium text-sm">{user.name}</p>
+                        <p className="text-gray-400 text-xs">{user.email || user.phone}</p>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        user.role === 'SELLER' ? 'bg-green-500/10 text-green-400' :
-                        user.role === 'RIDER'  ? 'bg-blue-500/10 text-blue-400' :
-                        'bg-gray-500/10 text-gray-400'
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        user.role === 'SELLER' ? 'bg-green-500/20 text-green-400' :
+                        user.role === 'RIDER'  ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-gray-600/50 text-gray-300'
                       }`}>
                         {user.role}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Shield className={`w-4 h-4 ${
-                          user.trustLevel === 'GOLD'   ? 'text-yellow-400' :
-                          user.trustLevel === 'SILVER' ? 'text-gray-400' :
-                          'text-orange-400'
-                        }`} />
-                        <span className="text-white text-sm">{user.trustLevel}</span>
-                      </div>
-                      {user.penaltyPoints > 0 && (
-                        <p className="text-xs text-red-400 mt-1">{user.penaltyPoints} penalty pts</p>
-                      )}
+                    <td className="px-4 py-3">
+                      <span className="text-gray-300 text-xs">{user.university?.shortName ?? '—'}</span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-400">
-                        <p>Orders: {(user._count.ordersAsBuyer ?? 0) + (user._count.ordersAsSeller ?? 0)}</p>
-                        <p>Products: {user._count.products ?? 0}</p>
-                      </div>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        user.trustLevel === 'GOLD'     ? 'bg-yellow-500/20 text-yellow-400' :
+                        user.trustLevel === 'SILVER'   ? 'bg-gray-400/20 text-gray-300' :
+                        user.trustLevel === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-orange-500/20 text-orange-400'
+                      }`}>
+                        {user.trustLevel}
+                      </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {user._count.ordersAsBuyer} orders · {user._count.products} products
+                    </td>
+                    <td className="px-4 py-3">
                       {user.isSuspended ? (
-                        <span className="px-3 py-1 bg-red-500/10 text-red-400 rounded-full text-xs font-semibold flex items-center gap-1 w-fit">
+                        <span className="flex items-center gap-1 text-red-400 text-xs">
                           <XCircle className="w-3 h-3" /> Suspended
                         </span>
                       ) : (
-                        <span className="px-3 py-1 bg-green-500/10 text-green-400 rounded-full text-xs font-semibold flex items-center gap-1 w-fit">
+                        <span className="flex items-center gap-1 text-green-400 text-xs">
                           <CheckCircle className="w-3 h-3" /> Active
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        {user.isSuspended ? (
-                          <button
-                            onClick={() => setUnsuspendTarget({ userId: user.id, userName: user.name })}
-                            disabled={actionLoading === user.id}
-                            className="px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg text-xs font-semibold hover:bg-green-500/20 transition-colors disabled:opacity-50"
-                          >
-                            {actionLoading === user.id ? '...' : 'Unsuspend'}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setSuspendDialog({ userId: user.id, userName: user.name, reason: '', days: '30' })}
-                            disabled={actionLoading === user.id}
-                            className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-xs font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                          >
-                            {actionLoading === user.id ? '...' : 'Suspend'}
-                          </button>
-                        )}
-                      </div>
+                    <td className="px-4 py-3">
+                      {actionLoading === user.id ? (
+                        <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                      ) : user.isSuspended ? (
+                        <button
+                          onClick={() => setUnsuspendTarget({ userId: user.id, userName: user.name })}
+                          className="text-xs text-green-400 hover:text-green-300 font-medium"
+                        >
+                          Unsuspend
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setSuspendDialog({ userId: user.id, userName: user.name, reason: '', days: '30' })}
+                          className="text-xs text-red-400 hover:text-red-300 font-medium"
+                        >
+                          Suspend
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-700">
-            <p className="text-sm text-gray-400">
-              Page {page} of {totalPages} · {total} total users
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1 || loading}
-                className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages || loading}
-                className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      {/* ── Pagination ── */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-400">
+            Page {page} of {totalPages} · {total.toLocaleString()} total
+          </p>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => p - 1)}
+              className="p-2 bg-gray-800 border border-gray-700 rounded-xl text-gray-400 hover:text-white disabled:opacity-40"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => p + 1)}
+              className="p-2 bg-gray-800 border border-gray-700 rounded-xl text-gray-400 hover:text-white disabled:opacity-40"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Suspend Dialog ── */}
+      {suspendDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setSuspendDialog(null)} />
+          <div className="relative bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-sm z-10">
+            <h3 className="text-lg font-bold text-white mb-1">Suspend User</h3>
+            <p className="text-sm text-gray-400 mb-4">{suspendDialog.userName}</p>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Reason</label>
+                <textarea
+                  value={suspendDialog.reason}
+                  onChange={e => setSuspendDialog({ ...suspendDialog, reason: e.target.value })}
+                  rows={3}
+                  placeholder="Reason for suspension…"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:border-red-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Duration (days)</label>
+                <input
+                  type="number"
+                  value={suspendDialog.days}
+                  onChange={e => setSuspendDialog({ ...suspendDialog, days: e.target.value })}
+                  min="1"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:border-red-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setSuspendDialog(null)} className="flex-1 py-2.5 border border-gray-600 rounded-xl text-gray-300 text-sm hover:bg-gray-700">Cancel</button>
+              <button
+                onClick={handleSuspendSubmit}
+                disabled={!suspendDialog.reason.trim()}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 rounded-xl text-white text-sm font-semibold"
+              >
+                Suspend
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unsuspend Confirm ── */}
+      {unsuspendTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setUnsuspendTarget(null)} />
+          <div className="relative bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-sm z-10">
+            <h3 className="text-lg font-bold text-white mb-2">Unsuspend User</h3>
+            <p className="text-sm text-gray-400 mb-5">Remove suspension from <span className="text-white">{unsuspendTarget.userName}</span>?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setUnsuspendTarget(null)} className="flex-1 py-2.5 border border-gray-600 rounded-xl text-gray-300 text-sm hover:bg-gray-700">Cancel</button>
+              <button onClick={handleUnsuspend} className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 rounded-xl text-white text-sm font-semibold">Unsuspend</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create Rider Modal ── */}
+      {showCreateRider && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={closeCreateRider} />
+          <div className="relative bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md z-10 max-h-[90vh] overflow-y-auto">
+            {createdCredentials ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Rider Created!</h3>
+                    <p className="text-xs text-gray-400">{createdCredentials.university}</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">Share these login credentials securely with the rider:</p>
+                <div className="space-y-3 mb-5">
+                  {[
+                    { label: 'Name',     value: createdCredentials.name,     field: 'name' },
+                    { label: 'Email',    value: createdCredentials.email,    field: 'email' },
+                    { label: 'Password', value: createdCredentials.password, field: 'password' },
+                  ].map(({ label, value, field }) => (
+                    <div key={field} className="flex items-center justify-between bg-gray-700 rounded-xl px-4 py-3">
+                      <div>
+                        <p className="text-xs text-gray-400">{label}</p>
+                        <p className="text-white font-mono text-sm">{value}</p>
+                      </div>
+                      <button onClick={() => copyToClipboard(value, field)} className="text-gray-400 hover:text-white">
+                        {copiedField === field ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={closeCreateRider} className="w-full py-3 bg-gray-700 hover:bg-gray-600 rounded-xl text-white text-sm font-semibold">Done</button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-lg font-bold text-white">Create Rider Account</h3>
+                  <button onClick={closeCreateRider} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                </div>
+                {createError && (
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">{createError}</div>
+                )}
+                <form onSubmit={handleCreateRider} className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">University</label>
+                    <select
+                      value={riderForm.universityId}
+                      onChange={e => setRiderForm({ ...riderForm, universityId: e.target.value })}
+                      required
+                      className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:border-red-500"
+                    >
+                      <option value="">Select university…</option>
+                      {universities.map(u => (
+                        <option key={u.id} value={u.id}>{u.shortName} — {u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {[
+                    { label: 'Full Name',     field: 'name',  type: 'text',  placeholder: 'Rider full name' },
+                    { label: 'Phone Number',  field: 'phone', type: 'tel',   placeholder: '080xxxxxxxx' },
+                    { label: 'Email Address', field: 'email', type: 'email', placeholder: 'rider@email.com' },
+                  ].map(({ label, field, type, placeholder }) => (
+                    <div key={field}>
+                      <label className="block text-xs text-gray-400 mb-1">{label}</label>
+                      <input
+                        type={type}
+                        value={(riderForm as any)[field]}
+                        onChange={e => setRiderForm({ ...riderForm, [field]: e.target.value })}
+                        placeholder={placeholder}
+                        required
+                        className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={riderForm.password}
+                        onChange={e => setRiderForm({ ...riderForm, password: e.target.value })}
+                        placeholder="Min 8 chars, at least 1 number"
+                        required
+                        className="w-full px-3 py-2.5 pr-10 bg-gray-700 border border-gray-600 rounded-xl text-white text-sm focus:outline-none focus:border-red-500"
+                      />
+                      <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={createLoading}
+                    className="w-full py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-xl text-white text-sm font-semibold transition-colors"
+                  >
+                    {createLoading ? 'Creating…' : 'Create Rider'}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

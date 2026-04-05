@@ -7,6 +7,11 @@
 //   fires only ONCE for the whole batch — regardless of how many orders
 //   are inside it. The DeliveryBatch.referralPaid flag is the atomic gate.
 //   This means the referrer gets ₦120 per checkout session, not per item.
+//
+// FIX #6 — VELOCITY CAP:
+//   A referrer can earn at most DAILY_REWARD_CAP rewards (₦1,200) within
+//   any rolling 24-hour window. This stops self-referral farms with burner
+//   accounts from draining money without limit.
 
 import { Prisma } from '@prisma/client'
 
@@ -15,6 +20,11 @@ import { Prisma } from '@prisma/client'
 // ₦120 of the ₦240 delivery cut goes to the referrer (once per batch).
 // Only paid if the order had a rider (delivery orders only).
 const REFERRAL_DELIVERY_REWARD = 120
+
+// FIX #6 — Max referral reward payouts per referrer within a rolling 24h window
+// 10 payouts = ₦1,200/day maximum. Adjust this value as your platform grows.
+const DAILY_REWARD_CAP = 10
+const ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 /**
  * Must be called INSIDE an existing prisma.$transaction(tx => ...) block.
@@ -81,10 +91,29 @@ export async function processReferralReward(
   })
   if (!referrer) return
 
+  // ── FIX #6 — Velocity cap: count rewards in the last 24 hours ───────────
+  // This prevents self-referral abuse where someone creates many burner
+  // accounts, refers them to themselves, and earns unlimited ₦120 payouts.
+  const rewardsInWindow = await tx.referralReward.count({
+    where: {
+      referrerId: referrer.id,
+      createdAt:  { gte: new Date(Date.now() - ROLLING_WINDOW_MS) },
+    },
+  })
+
+  if (rewardsInWindow >= DAILY_REWARD_CAP) {
+    // Silently skip — do not throw, do not block the order completion
+    console.log(
+      `[referral] Velocity cap hit for referrer ${referrer.id}: ` +
+      `${rewardsInWindow}/${DAILY_REWARD_CAP} rewards in last 24h. Skipping.`
+    )
+    return
+  }
+
   const balanceBefore = Number(referrer.availableBalance)
   const balanceAfter  = balanceBefore + REFERRAL_DELIVERY_REWARD
 
-  // ── Create ReferralReward record (orderId is still recorded for traceability) ─
+  // ── Create ReferralReward record (orderId is still recorded for traceability)
   await tx.referralReward.create({
     data: {
       referrerId:     referrer.id,

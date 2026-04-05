@@ -7,7 +7,6 @@ import prisma from '@/lib/prisma'
 async function verifyAdmin(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) return null
-
   try {
     const token = authHeader.substring(7)
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
@@ -25,17 +24,48 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const products = await prisma.product.findMany({
-      include: {
-        seller: {
-          select: { id: true, name: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
+    const { searchParams } = new URL(req.url)
+    const universityId = searchParams.get('universityId') || 'all'
+    const search       = searchParams.get('search') || ''
+    const page         = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
+    const limit        = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')))
+    const skip         = (page - 1) * limit
 
-    return NextResponse.json({ products })
+    const where: any = { isDeleted: false }
+
+    if (universityId !== 'all') {
+      where.universityId = universityId
+    }
+
+    if (search.trim()) {
+      where.OR = [
+        { name:     { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    const [total, products] = await Promise.all([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        include: {
+          seller: {
+            select: {
+              id:   true,
+              name: true,
+              university: { select: { shortName: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ])
+
+    return NextResponse.json({ products, total, page, limit })
   } catch (error) {
+    console.error('Admin products error:', error)
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
   }
 }

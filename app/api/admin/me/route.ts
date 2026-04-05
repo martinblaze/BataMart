@@ -1,46 +1,130 @@
-// app/api/admin/me/route.ts
+// app/api/auth/me/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import prisma from '@/lib/prisma'
+import { verifyToken } from '@/lib/auth/auth'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { 
-      userId: string
-      role: string
-      isAdmin: boolean
+    const token = authHeader.replace('Bearer ', '')
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!decoded.isAdmin || decoded.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    const admin = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true
-      }
+        id:               true,
+        name:             true,
+        phone:            true,
+        email:            true,
+        matricNumber:     true,
+        profilePhoto:     true,
+        role:             true,
+        isSellerMode:     true,
+        hostelName:       true,
+        roomNumber:       true,
+        landmark:         true,
+        trustLevel:       true,
+        avgRating:        true,
+        totalReviews:     true,
+        completedOrders:  true,
+        pendingBalance:   true,
+        availableBalance: true,
+        penaltyPoints:    true,
+        isSuspended:      true,
+        suspendedUntil:   true,
+        suspensionReason: true,
+        isRiderVerified:  true,
+        isAvailable:      true,
+        // withdrawalPin is intentionally NOT selected — the bcrypt hash must
+        // never be sent to the client. We only expose a boolean flag below.
+        withdrawalPin:    true,
+        createdAt:        true,
+        updatedAt:        true,
+        universityId:     true,
+        university: {
+          select: {
+            id:            true,
+            name:          true,
+            shortName:     true,
+            slug:          true,
+            location:      true,
+            deliveryAreas: true,
+            hostels:       true,
+          },
+        },
+      },
     })
 
-    if (!admin || admin.role !== 'ADMIN') {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    return NextResponse.json({ admin })
+    // Auto-lift expired suspension
+    if (user.isSuspended && user.suspendedUntil && new Date(user.suspendedUntil) < new Date()) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data:  { isSuspended: false, suspendedUntil: null, suspensionReason: null },
+      })
+      user.isSuspended      = false
+      user.suspendedUntil   = null
+      user.suspensionReason = null
+    }
+
+    if (user.isSuspended) {
+      return NextResponse.json(
+        {
+          error:     'Account suspended',
+          suspended: true,
+          reason:    user.suspensionReason ?? 'Violation of platform terms',
+          until:     user.suspendedUntil,
+        },
+        { status: 403 }
+      )
+    }
+
+    return NextResponse.json({
+      user: {
+        id:               user.id,
+        name:             user.name,
+        phone:            user.phone,
+        email:            user.email,
+        matricNumber:     user.matricNumber,
+        profilePhoto:     user.profilePhoto,
+        role:             user.role,
+        isSellerMode:     user.isSellerMode,
+        hostelName:       user.hostelName,
+        roomNumber:       user.roomNumber,
+        landmark:         user.landmark,
+        trustLevel:       user.trustLevel,
+        rating:           user.avgRating,
+        totalRatings:     user.totalReviews,
+        completedOrders:  user.completedOrders,
+        pendingBalance:   user.pendingBalance,
+        availableBalance: user.availableBalance,
+        penaltyPoints:    user.penaltyPoints,
+        isSuspended:      user.isSuspended,
+        suspendedUntil:   user.suspendedUntil,
+        isRiderVerified:  user.isRiderVerified,
+        isAvailable:      user.isAvailable,
+        // Only expose whether a PIN exists — NEVER the hash itself
+        hasWithdrawalPin: !!user.withdrawalPin,
+        createdAt:        user.createdAt,
+        updatedAt:        user.updatedAt,
+        universityId:     user.universityId,
+        university:       user.university,
+      },
+    })
   } catch (error) {
-    console.error('Admin auth error:', error)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    console.error('Get user error:', error)
+    return NextResponse.json({ error: 'Failed to get user' }, { status: 500 })
   }
 }

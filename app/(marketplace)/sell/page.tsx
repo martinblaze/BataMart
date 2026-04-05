@@ -18,16 +18,6 @@ const CATEGORIES = [
   'Furniture',
 ]
 
-const HOSTELS = [
-  'Aroma',
-  'Tempsite',
-  'Express Gate',
-  'Ifite',
-  'Amansea',
-  'Bus Stand (Inside School)',
-  'School Hostel (Inside School)',
-]
-
 const TAG_SUGGESTIONS: Record<string, string[]> = {
   'Tech Gadgets': ['New', 'Used', 'Refurbished', '128GB', '256GB', '64GB', 'Black', 'White', 'Gold', 'Silver', 'Battery Health 90%', 'Battery Health 80%', 'iPhone 13', 'iPhone 14', 'Samsung', 'Unlocked', 'Charger Included', 'Original Box'],
   'Fashion & Clothing': ['New', 'Used', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Unisex', 'Male', 'Female'],
@@ -61,10 +51,7 @@ function ConfirmListingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-
-      {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -73,7 +60,6 @@ function ConfirmListingModal({
           <h3 className="text-lg font-bold text-gray-900">Before you list</h3>
         </div>
 
-        {/* Fee Breakdown */}
         <p className="text-sm text-gray-600 mb-4">
           BATAMART charges a <strong>5% platform fee</strong> on every completed sale:
         </p>
@@ -97,7 +83,6 @@ function ConfirmListingModal({
           💡 Want to receive <strong>{fmt(price)}</strong>? List at <strong>{fmt(Math.ceil(price / 0.95))}</strong> to cover the fee.
         </p>
 
-        {/* Policy Warning */}
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
           <div className="flex items-start gap-2 mb-3">
             <span className="text-lg">🚫</span>
@@ -108,8 +93,6 @@ function ConfirmListingModal({
               </p>
             </div>
           </div>
-
-          {/* Checkbox */}
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="checkbox"
@@ -133,7 +116,7 @@ function ConfirmListingModal({
           <button
             onClick={onConfirm}
             disabled={!agreedToPolicy}
-            className="flex-1 py-3 rounded-xl bg-BATAMART-primary text-white font-semibold text-sm hover:bg-BATAMART-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 py-3 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             List Product
           </button>
@@ -143,466 +126,542 @@ function ConfirmListingModal({
   )
 }
 
-// ── Become Seller Gate ────────────────────────────────────────────────────────
-// Shown to BUYER role users who land on /sell.
-// They must upgrade to SELLER before they can list products.
-function BecomeSellerGate({ appMode }: { appMode: boolean }) {
-  const router = useRouter()
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-        <div className="text-6xl mb-4">🛍️</div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-3">Want to sell on BataMart?</h1>
-        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
-          You're currently signed in as a buyer. To list products, you need to upgrade your account to a seller account — it's free and takes 10 seconds.
-        </p>
-        <button
-          onClick={() => router.push(appMode ? '/become-seller?app=true' : '/become-seller')}
-          className="w-full py-3.5 rounded-xl font-bold text-white text-base shadow-lg mb-3"
-          style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-        >
-          Become a Seller →
-        </button>
-        <button
-          onClick={() => router.push(appMode ? '/marketplace?app=true' : '/marketplace')}
-          className="w-full py-3 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition"
-        >
-          Back to Marketplace
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function SellPage() {
   const router = useRouter()
-  const [loading, setLoading]                   = useState(false)
-  const [checkingAuth, setCheckingAuth]         = useState(true)
-  const [isBuyer, setIsBuyer]                   = useState(false)   // ← new: gate for buyers
-  const [appMode, setAppMode]                   = useState(false)
-  const [error, setError]                       = useState('')
-  const [images, setImages]                     = useState<{ preview: string; url: string; uploading: boolean }[]>([])
+
+  // ── University-scoped location data (loaded from session) ─────────────────
+  // These replace the old hardcoded HOSTELS and delivery areas arrays.
+  // They come from user.university.hostels and user.university.deliveryAreas
+  // which are already returned by /api/auth/me and stored in localStorage.
+  const [campusHostels, setCampusHostels]         = useState<string[]>([])
+  const [campusDeliveryAreas, setCampusDeliveryAreas] = useState<string[]>([])
+  const [universityName, setUniversityName]       = useState('')
+  const [locationReady, setLocationReady]         = useState(false)
+
+  // ── Form state ────────────────────────────────────────────────────────────
+  const [name, setName]           = useState('')
+  const [description, setDescription] = useState('')
+  const [price, setPrice]         = useState('')
+  const [category, setCategory]   = useState(CATEGORIES[0])
+  const [quantity, setQuantity]   = useState('1')
+  const [hostelName, setHostelName] = useState('')
+  const [roomNumber, setRoomNumber] = useState('')
+  const [landmark, setLandmark]   = useState('')
+  const [images, setImages]       = useState<string[]>([])
+  const [tags, setTags]           = useState<string[]>([])
+  const [tagInput, setTagInput]   = useState('')
+
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]         = useState('')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
-  const [tags, setTags]         = useState<string[]>([])
-  const [tagInput, setTagInput] = useState('')
-  const tagInputRef             = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const tagInputRef  = useRef<HTMLInputElement>(null)
 
-  const [formData, setFormData] = useState({
-    name:       '',
-    price:      '',
-    quantity:   '1',
-    category:   '',
-    hostelName: '',
-    roomNumber: '',
-    landmark:   '',
-  })
-
+  // ── Load university-specific location data from session ───────────────────
+  // Strategy: first try localStorage (fast, avoids extra fetch), then fall
+  // back to a fresh /api/auth/me call if the data isn't cached yet.
   useEffect(() => {
-    const token    = localStorage.getItem('token')
-    const userRole = localStorage.getItem('userRole')
-    const params   = new URLSearchParams(window.location.search)
-    setAppMode(params.get('app') === 'true')
+    const loadUniversityLocations = async () => {
+      try {
+        // Try from cached user in localStorage first
+        const cached = localStorage.getItem('user')
+        if (cached) {
+          const u = JSON.parse(cached)
+          if (u?.university?.hostels?.length || u?.university?.deliveryAreas?.length) {
+            applyUniversityData(u.university)
+            return
+          }
+        }
 
-    if (!token) {
-      router.push('/login')
-      return
+        // Fall back to fresh API call
+        const token = localStorage.getItem('token')
+        if (!token) { router.push('/login'); return }
+
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) { router.push('/login'); return }
+
+        const data = await res.json()
+        if (data.user?.university) {
+          applyUniversityData(data.user.university)
+        }
+      } catch {
+        // If all else fails, leave arrays empty — UI shows a warning
+      } finally {
+        setLocationReady(true)
+      }
     }
 
-    // ── Role gate: buyers get redirected to become-seller UI ──────────────
-    // Only SELLER (and ADMIN) roles may access the listing form.
-    if (userRole === 'BUYER') {
-      setIsBuyer(true)
-      setCheckingAuth(false)
-      return
-    }
-
-    setCheckingAuth(false)
+    loadUniversityLocations()
   }, [router])
 
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-BATAMART-primary border-t-transparent mx-auto mb-4" />
-          <p className="text-gray-600">Checking authentication...</p>
-        </div>
-      </div>
-    )
+  function applyUniversityData(university: {
+    name?: string
+    hostels?: string[] | unknown
+    deliveryAreas?: string[] | unknown
+  }) {
+    setUniversityName(university.name ?? '')
+
+    // hostels and deliveryAreas are stored as Json in Prisma — they come back
+    // as arrays from the API but may occasionally be stringified JSON
+    const parseJsonArray = (val: unknown): string[] => {
+      if (Array.isArray(val)) return val.filter((v): v is string => typeof v === 'string')
+      if (typeof val === 'string') {
+        try { return JSON.parse(val) } catch { return [] }
+      }
+      return []
+    }
+
+    const hostels       = parseJsonArray(university.hostels)
+    const deliveryAreas = parseJsonArray(university.deliveryAreas)
+
+    setCampusHostels(hostels)
+    setCampusDeliveryAreas(deliveryAreas)
+
+    // Pre-select the first option so the form is never in an empty state
+    if (hostels.length > 0)       setHostelName(hostels[0])
+    if (deliveryAreas.length > 0) setLandmark(deliveryAreas[0])
   }
 
-  // ── Show become-seller gate to buyers ─────────────────────────────────────
-  if (isBuyer) {
-    return <BecomeSellerGate appMode={appMode} />
-  }
-
-  const addTag = (value: string) => {
-    const trimmed = value.trim()
-    if (!trimmed) return
-    if (tags.includes(trimmed)) { setTagInput(''); return }
-    if (tags.length >= 20) { setError('Maximum 20 tags allowed'); return }
-    setTags(prev => [...prev, trimmed])
-    setTagInput('')
-    setError('')
-  }
-
-  const removeTag = (index: number) => setTags(prev => prev.filter((_, i) => i !== index))
-
-  const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) }
-    else if (e.key === 'Backspace' && !tagInput && tags.length > 0) removeTag(tags.length - 1)
-  }
-
-  const suggestions = formData.category
-    ? (TAG_SUGGESTIONS[formData.category] || []).filter(s => !tags.includes(s))
-    : []
-
-  const uploadToCloudinary = async (base64: string): Promise<string | null> => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch('/api/upload', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ image: base64 }),
-      })
-      const data = await response.json()
-      if (!response.ok) return null
-      return data.url
-    } catch { return null }
-  }
-
-  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-  const MAX_IMAGE_SIZE_MB   = 8
-
+  // ── Image upload ──────────────────────────────────────────────────────────
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
-    if (!files) return
-    const remaining      = 3 - images.length
-    const filesToProcess = Array.from(files).slice(0, remaining)
-    for (const file of filesToProcess) {
-      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        setError(`"${file.name}" is not allowed. Only JPG, PNG, and WEBP images are accepted.`)
-        continue
-      }
-      if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-        setError(`"${file.name}" is too large. Images must be under ${MAX_IMAGE_SIZE_MB}MB.`)
-        continue
-      }
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const base64 = reader.result as string
-        setImages(prev => [...prev, { preview: base64, url: '', uploading: true }])
-        const cloudUrl = await uploadToCloudinary(base64)
-        if (cloudUrl) {
-          setImages(prev => prev.map(img => img.preview === base64 ? { ...img, url: cloudUrl, uploading: false } : img))
-        } else {
-          setImages(prev => prev.filter(img => img.preview !== base64))
-          setError('Failed to upload one of your images. Please try again.')
+    if (!files || files.length === 0) return
+    if (images.length + files.length > 5) {
+      setError('Maximum 5 images allowed')
+      return
+    }
+
+    setUploading(true)
+    setError('')
+
+    try {
+      const token = localStorage.getItem('token')
+      const uploaded: string[] = []
+
+      for (const file of Array.from(files)) {
+        if (file.size > 5 * 1024 * 1024) {
+          setError('Each image must be under 5MB')
+          continue
+        }
+
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const res = await fetch('/api/upload', {
+          method:  'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body:    formData,
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          if (data.url) uploaded.push(data.url)
         }
       }
-      reader.readAsDataURL(file)
+
+      setImages(prev => [...prev, ...uploaded])
+    } catch {
+      setError('Failed to upload images. Please try again.')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
-    e.target.value = ''
   }
 
-  const removeImage = (index: number) => setImages(prev => prev.filter((_, i) => i !== index))
-  const allUploaded = images.length > 0 && images.every(img => !img.uploading)
+  // ── Tag handling ──────────────────────────────────────────────────────────
+  const addTag = (tag: string) => {
+    const t = tag.trim()
+    if (!t || tags.includes(t) || tags.length >= 10) return
+    setTags(prev => [...prev, t])
+    setTagInput('')
+  }
 
-  // Validates then shows modal
+  const removeTag = (tag: string) => setTags(prev => prev.filter(t => t !== tag))
+
+  const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTag(tagInput)
+    } else if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
+      removeTag(tags[tags.length - 1])
+    }
+  }
+
+  // ── Form submit ───────────────────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (images.length < 1) { setError('Please add at least 1 product image'); return }
-    if (!allUploaded)      { setError('Please wait for all images to finish uploading'); return }
-    if (tags.length === 0) { setError('Please add at least 1 description tag (e.g. New, 128GB, Black)'); return }
     setError('')
+
+    if (!name.trim())        { setError('Product name is required'); return }
+    if (!description.trim()) { setError('Description is required'); return }
+    if (!price || parseFloat(price) < 100) { setError('Price must be at least ₦100'); return }
+    if (!hostelName)         { setError('Please select your location'); return }
+    if (!landmark)           { setError('Please select a delivery area'); return }
+    if (images.length === 0) { setError('At least one image is required'); return }
+
     setShowConfirmModal(true)
   }
 
-  // Called when user clicks "List Product" in the modal
-  const handleConfirmListing = async () => {
+  const handleConfirmedSubmit = async () => {
     setShowConfirmModal(false)
-    setLoading(true)
+    setSubmitting(true)
     setError('')
-    try {
-      const token       = localStorage.getItem('token')
-      const imageUrls   = images.map(img => img.url)
-      const description = tags.join(' | ')
 
-      const response = await fetch('/api/products', {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/products', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({
-          ...formData,
-          description,
-          price:    parseFloat(formData.price),
-          quantity: parseInt(formData.quantity),
-          images:   imageUrls,
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name:        name.trim(),
+          description: description.trim(),
+          price:       parseFloat(price),
+          category,
+          quantity:    parseInt(quantity) || 1,
+          hostelName,
+          roomNumber:  roomNumber.trim() || 'N/A',
+          landmark,
+          images,
+          tags,
         }),
       })
-      const data = await response.json()
-      if (response.ok) router.push('/my-shop')
-      else setError(data.error || 'Failed to create product')
+
+      const data = await res.json()
+
+      if (res.ok) {
+        router.push('/my-shop?listed=1')
+      } else {
+        setError(data.error || 'Failed to list product. Please try again.')
+      }
     } catch {
-      setError('Network error. Please try again.')
+      setError('Network error. Please check your connection.')
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+  const suggestedTags = TAG_SUGGESTIONS[category] ?? []
 
-      {/* Confirmation Modal */}
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
       {showConfirmModal && (
         <ConfirmListingModal
-          price={parseFloat(formData.price) || 0}
-          onConfirm={handleConfirmListing}
+          price={parseFloat(price) || 0}
+          onConfirm={handleConfirmedSubmit}
           onCancel={() => setShowConfirmModal(false)}
         />
       )}
 
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <Link
-            href={appMode ? '/marketplace?app=true' : '/marketplace'}
-            className="text-BATAMART-primary hover:underline mb-4 inline-block"
-          >
-            ← Back to Marketplace
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Sell Your Product</h1>
-          <p className="text-gray-600 mt-2">List your item on BATAMART marketplace</p>
+      {/* Header */}
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
+        <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+          <X className="w-5 h-5 text-gray-600" />
+        </button>
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">List a Product</h1>
+          {universityName && (
+            <p className="text-xs text-gray-500">{universityName}</p>
+          )}
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+
+        {/* Error */}
+        {error && (
+          <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {/* Images */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <h2 className="font-semibold text-gray-900 mb-3">Product Images <span className="text-red-500">*</span></h2>
+          <div className="grid grid-cols-3 gap-3">
+            {images.map((img, i) => (
+              <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
+                <img src={img} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
+                  className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                >
+                  <X className="w-3 h-3 text-white" />
+                </button>
+              </div>
+            ))}
+            {images.length < 5 && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 hover:border-red-400 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {uploading ? (
+                  <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5 text-gray-400" />
+                    <span className="text-xs text-gray-400">Add Photo</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageUpload}
+            className="hidden"
+          />
+          <p className="text-xs text-gray-400 mt-2">Up to 5 images, max 5MB each</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic Info */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
+          <h2 className="font-semibold text-gray-900">Product Details</h2>
 
-            {/* Product Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Product Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                placeholder="e.g., iPhone 13 Pro"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. iPhone 13 Pro Max 128GB"
+              maxLength={100}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+            />
+          </div>
 
-            {/* Price */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Describe your product in detail — condition, features, why you're selling..."
+              rows={4}
+              maxLength={1000}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm resize-none"
+            />
+            <p className="text-xs text-gray-400 text-right mt-1">{description.length}/1000</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Price (₦) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
-                value={formData.price}
-                onChange={e => setFormData({ ...formData, price: e.target.value })}
-                required min="0" step="0.01"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                placeholder="e.g., 50000"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                placeholder="0"
+                min="100"
+                step="50"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
             </div>
-
-            {/* Quantity */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Quantity Available <span className="text-red-500">*</span>
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
               <input
                 type="number"
-                value={formData.quantity}
-                onChange={e => setFormData({ ...formData, quantity: e.target.value })}
-                required min="1"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                placeholder="e.g., 10"
+                value={quantity}
+                onChange={e => setQuantity(e.target.value)}
+                min="1"
+                max="999"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
-              <p className="text-xs text-gray-500 mt-1">How many units do you have in stock?</p>
             </div>
+          </div>
 
-            {/* Category */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.category}
-                onChange={e => setFormData({ ...formData, category: e.target.value })}
-                required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-              >
-                <option value="">Select category</option>
-                {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-            </div>
-
-            {/* Description Tags */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Product Details / Description <span className="text-red-500">*</span>
-              </label>
-              <p className="text-xs text-gray-500 mb-3">
-                Type a detail and press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 font-mono text-[11px]">Enter</kbd> or click <strong>Add</strong> to add it as a tag.
-              </p>
-              <div
-                className="min-h-[56px] w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus-within:border-BATAMART-primary transition-colors cursor-text flex flex-wrap gap-2 items-center"
-                onClick={() => tagInputRef.current?.focus()}
-              >
-                {tags.map((tag, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-BATAMART-primary/10 text-BATAMART-primary text-sm font-semibold rounded-full">
-                    {tag}
-                    <button type="button" onClick={e => { e.stopPropagation(); removeTag(i) }} className="hover:text-red-500 transition-colors ml-0.5">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                ))}
-                <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-                  <input
-                    ref={tagInputRef}
-                    type="text"
-                    value={tagInput}
-                    onChange={e => setTagInput(e.target.value)}
-                    onKeyDown={handleTagKeyDown}
-                    placeholder={tags.length === 0 ? 'e.g. New, 128GB, Black, XL...' : 'Add more...'}
-                    className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 min-w-[100px]"
-                  />
-                  {tagInput.trim() && (
-                    <button type="button" onClick={() => addTag(tagInput)} className="flex items-center gap-1 px-3 py-1 bg-BATAMART-primary text-white text-xs font-bold rounded-full hover:bg-BATAMART-dark transition-colors flex-shrink-0">
-                      <Plus className="w-3 h-3" /> Add
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {suggestions.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Quick add:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestions.slice(0, 12).map(s => (
-                      <button key={s} type="button" onClick={() => addTag(s)} className="px-3 py-1.5 bg-gray-100 hover:bg-BATAMART-primary/10 hover:text-BATAMART-primary text-gray-600 text-xs font-semibold rounded-full transition-all border border-gray-200 hover:border-BATAMART-primary/30">
-                        + {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {tags.length > 0 && <p className="text-xs text-gray-400 mt-2">{tags.length} tag{tags.length !== 1 ? 's' : ''} added</p>}
-            </div>
-
-            {/* Images */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Product Images <span className="text-red-500">*</span>
-              </label>
-              <div className="space-y-4">
-                {images.length > 0 && (
-                  <div className="grid grid-cols-3 gap-4">
-                    {images.map((img, index) => (
-                      <div key={index} className="relative">
-                        <img src={img.preview} alt={`Product ${index + 1}`} className="w-full h-32 object-cover rounded-lg" />
-                        {img.uploading && (
-                          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-4 border-white border-t-transparent" />
-                          </div>
-                        )}
-                        {!img.uploading && img.url && (
-                          <div className="absolute top-2 left-2 bg-green-500 rounded-full w-6 h-6 flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
-                        {!img.uploading && (
-                          <button type="button" onClick={() => removeImage(index)} className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 text-sm font-bold">×</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {images.length < 3 && (
-                  <label className="block cursor-pointer">
-                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} className="hidden" />
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-BATAMART-primary transition-colors">
-                      <svg className="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      <p className="text-gray-600 font-medium">Click to upload images</p>
-                      <p className="text-sm text-gray-500 mt-1">{images.length}/3 images · JPG, PNG, WEBP · Max 8MB each</p>
-                    </div>
-                  </label>
-                )}
-                {images.some(img => img.uploading) && (
-                  <p className="text-sm text-BATAMART-primary font-medium">⏳ Uploading images, please wait...</p>
-                )}
-              </div>
-            </div>
-
-            {/* Pickup Location */}
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Pickup Location</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Hostel/Location <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.hostelName}
-                    onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
-                    required
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                  >
-                    <option value="">Select hostel</option>
-                    {HOSTELS.map(hostel => <option key={hostel} value={hostel}>{hostel}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Room Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.roomNumber}
-                    onChange={e => setFormData({ ...formData, roomNumber: e.target.value })}
-                    required
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                    placeholder="e.g., Room 12, Block A"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Landmark <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.landmark}
-                    onChange={e => setFormData({ ...formData, landmark: e.target.value })}
-                    required
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-BATAMART-primary focus:outline-none"
-                    placeholder="e.g., Near the water dispenser"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !allUploaded}
-              className="w-full bg-BATAMART-primary hover:bg-BATAMART-dark text-white py-3.5 rounded-lg font-bold text-lg disabled:opacity-50 transition-all"
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm bg-white"
             >
-              {loading ? 'Listing Product...' : !allUploaded && images.length > 0 ? 'Uploading images...' : 'List Product'}
-            </button>
-
-          </form>
+              {CATEGORIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
+
+        {/* Location — dynamic from university ─────────────────────────────── */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">Your Location</h2>
+            {universityName && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                Showing locations for {universityName}
+              </p>
+            )}
+          </div>
+
+          {/* If location data hasn't loaded yet, show a skeleton */}
+          {!locationReady ? (
+            <div className="space-y-3">
+              <div className="h-12 rounded-xl bg-gray-100 animate-pulse" />
+              <div className="h-12 rounded-xl bg-gray-100 animate-pulse" />
+              <div className="h-12 rounded-xl bg-gray-100 animate-pulse" />
+            </div>
+          ) : (
+            <>
+              {/* Hostel / Lodge */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hostel / Lodge <span className="text-red-500">*</span>
+                </label>
+                {campusHostels.length > 0 ? (
+                  <select
+                    value={hostelName}
+                    onChange={e => setHostelName(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm bg-white"
+                  >
+                    <option value="">Select hostel / lodge</option>
+                    {campusHostels.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                ) : (
+                  // Fallback free-text if university has no hostels configured
+                  <input
+                    type="text"
+                    value={hostelName}
+                    onChange={e => setHostelName(e.target.value)}
+                    placeholder="e.g. Python Hall, Block C"
+                    maxLength={100}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  />
+                )}
+              </div>
+
+              {/* Room Number */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
+                <input
+                  type="text"
+                  value={roomNumber}
+                  onChange={e => setRoomNumber(e.target.value)}
+                  placeholder="e.g. 204, Ground Floor"
+                  maxLength={30}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                />
+              </div>
+
+              {/* Delivery Area */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Delivery Area <span className="text-red-500">*</span>
+                </label>
+                {campusDeliveryAreas.length > 0 ? (
+                  <select
+                    value={landmark}
+                    onChange={e => setLandmark(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm bg-white"
+                  >
+                    <option value="">Select delivery area</option>
+                    {campusDeliveryAreas.map(a => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={landmark}
+                    onChange={e => setLandmark(e.target.value)}
+                    placeholder="e.g. Aroma, Ifite"
+                    maxLength={100}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                  />
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Where the buyer's rider should come to pick up this product
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Tags */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
+          <div>
+            <h2 className="font-semibold text-gray-900">Tags</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Help buyers find your product faster (max 10)</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 p-3 rounded-xl border border-gray-200 min-h-[50px]" onClick={() => tagInputRef.current?.focus()}>
+            {tags.map(tag => (
+              <span key={tag} className="inline-flex items-center gap-1 px-3 py-1 bg-red-50 text-red-700 rounded-full text-xs font-medium">
+                {tag}
+                <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {tags.length < 10 && (
+              <input
+                ref={tagInputRef}
+                type="text"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder={tags.length === 0 ? 'Type a tag and press Enter' : ''}
+                className="flex-1 min-w-[120px] outline-none text-sm text-gray-700 bg-transparent"
+              />
+            )}
+          </div>
+
+          {suggestedTags.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-400 mb-2">Suggestions:</p>
+              <div className="flex flex-wrap gap-2">
+                {suggestedTags.filter(t => !tags.includes(t)).slice(0, 12).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => addTag(t)}
+                    className="px-3 py-1 rounded-full border border-gray-200 text-xs text-gray-600 hover:border-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    + {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={submitting || uploading}
+          className="w-full py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-colors text-base"
+        >
+          {submitting ? 'Listing...' : 'Preview & List'}
+        </button>
+
+        <p className="text-center text-xs text-gray-400 pb-4">
+          By listing, you agree to our{' '}
+          <Link href="/terms/sellers" className="text-red-500 underline">Seller Terms</Link>
+        </p>
+      </form>
     </div>
   )
 }
