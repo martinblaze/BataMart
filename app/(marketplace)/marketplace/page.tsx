@@ -10,7 +10,7 @@ import {
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
   BadgeCheck, Timer, Percent, MapPin, Bell, Menu,
-  ChevronDown, Grid3X3, List, Sliders,
+  ChevronDown, Grid3X3, List, Sliders, Loader2,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
@@ -246,6 +246,22 @@ const ANIM_CSS = `
     border-radius: 2px;
     margin-top: 4px;
   }
+
+  @keyframes spinLoader {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .spin { animation: spinLoader 0.8s linear infinite; }
+
+  .just-dropped-card {
+    transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.3s ease;
+  }
+  .just-dropped-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.1);
+  }
+  .just-dropped-card:active { transform: scale(0.97); }
+  .just-dropped-card:hover .product-img { transform: scale(1.06); }
 `
 
 const CATEGORIES = [
@@ -278,7 +294,6 @@ const PROMO_BANNERS = [
   { emoji: '🎓', text: 'Student Exclusive — Verified sellers only', accent: 'from-blue-500 to-indigo-600' },
 ]
 
-// Amazon-style category spotlight tiles
 const CATEGORY_SPOTLIGHTS = [
   {
     title: 'Level up your Tech',
@@ -329,6 +344,8 @@ const CATEGORY_SPOTLIGHTS = [
     catFilter: 'Cosmetics',
   },
 ]
+
+const JUST_DROPPED_PAGE_SIZE = 12
 
 function getSignal(productId: string, index: number) {
   const hash = productId.charCodeAt(0) + productId.charCodeAt(productId.length - 1)
@@ -507,7 +524,7 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
 }
 
 // ─────────────────────────────────────────────
-// Mini Product Card (for category spotlights)
+// Mini Product Card (for recently viewed)
 // ─────────────────────────────────────────────
 function MiniProductCard({ product, onClick }: { product: any; onClick: () => void }) {
   const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
@@ -564,9 +581,11 @@ function PromoTicker() {
 
 // ─────────────────────────────────────────────
 // Amazon-style Category Spotlight Grid
+// Clicking any product image → go to that CATEGORY view, not product page
 // ─────────────────────────────────────────────
-function CategorySpotlightGrid({ allProducts, onCategorySelect, onProductClick }: {
-  allProducts: any[]; onCategorySelect: (cat: string) => void; onProductClick: (id: string) => void
+function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
+  allProducts: any[]
+  onCategorySelect: (cat: string) => void
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -575,16 +594,23 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect, onProductClick }
           .filter(p => p.category === spot.catFilter)
           .slice(0, 4)
         return (
-          <div key={spot.title} className={`cat-tile card-enter bg-gradient-to-br ${spot.bg} rounded-2xl overflow-hidden border border-white shadow-sm cursor-pointer`}
-            onClick={() => onCategorySelect(spot.catFilter)}>
+          <div
+            key={spot.title}
+            className={`cat-tile card-enter bg-gradient-to-br ${spot.bg} rounded-2xl overflow-hidden border border-white shadow-sm cursor-pointer`}
+            onClick={() => onCategorySelect(spot.catFilter)}
+          >
             <div className="p-3 pb-1">
               <p className="text-sm font-black text-gray-900 leading-tight">{spot.title}</p>
             </div>
             {catProducts.length > 0 ? (
               <div className="grid grid-cols-2 gap-1 p-2 pt-1">
                 {catProducts.map(p => (
-                  <div key={p.id} onClick={e => { e.stopPropagation(); onProductClick(p.id) }}
-                    className="aspect-square rounded-lg overflow-hidden bg-white shadow-sm">
+                  /* Clicking a product image inside the tile also navigates to the category */
+                  <div
+                    key={p.id}
+                    onClick={e => { e.stopPropagation(); onCategorySelect(spot.catFilter) }}
+                    className="aspect-square rounded-lg overflow-hidden bg-white shadow-sm"
+                  >
                     <img src={p.images[0] || '/placeholder.png'} alt={p.name} className="w-full h-full object-cover" />
                   </div>
                 ))}
@@ -593,6 +619,7 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect, onProductClick }
                 ))}
               </div>
             ) : (
+              /* No products yet — show placeholder tiles with sub-category names */
               <div className="grid grid-cols-2 gap-1 p-2 pt-1">
                 {spot.categories.slice(0, 4).map((cat, i) => (
                   <div key={i} className="aspect-square rounded-lg bg-white/70 flex flex-col items-center justify-center p-1">
@@ -615,10 +642,14 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect, onProductClick }
 }
 
 // ─────────────────────────────────────────────
-// Best Sellers Row (Amazon-style horizontal scroll with big images)
+// Best Sellers Row — "See all" wired to category
 // ─────────────────────────────────────────────
-function BestSellersRow({ products, onProductClick, title, subtitle }: {
-  products: any[]; onProductClick: (id: string) => void; title: string; subtitle?: string
+function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }: {
+  products: any[]
+  onProductClick: (id: string) => void
+  onSeeAll?: () => void
+  title: string
+  subtitle?: string
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
   const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
@@ -631,9 +662,14 @@ function BestSellersRow({ products, onProductClick, title, subtitle }: {
           <h2 className="text-lg font-black text-gray-900 section-header-line">{title}</h2>
           {subtitle && <p className="text-xs text-gray-400 font-medium mt-1">{subtitle}</p>}
         </div>
-        <button className="text-xs font-bold text-BATAMART-primary flex items-center gap-1 hover:underline">
-          See all <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+        {onSeeAll && (
+          <button
+            onClick={onSeeAll}
+            className="text-xs font-bold text-BATAMART-primary flex items-center gap-1 hover:underline"
+          >
+            See all <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="relative group/row px-5 py-4">
         <button onClick={() => scrollBy(-1)}
@@ -641,7 +677,7 @@ function BestSellersRow({ products, onProductClick, title, subtitle }: {
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div ref={rowRef} className="flex gap-4 overflow-x-auto no-scrollbar scroll-section">
-          {products.map((p, i) => (
+          {products.map((p) => (
             <div key={p.id} onClick={() => onProductClick(p.id)}
               className="deal-card flex-shrink-0 w-36 sm:w-44 cursor-pointer group/card">
               <div className="aspect-square rounded-xl overflow-hidden bg-gray-50 mb-2.5">
@@ -668,11 +704,17 @@ function BestSellersRow({ products, onProductClick, title, subtitle }: {
 }
 
 // ─────────────────────────────────────────────
-// Deals Row (bigger cards, striped section)
+// Deals Row — "See all" wired to category
 // ─────────────────────────────────────────────
-function DealsSection({ products, onProductClick, sectionClass, icon, title, subtitle, badge }: {
-  products: any[]; onProductClick: (id: string) => void; sectionClass: string;
-  icon: React.ReactNode; title: string; subtitle: string; badge?: string
+function DealsSection({ products, onProductClick, onSeeAll, sectionClass, icon, title, subtitle, badge }: {
+  products: any[]
+  onProductClick: (id: string) => void
+  onSeeAll?: () => void
+  sectionClass: string
+  icon: React.ReactNode
+  title: string
+  subtitle: string
+  badge?: string
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
   const scrollBy = (dir: number) => rowRef.current?.scrollBy({ left: dir * 200, behavior: 'smooth' })
@@ -690,9 +732,11 @@ function DealsSection({ products, onProductClick, sectionClass, icon, title, sub
               <p className="text-white/70 text-[11px] mt-0.5">{subtitle}</p>
             </div>
           </div>
-          <button className="text-white/80 text-xs font-bold flex items-center gap-1">
-            See all <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+          {onSeeAll && (
+            <button onClick={onSeeAll} className="text-white/80 text-xs font-bold flex items-center gap-1">
+              See all <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
       <div className="bg-white px-5 py-4 relative group/row">
@@ -759,6 +803,145 @@ function LiveStatsBar({ count }: { count: number }) {
         <Users className="w-3 h-3 text-violet-400" />
         Students buying now
       </span>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Just Dropped — infinite vertical scroll section (ALWAYS last)
+// ─────────────────────────────────────────────
+function JustDroppedSection({ allProducts, onProductClick }: {
+  allProducts: any[]
+  onProductClick: (id: string) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [visibleCount, setVisibleCount] = useState(JUST_DROPPED_PAGE_SIZE)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loaderRef = useRef<HTMLDivElement>(null)
+
+  // Filter just-dropped products
+  const allNew = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return allNew
+    return allNew.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q) ||
+      p.seller?.name?.toLowerCase().includes(q) ||
+      parseTags(p.description).some((t: string) => t.toLowerCase().includes(q))
+    )
+  }, [allNew, search])
+
+  const visible = filtered.slice(0, visibleCount)
+  const hasMore = visibleCount < filtered.length
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    if (!loaderRef.current) return
+    const obs = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          setLoadingMore(true)
+          setTimeout(() => {
+            setVisibleCount(c => c + JUST_DROPPED_PAGE_SIZE)
+            setLoadingMore(false)
+          }, 600)
+        }
+      },
+      { threshold: 0.1 }
+    )
+    obs.observe(loaderRef.current)
+    return () => obs.disconnect()
+  }, [hasMore, loadingMore])
+
+  // Reset visible count when search changes
+  useEffect(() => { setVisibleCount(JUST_DROPPED_PAGE_SIZE) }, [search])
+
+  if (allNew.length === 0) return null
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+      {/* Header */}
+      <div className="section-stripe-emerald px-5 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-5 h-5 text-white" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-black text-white">Just Dropped</h2>
+                <span className="badge-pulse bg-white/20 text-white text-[9px] font-black px-2 py-0.5 rounded-full">NEW</span>
+              </div>
+              <p className="text-white/70 text-[11px] mt-0.5">Fresh listings — keep scrolling, more loads as you go</p>
+            </div>
+          </div>
+          <span className="text-white/60 text-[11px] font-bold">{filtered.length} items</span>
+        </div>
+
+        {/* Search bar inside the section */}
+        <div className="flex items-center gap-2 bg-white/15 hover:bg-white/20 rounded-xl px-3 py-2.5 transition-colors ring-1 ring-white/20 focus-within:ring-white/40 focus-within:bg-white/25">
+          <Search className="w-4 h-4 text-white/70 flex-shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search just dropped listings…"
+            className="flex-1 bg-transparent outline-none text-sm text-white placeholder-white/50 min-w-0"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="text-white/60 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Products grid */}
+      <div className="bg-white p-4">
+        {filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <Sparkles className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+            <p className="text-gray-400 font-semibold text-sm">No results for &ldquo;{search}&rdquo;</p>
+            <button onClick={() => setSearch('')} className="text-BATAMART-primary text-xs font-bold mt-2 hover:underline">
+              Clear search
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {visible.map((p, i) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  onClick={() => onProductClick(p.id)}
+                  delay={i * 25}
+                />
+              ))}
+              {/* Skeleton placeholders while loading more */}
+              {loadingMore && Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonCard key={`skel-${i}`} delay={i * 60} />
+              ))}
+            </div>
+
+            {/* Infinite scroll sentinel */}
+            <div ref={loaderRef} className="flex justify-center items-center py-8 mt-2">
+              {loadingMore ? (
+                <div className="flex items-center gap-2 text-gray-400 text-sm font-medium">
+                  <Loader2 className="w-4 h-4 spin" />
+                  Loading more…
+                </div>
+              ) : hasMore ? (
+                <div className="w-full h-4" /> // invisible sentinel
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-gray-300">
+                  <CheckCircle className="w-5 h-5" />
+                  <p className="text-xs font-semibold">You&apos;ve seen them all!</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -987,7 +1170,7 @@ export default function MarketplacePage() {
 
   const forYouProducts = useMemo(() => allProducts.filter(p => p.isPersonalised).slice(0, 12), [allProducts])
   const trendingProducts = useMemo(() => allProducts.filter(p => p.isTrending).slice(0, 12), [allProducts])
-  const newListings = useMemo(() => allProducts.filter(p => p.isNew).slice(0, 12), [allProducts])
+  const newListings = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
   const discoverProducts = useMemo(() => {
     const shown = new Set([...forYouProducts.map(p => p.id), ...trendingProducts.map(p => p.id), ...newListings.map(p => p.id)])
     return allProducts.filter(p => !shown.has(p.id)).slice(0, 16)
@@ -998,7 +1181,7 @@ export default function MarketplacePage() {
     [allProducts, selectedCategory]
   )
 
-  // Group products by category for "Best Sellers" rows (Amazon style)
+  // Group products by category for "Best Sellers" rows
   const productsByCategory = useMemo(() => {
     const map: Record<string, any[]> = {}
     for (const cat of CATEGORIES.slice(1)) {
@@ -1080,9 +1263,7 @@ export default function MarketplacePage() {
       {/* ── PROMO TICKER ── */}
       <PromoTicker />
 
-      {/* ══════════════════════════════════════════
-          AMAZON-STYLE HEADER with search bar on top
-      ══════════════════════════════════════════ */}
+      {/* ══ HEADER ══ */}
       <header className="batamart-header sticky top-0 z-40 shadow-lg"
         style={{
           transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.2, 20)}px)` : undefined,
@@ -1090,9 +1271,8 @@ export default function MarketplacePage() {
         }}>
         <div className="max-w-7xl mx-auto px-3 sm:px-6">
 
-          {/* Top row: Logo + Search + Actions */}
+          {/* Top row */}
           <div className="flex items-center gap-2 sm:gap-4 py-3">
-            {/* Logo / Brand */}
             <div className="flex-shrink-0 flex items-center gap-2">
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/15 flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -1107,10 +1287,9 @@ export default function MarketplacePage() {
               </div>
             </div>
 
-            {/* ── SEARCH BAR (center, prominent) ── */}
+            {/* Search bar */}
             <div ref={searchRef} className="flex-1 min-w-0">
               <div className="search-input flex items-center gap-2 bg-white rounded-xl shadow-md px-3 sm:px-4 ring-2 ring-transparent">
-                {/* Category dropdown hint */}
                 <div className="hidden sm:flex items-center gap-1 border-r border-gray-200 pr-3 mr-1 flex-shrink-0 cursor-pointer hover:text-BATAMART-primary transition-colors"
                   onClick={() => {}}>
                   <span className="text-xs font-bold text-gray-500 whitespace-nowrap">All</span>
@@ -1141,7 +1320,6 @@ export default function MarketplacePage() {
               </div>
             </div>
 
-            {/* Right actions */}
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <Link href="/sell"
                 className="btn-press glow-pulse hidden sm:flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white px-3.5 py-2 rounded-xl font-bold text-xs ring-1 ring-white/20 transition-colors">
@@ -1159,7 +1337,7 @@ export default function MarketplacePage() {
             </div>
           </div>
 
-          {/* ── CATEGORY NAV (sub-header strip) ── */}
+          {/* Category nav */}
           <div className="flex items-center justify-between gap-2 pb-2 border-t border-white/10 pt-2">
             <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1">
               {CATEGORIES.map(cat => (
@@ -1188,7 +1366,7 @@ export default function MarketplacePage() {
             </div>
           </div>
 
-          {/* Trending chips strip */}
+          {/* Trending chips */}
           <div className="flex items-center gap-2 pb-2.5 overflow-hidden">
             <span className="text-[10px] font-black text-white/60 uppercase tracking-wider flex-shrink-0 flex items-center gap-1">
               <Flame className="w-3 h-3 text-orange-400" />
@@ -1251,9 +1429,7 @@ export default function MarketplacePage() {
           </div>
 
         ) : (
-          /* ══════════════════════════════════════════
-              AMAZON-STYLE PERSONALISED FEED
-          ══════════════════════════════════════════ */
+          /* ══ AMAZON-STYLE PERSONALISED FEED ══ */
           <div className="space-y-4">
 
             {/* Live stats */}
@@ -1263,7 +1439,7 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* ── CATEGORY SPOTLIGHT GRID (Amazon top section) ── */}
+            {/* ── SHOP BY CATEGORY (spotlight grid) ── */}
             {allProducts.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -1272,16 +1448,16 @@ export default function MarketplacePage() {
                 <CategorySpotlightGrid
                   allProducts={allProducts}
                   onCategorySelect={setSelectedCategory}
-                  onProductClick={handleProductClick}
                 />
               </div>
             )}
 
-            {/* ── FLASH DEALS (orange stripe) ── */}
+            {/* ── FLASH DEALS (trending, orange stripe) ── */}
             {trendingProducts.length > 0 && (
               <DealsSection
                 products={trendingProducts}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('All')}
                 sectionClass="section-stripe-orange"
                 icon={<Flame className="w-5 h-5 text-white" />}
                 title="Flash Deals"
@@ -1295,6 +1471,7 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={forYouProducts}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('All')}
                 title="Picked for You"
                 subtitle="Based on what you browse, search, and order"
               />
@@ -1311,7 +1488,7 @@ export default function MarketplacePage() {
                 </div>
                 <div className="px-5 py-4">
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                    {recentlyViewed.slice(0, 8).map((p, i) => (
+                    {recentlyViewed.slice(0, 8).map((p) => (
                       <MiniProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} />
                     ))}
                   </div>
@@ -1319,24 +1496,12 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* ── JUST DROPPED (emerald stripe) ── */}
-            {newListings.length > 0 && (
-              <DealsSection
-                products={newListings}
-                onProductClick={handleProductClick}
-                sectionClass="section-stripe-emerald"
-                icon={<Sparkles className="w-5 h-5 text-white" />}
-                title="Just Dropped"
-                subtitle="Fresh listings added today"
-                badge="NEW"
-              />
-            )}
-
             {/* ── BEST SELLERS: TECH GADGETS ── */}
             {productsByCategory['Tech Gadgets']?.length > 0 && (
               <BestSellersRow
                 products={productsByCategory['Tech Gadgets']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Tech Gadgets')}
                 title="Best Sellers in Tech Gadgets"
                 subtitle="Top picks from campus techies"
               />
@@ -1347,6 +1512,7 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={productsByCategory['Fashion & Clothing']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Fashion & Clothing')}
                 title="Best Sellers in Campus Fashion"
                 subtitle="Style up your university life"
               />
@@ -1357,6 +1523,7 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={productsByCategory['Food Services']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Food Services')}
                 title="Best Sellers in Food & Dining"
                 subtitle="Eat well, study harder"
               />
@@ -1390,6 +1557,7 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={productsByCategory['School Supplies']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('School Supplies')}
                 title="Best Sellers in School Supplies"
                 subtitle="Gear up for the semester"
               />
@@ -1400,6 +1568,7 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={productsByCategory['Cosmetics']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Cosmetics')}
                 title="Best Sellers in Beauty & Cosmetics"
                 subtitle="Top-rated by campus students"
               />
@@ -1431,6 +1600,7 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={productsByCategory['Room Essentials']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Room Essentials')}
                 title="Finds for Your Room"
                 subtitle="Make your hostel feel like home"
               />
@@ -1441,10 +1611,28 @@ export default function MarketplacePage() {
               <BestSellersRow
                 products={productsByCategory['Books']}
                 onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Books')}
                 title="Books & Academic Resources"
                 subtitle="Study smarter with the right materials"
               />
             )}
+
+            {/* ── SNACKS ── */}
+            {productsByCategory['Snacks']?.length > 0 && (
+              <BestSellersRow
+                products={productsByCategory['Snacks']}
+                onProductClick={handleProductClick}
+                onSeeAll={() => setSelectedCategory('Snacks')}
+                title="Snacks & Treats"
+                subtitle="Fuel your study sessions"
+              />
+            )}
+
+            {/* ══ JUST DROPPED — ALWAYS LAST, INFINITE SCROLL ══ */}
+            <JustDroppedSection
+              allProducts={allProducts}
+              onProductClick={handleProductClick}
+            />
 
             {/* Empty state */}
             {allProducts.length === 0 && (
