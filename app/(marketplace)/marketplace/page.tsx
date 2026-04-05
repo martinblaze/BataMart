@@ -9,542 +9,265 @@ import {
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
-  BadgeCheck, Timer, Bell, Gift, Percent, Crown,
-  MapPin, Lock, Bolt,
+  BadgeCheck, Timer, Percent,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
-// ─── Pull-to-refresh constants (unchanged) ───────────────────────────────────
 const PULL_THRESHOLD = 130
 const PULL_MAX = 175
 const PULL_DEAD_ZONE = 12
 const PULL_RESIST = 0.38
 
-// ─── ALL CSS ──────────────────────────────────────────────────────────────────
 const ANIM_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap');
-
-  /* ─── Base Tokens ─── */
-  :root {
-    --bm-violet: #6366f1;
-    --bm-dark:   #4c1d95;
-    --bm-flash:  #f97316;
-    --bm-neon:   #a855f7;
-    --bm-gold:   #f59e0b;
-    --bm-red:    #ef4444;
-    --bm-green:  #10b981;
-  }
-
-  /* ─── Entrance ─── */
   @keyframes fadeSlideUp {
-    from { opacity:0; transform:translateY(22px) scale(0.97); }
-    to   { opacity:1; transform:translateY(0) scale(1); }
+    from { opacity: 0; transform: translateY(18px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
   .card-enter {
-    opacity:0;
-    animation: fadeSlideUp 0.42s cubic-bezier(0.22,1,0.36,1) forwards;
+    opacity: 0;
+    animation: fadeSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   @keyframes sectionIn {
-    from { opacity:0; transform:translateY(28px); }
-    to   { opacity:1; transform:translateY(0); }
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   .section-enter {
-    opacity:0;
-    animation: sectionIn 0.5s cubic-bezier(0.22,1,0.36,1) forwards;
+    opacity: 0;
+    animation: sectionIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
-  /* ─── Skeleton shimmer ─── */
-  @keyframes shimmerSkel {
-    0%   { background-position:-600px 0; }
-    100% { background-position:600px 0; }
+  @keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position: 600px 0; }
   }
   .shimmer {
-    background: linear-gradient(90deg,#f3f4f6 25%,#e9eaec 50%,#f3f4f6 75%);
-    background-size:1200px 100%;
-    animation: shimmerSkel 1.5s ease-in-out infinite;
+    background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
+    background-size: 1200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
   }
 
-  /* ─── Pull-to-refresh ─── */
-  @keyframes ptr-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-  .ptr-spinning { animation: ptr-spin 0.7s linear infinite; }
-  .ptr-indicator { transition: opacity 0.2s ease; }
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(1.04); }
+  }
+  .badge-pulse { animation: pulse-badge 2s ease-in-out infinite; }
 
-  /* ─────────────────────────────────────────────
-     HERO BACKGROUND ANIMATION
-  ───────────────────────────────────────────── */
-  @keyframes heroOrb1 {
-    0%,100%  { transform: translate(-10%,-10%) scale(1); }
-    50%      { transform: translate(5%,15%) scale(1.15); }
+  @keyframes ticker {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
   }
-  @keyframes heroOrb2 {
-    0%,100%  { transform: translate(10%,10%) scale(1); }
-    50%      { transform: translate(-8%,-12%) scale(1.2); }
-  }
-  @keyframes heroOrb3 {
-    0%,100%  { transform: translate(0,0) scale(1); }
-    33%      { transform: translate(-15%,10%) scale(1.1); }
-    66%      { transform: translate(12%,-8%) scale(0.9); }
-  }
-  .hero-orb-1 { animation: heroOrb1 12s ease-in-out infinite; }
-  .hero-orb-2 { animation: heroOrb2 15s ease-in-out infinite; }
-  .hero-orb-3 { animation: heroOrb3 18s ease-in-out infinite; }
+  .ticker-inner { animation: ticker 28s linear infinite; }
+  .ticker-wrap:hover .ticker-inner { animation-play-state: paused; }
 
-  /* ─── Scanline overlay ─── */
-  .scanlines::after {
-    content:'';
-    position:absolute;
-    inset:0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,0,0,0.03) 2px,
-      rgba(0,0,0,0.03) 4px
-    );
-    pointer-events:none;
-    z-index:1;
+  @keyframes bannerSlide {
+    0%   { opacity: 0; transform: translateX(40px); }
+    8%   { opacity: 1; transform: translateX(0); }
+    92%  { opacity: 1; transform: translateX(0); }
+    100% { opacity: 0; transform: translateX(-40px); }
   }
 
-  /* ─── Diagonal stripe BG ─── */
-  .stripe-bg {
-    background-image: repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 8px,
-      rgba(255,255,255,0.03) 8px,
-      rgba(255,255,255,0.03) 16px
-    );
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+    50% { box-shadow: 0 0 0 6px rgba(99,102,241,0.15); }
   }
+  .glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
 
-  /* ─────────────────────────────────────────────
-     TICKER
-  ───────────────────────────────────────────── */
-  @keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-  .ticker-inner { animation: ticker 22s linear infinite; }
-  .ticker-wrap:hover .ticker-inner { animation-play-state:paused; }
-
-  /* ─────────────────────────────────────────────
-     PRODUCT CARD — THE BEAST
-  ───────────────────────────────────────────── */
   .product-card {
-    transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s ease;
-    position: relative;
-  }
-  .product-card::before {
-    content:'';
-    position:absolute;
-    inset:-1px;
-    border-radius:18px;
-    background: linear-gradient(135deg, rgba(99,102,241,0), rgba(99,102,241,0));
-    transition: background 0.3s ease;
-    z-index:0;
-    pointer-events:none;
-  }
-  .product-card:hover::before {
-    background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(168,85,247,0.3));
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
   }
   .product-card:hover {
-    transform: translateY(-8px) scale(1.022);
-    box-shadow:
-      0 0 0 1px rgba(99,102,241,0.2),
-      0 24px 60px rgba(99,102,241,0.18),
-      0 8px 20px rgba(0,0,0,0.1);
+    transform: translateY(-5px) scale(1.018);
+    box-shadow: 0 24px 56px rgba(0,0,0,0.12), 0 4px 16px rgba(99,102,241,0.08);
   }
   .product-card:active {
-    transform: scale(0.96);
-    transition: transform 0.1s ease;
+    transform: scale(0.97);
+    transition: transform 0.12s ease;
   }
-  .product-img { transition: transform 0.6s cubic-bezier(0.22,1,0.36,1); }
-  .product-card:hover .product-img { transform: scale(1.1); }
+  .product-img { transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1); }
+  .product-card:hover .product-img { transform: scale(1.08); }
 
-  /* card inner content sits above ::before */
-  .product-card > * { position: relative; z-index: 1; }
-
-  /* Quick actions */
   .quick-actions {
-    opacity:0;
-    transform:translateY(8px);
-    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34,1.4,0.64,1);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
   }
-  .product-card:hover .quick-actions { opacity:1; transform:translateY(0); }
-
-  /* Price flash on hover */
-  .price-tag { transition: color 0.2s ease, transform 0.2s ease; }
-  .product-card:hover .price-tag { color: var(--bm-violet); transform: scale(1.05); }
-
-  /* ─────────────────────────────────────────────
-     BADGES & PULSES
-  ───────────────────────────────────────────── */
-  @keyframes badgePop {
-    0%,100% { transform: scale(1); }
-    50%     { transform: scale(1.08); }
-  }
-  .badge-pulse { animation: badgePop 1.8s ease-in-out infinite; }
-
-  @keyframes hotBadge {
-    0%,100% { box-shadow: 0 2px 8px rgba(239,68,68,0.5); }
-    50%     { box-shadow: 0 2px 20px rgba(239,68,68,0.9), 0 0 40px rgba(239,68,68,0.3); }
-  }
-  .hot-glow { animation: hotBadge 1.6s ease-in-out infinite; }
-
-  @keyframes newBadge {
-    0%,100% { box-shadow: 0 2px 8px rgba(16,185,129,0.4); }
-    50%     { box-shadow: 0 2px 20px rgba(16,185,129,0.8), 0 0 30px rgba(16,185,129,0.2); }
-  }
-  .new-glow { animation: newBadge 2s ease-in-out infinite; }
-
-  @keyframes discountShake {
-    0%,100% { transform:rotate(-3deg) scale(1); }
-    25%     { transform:rotate(3deg) scale(1.05); }
-    75%     { transform:rotate(-2deg) scale(1.02); }
-  }
-  .discount-shake { animation: discountShake 3s ease-in-out infinite; }
-
-  @keyframes stockUrgency {
-    0%,100% { color: #ef4444; }
-    50%     { color: #dc2626; opacity:0.7; }
-  }
-  .stock-urgent { animation: stockUrgency 1.2s ease-in-out infinite; }
-
-  @keyframes viewerPulse {
-    0%,100% { opacity:1; }
-    50%     { opacity:0.6; }
-  }
-  .viewer-pulse { animation: viewerPulse 2s ease-in-out infinite; }
-
-  @keyframes liveRed {
-    0%,100% { background:#ef4444; }
-    50%     { background:#fca5a5; }
-  }
-  .live-dot { animation: liveRed 1s ease-in-out infinite; }
-
-  /* ─────────────────────────────────────────────
-     SECTION HEADERS
-  ───────────────────────────────────────────── */
-  @keyframes fireFlicker {
-    0%,100% { filter: drop-shadow(0 0 4px rgba(249,115,22,0.8)); }
-    33%     { filter: drop-shadow(0 0 12px rgba(239,68,68,1)); }
-    66%     { filter: drop-shadow(0 0 6px rgba(249,115,22,0.6)); }
-  }
-  .fire-flicker { animation: fireFlicker 1.4s ease-in-out infinite; }
-
-  @keyframes sparkleRot {
-    from { transform: rotate(0deg) scale(1); }
-    50%  { transform: rotate(180deg) scale(1.2); }
-    to   { transform: rotate(360deg) scale(1); }
-  }
-  .sparkle-spin { animation: sparkleRot 3s linear infinite; }
-
-  /* ─────────────────────────────────────────────
-     HERO ELEMENTS
-  ───────────────────────────────────────────── */
-  @keyframes glowPulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
-    50%     { box-shadow: 0 0 0 8px rgba(99,102,241,0.15), 0 0 30px rgba(99,102,241,0.1); }
-  }
-  .glow-pulse { animation: glowPulse 2.5s ease-in-out infinite; }
-
-  @keyframes shimmerBtn {
-    0%   { background-position:200% center; }
-    100% { background-position:-200% center; }
-  }
-  .shimmer-btn {
-    background: linear-gradient(90deg, #fff 0%, #e0e7ff 25%, #fff 50%, #e0e7ff 75%, #fff 100%);
-    background-size: 400% auto;
-    animation: shimmerBtn 3s linear infinite;
-    color: #4c1d95 !important;
+  .product-card:hover .quick-actions {
+    opacity: 1;
+    transform: translateY(0);
   }
 
-  /* Counter badges */
-  @keyframes countBounce {
-    0%  { transform: scale(1); }
-    50% { transform: scale(1.3) rotate(-5deg); }
-    100%{ transform: scale(1); }
-  }
-  .count-bounce { animation: countBounce 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+  .btn-press { transition: transform 0.15s cubic-bezier(0.34, 1.4, 0.64, 1); }
+  .btn-press:hover  { transform: scale(1.03); }
+  .btn-press:active { transform: scale(0.96); }
 
-  /* ─────────────────────────────────────────────
-     CATEGORY NAV
-  ───────────────────────────────────────────── */
-  .cat-btn {
-    transition: all 0.2s cubic-bezier(0.34,1.4,0.64,1);
-    position: relative;
-    overflow: hidden;
-  }
-  .cat-btn::after {
-    content:'';
-    position:absolute;
-    inset:0;
-    background: radial-gradient(circle at center, rgba(255,255,255,0.3) 0%, transparent 70%);
-    opacity:0;
-    transition: opacity 0.2s ease;
-  }
-  .cat-btn:hover::after { opacity:1; }
-  .cat-btn:hover:not(.cat-active) { transform:scale(1.08) translateY(-1px); }
-  .cat-btn:active { transform:scale(0.94); }
-  .cat-active {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
-    box-shadow: 0 4px 16px rgba(99,102,241,0.4), 0 0 0 2px rgba(99,102,241,0.15) !important;
-  }
+  .cat-btn { transition: background 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s ease; }
+  .cat-btn:hover:not(.cat-active) { transform: scale(1.06); }
+  .cat-btn:active { transform: scale(0.95); }
 
-  /* ─────────────────────────────────────────────
-     SEARCH
-  ───────────────────────────────────────────── */
   .search-input { transition: box-shadow 0.25s ease, background 0.25s ease; }
   .search-input:focus-within {
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.2), 0 2px 12px rgba(99,102,241,0.1) !important;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.18), 0 2px 8px rgba(0,0,0,0.06) !important;
     background: white !important;
   }
 
-  .hot-tag { transition: all 0.2s cubic-bezier(0.34,1.4,0.64,1); }
-  .hot-tag:hover { transform: scale(1.1) translateY(-2px); }
-  .hot-tag:active { transform: scale(0.93); }
+  @keyframes dropIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .drop-in { animation: dropIn 0.18s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
-  /* ─────────────────────────────────────────────
-     PROMO TICKER
-  ───────────────────────────────────────────── */
-  @keyframes tickerBg {
-    0%   { background-position:0% 50%; }
-    100% { background-position:200% 50%; }
+  .rv-card {
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
   }
-  .ticker-bar {
-    background: linear-gradient(90deg, #4c1d95, #6366f1, #8b5cf6, #6366f1, #4c1d95);
-    background-size:300% 100%;
-    animation: tickerBg 6s linear infinite;
-  }
+  .rv-card:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 12px 28px rgba(0,0,0,0.1); }
+  .rv-card:active { transform: scale(0.97); }
+  .rv-card:hover .product-img { transform: scale(1.06); }
 
-  /* ─────────────────────────────────────────────
-     FLASH DEAL SECTION — diagonal cut header
-  ───────────────────────────────────────────── */
-  .flash-header {
-    background: linear-gradient(135deg, #ef4444 0%, #f97316 50%, #fbbf24 100%);
-    clip-path: polygon(0 0, 100% 0, 100% 75%, 0 100%);
-    padding-bottom: 2rem;
-  }
-  .flash-header-alt {
-    background: linear-gradient(135deg, #4c1d95 0%, #6366f1 60%, #8b5cf6 100%);
-    clip-path: polygon(0 0, 100% 0, 100% 75%, 0 100%);
-    padding-bottom: 2rem;
-  }
-  .new-header {
-    background: linear-gradient(135deg, #059669 0%, #10b981 60%, #34d399 100%);
-    clip-path: polygon(0 0, 100% 0, 100% 75%, 0 100%);
-    padding-bottom: 2rem;
-  }
-
-  /* ─────────────────────────────────────────────
-     SECTION CARDS — glassy
-  ───────────────────────────────────────────── */
-  .glass-card {
-    background: rgba(255,255,255,0.85);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.6);
-  }
-
-  /* ─────────────────────────────────────────────
-     INTEREST PILLS
-  ───────────────────────────────────────────── */
   .interest-pill {
-    transition: all 0.2s cubic-bezier(0.34,1.4,0.64,1);
-    position: relative;
-    overflow: hidden;
+    transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   }
   .interest-pill:hover {
-    transform: scale(1.08) translateY(-2px);
-    background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+    transform: scale(1.05) translateY(-1px);
+    background: #6366f1 !important;
     color: white !important;
     border-color: transparent !important;
-    box-shadow: 0 8px 24px rgba(99,102,241,0.35);
+    box-shadow: 0 8px 20px rgba(99,102,241,0.25);
   }
-  .interest-pill:active { transform: scale(0.95); }
+  .interest-pill:active { transform: scale(0.96); }
 
-  /* ─────────────────────────────────────────────
-     BTN PRESS
-  ───────────────────────────────────────────── */
-  .btn-press { transition: transform 0.15s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.15s ease; }
-  .btn-press:hover  { transform:scale(1.04); }
-  .btn-press:active { transform:scale(0.95); }
+  .hot-tag { transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), background 0.15s ease, color 0.15s ease; }
+  .hot-tag:hover { transform: scale(1.07) translateY(-1px); }
+  .hot-tag:active { transform: scale(0.95); }
 
-  /* rv-card */
-  .rv-card {
-    transition: transform 0.28s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.28s ease;
-  }
-  .rv-card:hover {
-    transform:translateY(-5px) scale(1.04);
-    box-shadow: 0 16px 36px rgba(0,0,0,0.12), 0 0 0 1px rgba(99,102,241,0.15);
-  }
-  .rv-card:hover .product-img { transform:scale(1.08); }
-  .rv-card:active { transform:scale(0.96); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* ─────────────────────────────────────────────
-     DROP-IN SUGGESTIONS
-  ───────────────────────────────────────────── */
-  @keyframes dropIn {
-    from { opacity:0; transform:translateY(-10px) scale(0.96); }
-    to   { opacity:1; transform:translateY(0) scale(1); }
+  @keyframes ptr-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
   }
-  .drop-in { animation: dropIn 0.2s cubic-bezier(0.22,1,0.36,1) forwards; }
+  .ptr-spinning { animation: ptr-spin 0.7s linear infinite; }
 
-  /* ─────────────────────────────────────────────
-     FLOATING SELL BUTTON — pulsing ring
-  ───────────────────────────────────────────── */
-  @keyframes ringPulse {
-    0%   { transform:scale(1); opacity:0.6; }
-    100% { transform:scale(2.2); opacity:0; }
+  @keyframes ptr-bounce-in {
+    0%   { opacity: 0; transform: translateY(-16px) scale(0.85); }
+    60%  { transform: translateY(4px) scale(1.05); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
   }
-  .sell-btn-wrap { position:relative; }
-  .sell-btn-wrap::before, .sell-btn-wrap::after {
-    content:'';
-    position:absolute;
-    inset:0;
-    border-radius:1rem;
-    background: rgba(99,102,241,0.4);
-    animation: ringPulse 2s ease-out infinite;
-  }
-  .sell-btn-wrap::after { animation-delay: 1s; }
+  .ptr-bounce { animation: ptr-bounce-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .ptr-indicator { transition: opacity 0.2s ease; }
 
-  /* ─────────────────────────────────────────────
-     SCROLLBAR HIDE
-  ───────────────────────────────────────────── */
-  .no-scrollbar::-webkit-scrollbar { display:none; }
-  .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
-
-  /* ─────────────────────────────────────────────
-     PROMO CARD HOVER (hero)
-  ───────────────────────────────────────────── */
-  @keyframes promoPop {
-    0%,100% { transform: scale(1) rotate(0deg); }
-    25%     { transform: scale(1.06) rotate(-1deg); }
-    75%     { transform: scale(1.04) rotate(1deg); }
+  @keyframes viewerCount {
+    0%, 100% { color: #ef4444; }
+    50% { color: #f97316; }
   }
-  .promo-card-pop { animation: promoPop 4s ease-in-out infinite; }
+  .viewer-anim { animation: viewerCount 2.5s ease-in-out infinite; }
 
-  /* ─────────────────────────────────────────────
-     LIGHTNING BOLT
-  ───────────────────────────────────────────── */
-  @keyframes boltFlash {
-    0%,90%,100% { opacity:1; filter:drop-shadow(0 0 4px rgba(251,191,36,0.8)); }
-    95%          { opacity:0.3; filter:none; }
+  .section-stripe {
+    background: linear-gradient(135deg, #6366f1 0%, #4c1d95 100%);
   }
-  .bolt-flash { animation: boltFlash 2.5s ease-in-out infinite; }
-
-  /* ─────────────────────────────────────────────
-     SECTION DIVIDER PULSE
-  ───────────────────────────────────────────── */
-  @keyframes dividerShimmer {
-    0%   { background-position:0% 50%; }
-    100% { background-position:200% 50%; }
+  .section-stripe-orange {
+    background: linear-gradient(135deg, #f97316 0%, #dc2626 100%);
   }
-  .divider-shimmer {
-    background: linear-gradient(90deg, transparent, #6366f1, #a855f7, #6366f1, transparent);
-    background-size:200% 100%;
-    animation: dividerShimmer 3s linear infinite;
-    height: 1px;
+  .section-stripe-emerald {
+    background: linear-gradient(135deg, #059669 0%, #0891b2 100%);
   }
 
-  /* ─── Trust bar shimmer bg ─── */
-  .trust-bg {
-    background: linear-gradient(90deg, #fafbff 0%, #f0f0ff 50%, #fafbff 100%);
+  @keyframes countUp {
+    from { transform: translateY(4px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .count-appear { animation: countUp 0.3s ease forwards; }
+
+  .discount-badge {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 2px 8px rgba(239,68,68,0.4);
   }
 
-  /* ─── Scroll snap for horizontal rows ─── */
-  .h-scroll-snap { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
-  .h-scroll-snap > * { scroll-snap-align: start; }
-
-  /* ─── Sold count chip ─── */
-  @keyframes soldCount {
-    0%,100% { transform: scale(1); }
-    50% { transform: scale(1.12) rotate(-2deg); }
+  @keyframes floatBadge {
+    0%, 100% { transform: translateY(0) rotate(-2deg); }
+    50% { transform: translateY(-2px) rotate(-2deg); }
   }
-  .sold-chip { animation: soldCount 2.2s ease-in-out infinite; }
+  .float-badge { animation: floatBadge 3s ease-in-out infinite; }
 
-  /* GRID BG for sections */
-  .grid-bg {
-    background-image:
-      linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
-    background-size: 32px 32px;
+  .promo-bar {
+    background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
+    background-size: 200% 100%;
+    animation: shimmerBg 4s linear infinite;
+  }
+  @keyframes shimmerBg {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
   }
 
-  /* ─── Crown glow ─── */
-  @keyframes crownGlow {
-    0%,100% { filter: drop-shadow(0 0 4px rgba(245,158,11,0.7)); }
-    50%     { filter: drop-shadow(0 0 14px rgba(245,158,11,1)); }
+  .trust-bar {
+    background: linear-gradient(90deg, #f8fafc 0%, #f0f4ff 50%, #f8fafc 100%);
   }
-  .crown-glow { animation: crownGlow 2s ease-in-out infinite; }
 
-  /* number counter spin */
-  @keyframes numSpin {
-    from { transform: translateY(-100%); opacity:0; }
-    to   { transform: translateY(0); opacity:1; }
+  .scroll-section {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
   }
-  .num-spin { animation: numSpin 0.3s ease forwards; }
+  .scroll-section > * {
+    scroll-snap-align: start;
+  }
 `
 
-// ─── DATA / CONSTANTS ────────────────────────────────────────────────────────
 const CATEGORIES = [
-  { name: 'All',               icon: '🛍️' },
+  { name: 'All', icon: '🛍️' },
   { name: 'Fashion & Clothing', icon: '👔' },
-  { name: 'Food Services',      icon: '🍔' },
-  { name: 'Room Essentials',    icon: '🏠' },
-  { name: 'School Supplies',    icon: '🎒' },
-  { name: 'Tech Gadgets',       icon: '🎧' },
-  { name: 'Cosmetics',          icon: '💄' },
-  { name: 'Snacks',             icon: '🍿' },
-  { name: 'Books',              icon: '📚' },
+  { name: 'Food Services', icon: '🍔' },
+  { name: 'Room Essentials', icon: '🏠' },
+  { name: 'School Supplies', icon: '🎒' },
+  { name: 'Tech Gadgets', icon: '🎧' },
+  { name: 'Cosmetics', icon: '💄' },
+  { name: 'Snacks', icon: '🍿' },
+  { name: 'Books', icon: '📚' },
 ]
 
-const TRENDING_SEARCHES = ['iPhone','Sneakers','Laptop','Jollof Rice','Textbooks','Earbuds','Braids','Power Bank']
+const TRENDING_SEARCHES = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY = 'BATAMART-recently-viewed'
 
-const TICKER_ITEMS = [
-  '🔥 HOT DEALS — Grab before they\'re gone!',
-  '⚡ FLASH SALE — Only today!',
-  '🚀 FREE Delivery over ₦30,000',
-  '🛡️ 100% Buyer Protection',
-  '✅ Verified Campus Sellers Only',
-  '👑 Top-Rated Products This Week',
-  '📦 Same-Day Campus Pickup Available',
-  '💳 Secure Wallet Payments',
-  '🎓 Exclusively for Students',
-  '📣 New Drops Every Hour!',
+// Mock activity signals - UI only, cycled per product
+const ACTIVITY_SIGNALS = [
+  { icon: '🔥', text: (n: number) => `${n} viewing now` },
+  { icon: '🛒', text: (n: number) => `${n} sold today` },
+  { icon: '⚡', text: () => 'Selling fast' },
+  { icon: '👀', text: () => 'Recently added' },
 ]
 
 const PROMO_BANNERS = [
-  { emoji: '🔥', title: 'Flash Sale', sub: 'Up to 40% OFF', grad: 'from-orange-500 to-red-600' },
-  { emoji: '⚡', title: 'Just Dropped', sub: 'Fresh picks added', grad: 'from-violet-600 to-purple-700' },
-  { emoji: '🚀', title: 'Free Delivery', sub: 'Orders over ₦30,000', grad: 'from-emerald-500 to-teal-600' },
-  { emoji: '🎓', title: 'Campus Only', sub: 'Verified sellers', grad: 'from-blue-500 to-indigo-600' },
+  { emoji: '🔥', text: 'Hot Deals — Up to 40% OFF campus picks', accent: 'from-orange-500 to-red-500' },
+  { emoji: '⚡', text: 'Flash Sale — Limited stock, grab yours now!', accent: 'from-violet-500 to-purple-600' },
+  { emoji: '🚀', text: 'Free Campus Delivery on orders over ₦30,000', accent: 'from-emerald-500 to-teal-500' },
+  { emoji: '🎓', text: 'Student Exclusive — Verified sellers only', accent: 'from-blue-500 to-indigo-600' },
 ]
 
-function seededRand(id: string, salt: number) {
-  let h = salt
-  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0
-  return Math.abs(h)
+function getSignal(productId: string, index: number) {
+  const hash = productId.charCodeAt(0) + productId.charCodeAt(productId.length - 1)
+  const signalIndex = (hash + index) % ACTIVITY_SIGNALS.length
+  const signal = ACTIVITY_SIGNALS[signalIndex]
+  const count = 5 + ((hash * 7 + index * 3) % 28)
+  return { icon: signal.icon, text: signal.text(count) }
 }
-function getDiscount(id: string) {
-  const discounts = [0,0,0,10,15,20,25,30]
-  return discounts[seededRand(id, 1) % discounts.length]
+
+function getDiscount(productId: string) {
+  const hash = productId.charCodeAt(0) * 3 + productId.charCodeAt(productId.length - 1)
+  const discounts = [10, 15, 20, 25, 30, 0, 0, 0] // 0 = no discount shown
+  return discounts[hash % discounts.length]
 }
-function getStockLeft(id: string) {
-  const levels = [null,null,null,null,2,3,4,5,7]
-  return levels[seededRand(id, 2) % levels.length]
+
+function getStockLevel(productId: string) {
+  const hash = productId.charCodeAt(0) + productId.charCodeAt(1)
+  const levels = [null, null, null, 3, 5, 7, null, null] // null = don't show
+  return levels[hash % levels.length]
 }
-function getDeliveryTag(id: string) {
-  const tags = [null,'Free Delivery','Campus Pickup','Fast Delivery',null]
-  return tags[seededRand(id, 3) % tags.length]
-}
-function getViewers(id: string) {
-  return 4 + (seededRand(id, 4) % 34)
-}
-function getSoldToday(id: string) {
-  return 1 + (seededRand(id, 5) % 19)
-}
-function getSignalType(id: string, idx: number) {
-  const types = ['viewers','sold','selling','added']
-  return types[(seededRand(id, 6) + idx) % types.length]
+
+function getDeliveryTag(productId: string) {
+  const hash = productId.charCodeAt(0)
+  const tags = ['Campus Pickup', 'Fast Delivery', 'Free Delivery', null, null]
+  return tags[hash % tags.length]
 }
 
 function parseTags(description: string): string[] {
@@ -553,19 +276,23 @@ function parseTags(description: string): string[] {
   return []
 }
 
-// ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
-
 function TrustPill({ level }: { level: string }) {
-  const map: Record<string, { bg: string; text: string; ring: string; dot: string }> = {
-    GOLD:   { bg:'bg-amber-50',  text:'text-amber-700',  ring:'ring-amber-200',  dot:'bg-amber-400'  },
-    SILVER: { bg:'bg-slate-50',  text:'text-slate-600',  ring:'ring-slate-200',  dot:'bg-slate-400'  },
-    BRONZE: { bg:'bg-orange-50', text:'text-orange-700', ring:'ring-orange-200', dot:'bg-orange-400' },
-  }
-  const t = map[level] ?? map.BRONZE
+  const tone = level === 'GOLD'
+    ? { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-200', dot: 'bg-amber-400' }
+    : level === 'SILVER'
+      ? { bg: 'bg-slate-50', text: 'text-slate-600', ring: 'ring-slate-200', dot: 'bg-slate-400' }
+      : { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-200', dot: 'bg-orange-400' }
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ring-1 ${t.bg} ${t.text} ${t.ring}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />
-      {level}
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${tone.bg} ${tone.text} ${tone.ring}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} /> {level}
+    </span>
+  )
+}
+
+function VerifiedBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold ring-1 ring-blue-100">
+      <BadgeCheck className="w-2.5 h-2.5" /> Verified
     </span>
   )
 }
@@ -573,175 +300,139 @@ function TrustPill({ level }: { level: string }) {
 function StarRating({ rating }: { rating: number }) {
   return (
     <div className="flex items-center gap-0.5">
-      {[1,2,3,4,5].map(i => (
-        <Star key={i} className={`w-2.5 h-2.5 ${i <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`} />
+      {[1, 2, 3, 4, 5].map(i => (
+        <Star key={i} className={`w-3 h-3 ${i <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`} />
       ))}
-      <span className="text-[10px] font-bold text-gray-500 ml-0.5">{rating.toFixed(1)}</span>
+      <span className="text-xs font-semibold text-gray-500 ml-0.5">{rating.toFixed(1)}</span>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 💥 PRODUCT CARD — Maximum density, max information
-// ─────────────────────────────────────────────────────────────────────────────
-function ProductCard({ product, onClick, delay = 0 }: { product: any; onClick: () => void; delay?: number }) {
-  const tags        = parseTags(product.description)
-  const fmt         = (p: number) => new Intl.NumberFormat('en-NG', { style:'currency', currency:'NGN', maximumFractionDigits:0 }).format(p)
-  const discount    = getDiscount(product.id)
-  const stockLeft   = getStockLeft(product.id)
+// ─────────────────────────────────────────────
+// Upgraded Product Card
+// ─────────────────────────────────────────────
+function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
+  product: any; onClick: () => void; delay?: number; showSignal?: boolean
+}) {
+  const tags = parseTags(product.description)
+  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
+  const discount = getDiscount(product.id)
+  const stockLeft = getStockLevel(product.id)
   const deliveryTag = getDeliveryTag(product.id)
-  const viewers     = getViewers(product.id)
-  const soldToday   = getSoldToday(product.id)
-  const signalType  = getSignalType(product.id, delay)
-  const origPrice   = discount ? Math.round(product.price * (1 + discount / 100)) : null
+  const signal = showSignal ? getSignal(product.id, delay) : null
+  const originalPrice = discount ? Math.round(product.price * (1 + discount / 100)) : null
 
   return (
-    <div
-      onClick={onClick}
-      className="product-card card-enter bg-white rounded-[18px] overflow-hidden border border-gray-100 shadow-sm cursor-pointer flex flex-col"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      {/* ── Image zone ── */}
-      <div className="relative overflow-hidden bg-gray-100" style={{ aspectRatio:'1/1' }}>
-        <img
-          src={product.images[0] || '/placeholder.png'}
-          alt={product.name}
-          className="product-img w-full h-full object-cover"
-        />
+    <div onClick={onClick} className="product-card card-enter bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer flex flex-col group"
+      style={{ animationDelay: `${delay}ms` }}>
+      <div className="relative aspect-square bg-gray-100 overflow-hidden">
+        <img src={product.images[0] || '/placeholder.png'} alt={product.name} className="product-img w-full h-full object-cover" />
 
-        {/* gradient overlay bottom */}
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
-
-        {/* Top-left badges stacked */}
-        <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+        {/* Top Left Badges */}
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
           {product.isTrending && (
-            <span className="hot-glow badge-pulse inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-black text-white"
-              style={{ background:'linear-gradient(135deg,#ef4444,#dc2626)' }}>
+            <span className="badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md">
               <Flame className="w-2.5 h-2.5" /> HOT
             </span>
           )}
           {product.isNew && (
-            <span className="new-glow inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-black text-white"
-              style={{ background:'linear-gradient(135deg,#10b981,#059669)' }}>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[10px] font-black rounded-lg shadow-md">
               <Sparkles className="w-2.5 h-2.5" /> NEW
             </span>
           )}
           {product.isPersonalised && !product.isTrending && !product.isNew && (
-            <span className="badge-pulse inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-black text-white"
-              style={{ background:'linear-gradient(135deg,#8b5cf6,#6366f1)' }}>
-              <Heart className="w-2.5 h-2.5 fill-white" /> YOU
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-[10px] font-black rounded-lg shadow-md">
+              <Heart className="w-2.5 h-2.5 fill-white" /> FOR YOU
             </span>
           )}
         </div>
 
-        {/* Discount corner ribbon */}
+        {/* Discount Badge */}
         {discount > 0 && (
-          <div className="discount-shake absolute top-2 right-2 z-10 w-10 h-10 flex items-center justify-center rounded-full text-white text-[11px] font-black leading-none"
-            style={{ background:'linear-gradient(135deg,#ef4444,#b91c1c)', boxShadow:'0 3px 10px rgba(239,68,68,0.6)' }}>
-            <div className="text-center">
-              <div className="text-[9px] leading-none opacity-80">OFF</div>
-              <div>{discount}%</div>
-            </div>
+          <div className="float-badge absolute top-2 right-2 discount-badge text-white text-[11px] font-black px-2 py-1 rounded-lg">
+            -{discount}%
           </div>
         )}
 
         {/* Photo count */}
         {product.images?.length > 1 && (
-          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[9px] font-bold backdrop-blur-sm">
-            📷 {product.images.length}
+          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-black/50 text-white text-[10px] font-bold backdrop-blur-sm">
+            {product.images.length} photos
           </div>
         )}
 
-        {/* Quick actions on hover */}
-        <div className="quick-actions absolute bottom-2 right-2 flex gap-1">
-          <button onClick={e => e.stopPropagation()}
-            className="w-7 h-7 bg-white rounded-xl flex items-center justify-center shadow-md hover:scale-110 transition-transform">
-            <Heart className="w-3.5 h-3.5 text-red-400" />
+        {/* Quick Actions on hover */}
+        <div className="quick-actions absolute bottom-2 left-2 flex gap-1.5">
+          <button
+            onClick={e => { e.stopPropagation(); }}
+            className="w-7 h-7 bg-white/95 hover:bg-red-50 rounded-lg flex items-center justify-center shadow-sm transition-colors"
+          >
+            <Heart className="w-3.5 h-3.5 text-gray-500 hover:text-red-500" />
           </button>
-          <button onClick={e => { e.stopPropagation(); onClick(); }}
-            className="w-7 h-7 bg-white rounded-xl flex items-center justify-center shadow-md hover:scale-110 transition-transform">
-            <Eye className="w-3.5 h-3.5 text-violet-500" />
+          <button
+            onClick={e => { e.stopPropagation(); onClick(); }}
+            className="w-7 h-7 bg-white/95 hover:bg-BATAMART-primary/10 rounded-lg flex items-center justify-center shadow-sm transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5 text-gray-500 hover:text-BATAMART-primary" />
           </button>
         </div>
       </div>
 
-      {/* ── Info zone ── */}
-      <div className="p-2.5 flex flex-col flex-1 gap-1">
-        {/* Category */}
-        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{product.category}</p>
+      <div className="p-2.5 sm:p-3 flex flex-col flex-1">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{product.category}</p>
+        <h3 className="font-bold text-gray-900 line-clamp-2 text-xs sm:text-sm leading-snug flex-1">{product.name}</h3>
 
-        {/* Name */}
-        <h3 className="font-bold text-gray-900 line-clamp-2 text-xs leading-snug flex-1">{product.name}</h3>
-
-        {/* Tags */}
         {tags.length > 0 && (
-          <div className="flex gap-1 flex-wrap">
+          <div className="flex flex-wrap gap-1 mt-1">
             {tags.slice(0, 2).map((tag: string) => (
-              <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[9px] font-semibold rounded-full border border-indigo-100">{tag}</span>
+              <span key={tag} className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-[9px] font-semibold rounded-full">{tag}</span>
             ))}
           </div>
         )}
 
-        {/* Price */}
-        <div className="flex items-baseline gap-1.5 flex-wrap mt-0.5">
-          <span className="price-tag font-black text-sm text-gray-900 tracking-tight">{fmt(product.price)}</span>
-          {origPrice && (
-            <span className="text-gray-400 text-[10px] font-medium line-through">{fmt(origPrice)}</span>
-          )}
-          {discount > 0 && (
-            <span className="text-[9px] font-black text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">-{discount}%</span>
-          )}
+        {/* Price row */}
+        <div className="mt-2">
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-BATAMART-primary font-black text-sm sm:text-base tracking-tight">{fmt(product.price)}</span>
+            {originalPrice && (
+              <span className="text-gray-400 font-medium text-[11px] line-through">{fmt(originalPrice)}</span>
+            )}
+          </div>
+          <StarRating rating={product.seller?.avgRating || 0} />
         </div>
 
-        {/* Stars */}
-        <StarRating rating={product.seller?.avgRating || 0} />
-
-        {/* Delivery */}
+        {/* Delivery tag */}
         {deliveryTag && (
-          <div className="flex items-center gap-1">
-            <Truck className="w-2.5 h-2.5 text-emerald-500" />
-            <span className="text-[9px] font-bold text-emerald-600">{deliveryTag}</span>
+          <div className="mt-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              <Truck className="w-2.5 h-2.5" /> {deliveryTag}
+            </span>
           </div>
         )}
 
-        {/* Urgency + signal row */}
-        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-          {stockLeft && (
-            <span className="stock-urgent inline-flex items-center gap-0.5 text-[9px] font-black text-red-500">
-              <Timer className="w-2.5 h-2.5" /> Only {stockLeft} left!
+        {/* Stock urgency */}
+        {stockLeft && (
+          <div className="mt-1">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500">
+              <Timer className="w-2.5 h-2.5" /> Only {stockLeft} left
             </span>
-          )}
-          {signalType === 'viewers' && (
-            <span className="viewer-pulse inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-500">
-              🔥 {viewers} viewing
-            </span>
-          )}
-          {signalType === 'sold' && (
-            <span className="sold-chip inline-flex items-center gap-0.5 text-[9px] font-semibold text-violet-600">
-              🛒 {soldToday} sold today
-            </span>
-          )}
-          {signalType === 'selling' && (
-            <span className="badge-pulse inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-600">
-              ⚡ Selling fast
-            </span>
-          )}
-          {signalType === 'added' && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-blue-500">
-              👀 Just added
-            </span>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Seller row */}
-        <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-gray-50 mt-0.5">
-          <div className="flex items-center gap-1 min-w-0">
-            <BadgeCheck className="w-3 h-3 text-blue-500 flex-shrink-0" />
-            <Link href={`/seller/${product.seller?.id}`}
-              className="text-[10px] font-bold text-gray-500 hover:text-violet-600 truncate transition-colors"
-              onClick={e => e.stopPropagation()}>
+        {/* Activity signal */}
+        {signal && (
+          <div className="mt-1.5 flex items-center gap-1">
+            <span className="text-[10px] viewer-anim font-semibold text-gray-500">{signal.icon} {signal.text}</span>
+          </div>
+        )}
+
+        {/* Seller info */}
+        <div className="flex items-center justify-between pt-2 mt-1.5 border-t border-gray-50">
+          <div className="min-w-0 flex items-center gap-1 flex-wrap">
+            <Link href={`/seller/${product.seller?.id}`} className="text-[10px] font-semibold text-gray-500 hover:text-BATAMART-primary truncate transition-colors" onClick={e => e.stopPropagation()}>
               {product.seller?.name}
             </Link>
+            <VerifiedBadge />
           </div>
           <TrustPill level={product.seller?.trustLevel || 'BRONZE'} />
         </div>
@@ -752,63 +443,69 @@ function ProductCard({ product, onClick, delay = 0 }: { product: any; onClick: (
 
 function SkeletonCard({ delay = 0 }: { delay?: number }) {
   return (
-    <div className="card-enter bg-white rounded-[18px] overflow-hidden border border-gray-100 shadow-sm" style={{ animationDelay:`${delay}ms` }}>
-      <div className="shimmer" style={{ aspectRatio:'1/1' }} />
-      <div className="p-2.5 space-y-2">
-        <div className="h-2 shimmer rounded-full w-1/3" />
+    <div className="card-enter bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm" style={{ animationDelay: `${delay}ms` }}>
+      <div className="aspect-square shimmer" />
+      <div className="p-3 space-y-2">
+        <div className="h-2.5 shimmer rounded-full w-1/2" />
         <div className="h-3.5 shimmer rounded-full w-full" />
-        <div className="h-3 shimmer rounded-full w-3/4" />
-        <div className="h-4 shimmer rounded-full w-1/2 mt-2" />
+        <div className="h-3.5 shimmer rounded-full w-3/4" />
+        <div className="h-5 shimmer rounded-full w-1/3 mt-3" />
       </div>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 📣 PROMO TICKER
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Promo Ticker Bar
+// ─────────────────────────────────────────────
 function PromoTicker() {
-  const doubled = [...TICKER_ITEMS, ...TICKER_ITEMS]
+  const items = [
+    '🔥 Hot Deals — Up to 40% OFF',
+    '⚡ Flash Sale — Limited stock',
+    '🚀 Free Delivery on orders over ₦30,000',
+    '🎓 Verified Campus Sellers Only',
+    '💳 Secure Payments — Wallet Protected',
+    '📦 Campus Pickup Available',
+    '⭐ Top Rated Products on Campus',
+    '🛡️ Buyer Protection Guaranteed',
+  ]
+  const doubled = [...items, ...items]
   return (
-    <div className="ticker-bar overflow-hidden py-1.5 ticker-wrap select-none">
+    <div className="promo-bar overflow-hidden py-1.5 ticker-wrap">
       <div className="ticker-inner flex whitespace-nowrap">
         {doubled.map((item, i) => (
-          <span key={i} className="text-white text-[11px] font-bold mx-5 flex-shrink-0 flex items-center gap-1">
-            {item}
-            <span className="mx-3 text-white/30">•</span>
-          </span>
+          <span key={i} className="text-white text-[11px] font-bold mx-6 flex-shrink-0">{item}</span>
         ))}
       </div>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 🛡️ TRUST BAR
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Trust Bar
+// ─────────────────────────────────────────────
 function TrustBar() {
-  const items = [
-    { icon: <Shield className="w-3.5 h-3.5 text-violet-500" />, label:'Buyer Protection', sub:'Every order covered' },
-    { icon: <BadgeCheck className="w-3.5 h-3.5 text-blue-500" />, label:'Verified Sellers', sub:'Identity confirmed' },
-    { icon: <Truck className="w-3.5 h-3.5 text-emerald-500" />, label:'Campus Delivery', sub:'Fast & reliable' },
-    { icon: <Crown className="w-3.5 h-3.5 text-amber-500 crown-glow" />, label:'Top Rated', sub:'4.5★ avg' },
-    { icon: <Lock className="w-3.5 h-3.5 text-gray-500" />, label:'Secure Payments', sub:'Wallet protected' },
-    { icon: <Users className="w-3.5 h-3.5 text-pink-500" />, label:'5,000+ Students', sub:'Active community' },
+  const signals = [
+    { icon: <Shield className="w-4 h-4 text-BATAMART-primary" />, label: 'Buyer Protection', sub: 'Every purchase covered' },
+    { icon: <BadgeCheck className="w-4 h-4 text-blue-500" />, label: 'Verified Sellers', sub: 'Identity-checked sellers' },
+    { icon: <Truck className="w-4 h-4 text-emerald-500" />, label: 'Campus Delivery', sub: 'Fast & reliable' },
+    { icon: <Award className="w-4 h-4 text-amber-500" />, label: 'Top Rated', sub: '4.5★ avg across campus' },
+    { icon: <Users className="w-4 h-4 text-violet-500" />, label: 'Trusted Community', sub: '5,000+ active students' },
   ]
   return (
-    <div className="trust-bg border-b border-indigo-100/60">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex gap-4 overflow-x-auto no-scrollbar py-2">
-          {items.map((s, i) => (
-            <div key={i} className="flex items-center gap-1.5 flex-shrink-0">
-              <div className="w-6 h-6 rounded-lg bg-white border border-gray-100 shadow-sm flex items-center justify-center">
+    <div className="trust-bar border-b border-gray-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="flex gap-4 overflow-x-auto no-scrollbar py-2.5">
+          {signals.map((s, i) => (
+            <div key={i} className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-7 h-7 rounded-full bg-white border border-gray-100 shadow-sm flex items-center justify-center flex-shrink-0">
                 {s.icon}
               </div>
               <div>
-                <p className="text-[10px] font-black text-gray-800 whitespace-nowrap">{s.label}</p>
-                <p className="text-[9px] text-gray-400 whitespace-nowrap">{s.sub}</p>
+                <p className="text-[11px] font-black text-gray-800 whitespace-nowrap">{s.label}</p>
+                <p className="text-[10px] text-gray-400 whitespace-nowrap">{s.sub}</p>
               </div>
-              {i < items.length - 1 && <div className="w-px h-5 bg-gray-200 mx-2 flex-shrink-0" />}
+              {i < signals.length - 1 && <div className="w-px h-6 bg-gray-200 ml-3 flex-shrink-0" />}
             </div>
           ))}
         </div>
@@ -817,43 +514,35 @@ function TrustBar() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION HEADER
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Section Header (upgraded)
+// ─────────────────────────────────────────────
 function SectionHeader({
-  title, icon, sub, badge, badgeClass='bg-red-500 text-white',
-  onSeeAll, delay=0, counter
+  title, icon, sub, badge, badgeColor = 'bg-orange-500', onSeeAll, delay = 0
 }: {
-  title:string; icon:React.ReactNode; sub?:string; badge?:string;
-  badgeClass?:string; onSeeAll?:()=>void; delay?:number; counter?:number
+  title: string; icon: React.ReactNode; sub?: string; badge?: string;
+  badgeColor?: string; onSeeAll?: () => void; delay?: number
 }) {
   return (
-    <div className="section-enter flex items-center justify-between mb-3" style={{ animationDelay:`${delay}ms` }}>
-      <div className="flex items-center gap-2">
-        <div className="w-9 h-9 rounded-2xl flex items-center justify-center shadow-sm border border-white/60"
-          style={{ background:'linear-gradient(135deg,#f3f4f6,#fff)' }}>
+    <div className="section-enter flex items-center justify-between mb-3" style={{ animationDelay: `${delay}ms` }}>
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
           {icon}
         </div>
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-black text-gray-900 tracking-tight">{title}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-black text-gray-900">{title}</h2>
             {badge && (
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeClass}`}>
+              <span className={`${badgeColor} text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide`}>
                 {badge}
               </span>
             )}
-            {counter !== undefined && (
-              <span className="text-[9px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                {counter} items
-              </span>
-            )}
           </div>
-          {sub && <p className="text-[10px] text-gray-400 font-medium leading-tight">{sub}</p>}
+          {sub && <p className="text-[11px] text-gray-400 font-medium">{sub}</p>}
         </div>
       </div>
       {onSeeAll && (
-        <button onClick={onSeeAll}
-          className="btn-press flex items-center gap-0.5 text-[11px] font-black text-violet-600 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl transition-colors border border-violet-100">
+        <button onClick={onSeeAll} className="btn-press flex items-center gap-1 text-xs font-bold text-BATAMART-primary hover:text-BATAMART-dark transition-colors bg-BATAMART-primary/5 hover:bg-BATAMART-primary/10 px-3 py-1.5 rounded-lg">
           See all <ChevronRight className="w-3 h-3" />
         </button>
       )}
@@ -861,118 +550,68 @@ function SectionHeader({
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HORIZONTAL SCROLL ROW with nav arrows
-// ─────────────────────────────────────────────────────────────────────────────
-function HScrollRow({ products, onProductClick }: { products: any[]; onProductClick:(id:string)=>void }) {
+// ─────────────────────────────────────────────
+// Horizontal Scroll Product Row
+// ─────────────────────────────────────────────
+function HScrollRow({ products, onProductClick }: { products: any[]; onProductClick: (id: string) => void }) {
   const rowRef = useRef<HTMLDivElement>(null)
-  const scroll = (dir: number) => rowRef.current?.scrollBy({ left: dir * 210, behavior:'smooth' })
+  const scrollBy = (dir: number) => rowRef.current?.scrollBy({ left: dir * 200, behavior: 'smooth' })
   return (
     <div className="relative group/row">
-      <button onClick={() => scroll(-1)}
-        className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-lg items-center justify-center opacity-0 group-hover/row:opacity-100 transition-all hover:scale-110 hover:bg-violet-600 hover:text-white hover:border-violet-600">
+      <button
+        onClick={() => scrollBy(-1)}
+        className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity hover:bg-BATAMART-primary hover:text-white hover:border-BATAMART-primary"
+      >
         <ChevronLeft className="w-4 h-4" />
       </button>
-      <div ref={rowRef} className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 h-scroll-snap">
+      <div ref={rowRef} className="flex gap-3 overflow-x-auto no-scrollbar pb-1 scroll-section">
         {products.map((p, i) => (
-          <div key={p.id} className="flex-shrink-0 w-36 sm:w-40">
-            <ProductCard product={p} onClick={() => onProductClick(p.id)} delay={i * 50} />
+          <div key={p.id} className="flex-shrink-0 w-40 sm:w-44">
+            <ProductCard product={p} onClick={() => onProductClick(p.id)} delay={i * 40} />
           </div>
         ))}
       </div>
-      <button onClick={() => scroll(1)}
-        className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-lg items-center justify-center opacity-0 group-hover/row:opacity-100 transition-all hover:scale-110 hover:bg-violet-600 hover:text-white hover:border-violet-600">
+      <button
+        onClick={() => scrollBy(1)}
+        className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity hover:bg-BATAMART-primary hover:text-white hover:border-BATAMART-primary"
+      >
         <ChevronRight className="w-4 h-4" />
       </button>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FLASH DEAL SECTION BLOCK  (diagonal-cut header)
-// ─────────────────────────────────────────────────────────────────────────────
-function FlashSection({
-  title, sub, badge, headerClass, iconEl, products, onProductClick, onSeeAll
-}: {
-  title:string; sub:string; badge:string; headerClass:string;
-  iconEl:React.ReactNode; products:any[]; onProductClick:(id:string)=>void; onSeeAll?:()=>void
-}) {
-  if (!products.length) return null
+// ─────────────────────────────────────────────
+// Section Wrapper
+// ─────────────────────────────────────────────
+function MarketSection({
+  children, className = ''
+}: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-      {/* diagonal header */}
-      <div className={`${headerClass} px-4 pt-4 pb-8 relative`}>
-        <div className="stripe-bg absolute inset-0 opacity-30" />
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="text-white">{iconEl}</div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-white tracking-tight">{title}</h2>
-                <span className="badge-pulse bg-white/25 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase border border-white/30">
-                  {badge}
-                </span>
-              </div>
-              <p className="text-white/70 text-[11px] font-medium">{sub}</p>
-            </div>
-          </div>
-          {onSeeAll && (
-            <button onClick={onSeeAll} className="text-white/80 text-xs font-black flex items-center gap-0.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-xl transition-colors border border-white/20">
-              All <ChevronRight className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
-      {/* content lifted over clip path */}
-      <div className="bg-white px-4 pb-4 -mt-5 relative z-10">
-        <HScrollRow products={products} onProductClick={onProductClick} />
-      </div>
+    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 ${className}`}>
+      {children}
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LIVE STATS STRIP
-// ─────────────────────────────────────────────────────────────────────────────
-function LiveStatsStrip({ count }: { count: number }) {
-  if (!count) return null
-  return (
-    <div className="flex items-center gap-3 flex-wrap text-[10px] font-semibold text-gray-500">
-      <span className="flex items-center gap-1.5">
-        <span className="live-dot w-2 h-2 rounded-full inline-block flex-shrink-0" />
-        <span className="font-black text-gray-800 text-[11px]">{count}</span>
-        <span>products live</span>
-      </span>
-      <span className="w-px h-3 bg-gray-200" />
-      <span className="flex items-center gap-1">
-        <Zap className="w-3 h-3 text-violet-400" />
-        <span>Students buying <span className="font-black text-gray-700">right now</span></span>
-      </span>
-      <span className="w-px h-3 bg-gray-200" />
-      <span className="flex items-center gap-1">
-        <MapPin className="w-3 h-3 text-emerald-400" />
-        <span>Campus-only sellers</span>
-      </span>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PULL INDICATOR
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Pull-to-Refresh
+// ─────────────────────────────────────────────
 function PullIndicator({ pullDistance, isRefreshing }: { pullDistance: number; isRefreshing: boolean }) {
   const progress = Math.min(pullDistance / PULL_THRESHOLD, 1)
-  const ready    = pullDistance >= PULL_THRESHOLD
+  const ready = pullDistance >= PULL_THRESHOLD
   return (
-    <div className="ptr-indicator pointer-events-none fixed top-0 left-0 right-0 z-50 flex justify-center"
+    <div
+      className="ptr-indicator pointer-events-none fixed top-0 left-0 right-0 z-50 flex justify-center"
       style={{
-        transform:`translateY(${Math.min(pullDistance, PULL_MAX) - 64}px)`,
+        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 64}px)`,
         transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
         opacity: isRefreshing ? 1 : progress,
-      }}>
+      }}
+    >
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white shadow-lg border border-gray-100"
-        style={{ transform:`scale(${0.85 + progress * 0.15})` }}>
-        <RefreshCw className={`w-4 h-4 text-violet-500 ${isRefreshing ? 'ptr-spinning' : ''}`}
+        style={{ transform: `scale(${0.85 + progress * 0.15})` }}>
+        <RefreshCw className={`w-4 h-4 text-BATAMART-primary ${isRefreshing ? 'ptr-spinning' : ''}`}
           style={{ transform: isRefreshing ? undefined : `rotate(${progress * 220}deg)` }} />
         <span className="text-xs font-bold text-gray-600">
           {isRefreshing ? 'Refreshing…' : ready ? 'Release to refresh' : 'Pull to refresh'}
@@ -982,13 +621,36 @@ function PullIndicator({ pullDistance, isRefreshing }: { pullDistance: number; i
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ██████████████████████████████████████████████████████
-//  MAIN PAGE
-// ██████████████████████████████████████████████████████
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Live Stats Bar
+// ─────────────────────────────────────────────
+function LiveStatsBar({ count }: { count: number }) {
+  if (!count) return null
+  return (
+    <div className="flex items-center gap-3 flex-wrap text-[11px] text-gray-500 font-medium">
+      <span className="flex items-center gap-1">
+        <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse inline-block" />
+        <span className="font-bold text-gray-700">{count}</span> products live
+      </span>
+      <span className="w-px h-3 bg-gray-200" />
+      <span className="flex items-center gap-1">
+        <span className="viewer-anim font-bold">🔴 LIVE</span>
+        <span>marketplace</span>
+      </span>
+      <span className="w-px h-3 bg-gray-200" />
+      <span className="flex items-center gap-1">
+        <Users className="w-3 h-3 text-violet-400" />
+        <span>Students buying now</span>
+      </span>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────
 export default function MarketplacePage() {
-  const router       = useRouter()
+  const router = useRouter()
   const searchParams = useSearchParams()
 
   const isApp = searchParams.get('app') === 'true' ||
@@ -999,63 +661,68 @@ export default function MarketplacePage() {
     return !isSplashPending()
   })
 
-  const [allProducts, setAllProducts]               = useState<any[]>([])
-  const [loading, setLoading]                       = useState(true)
-  const [selectedCategory, setSelectedCategory]     = useState('All')
-  const [viewMode, setViewMode]                     = useState<'feed' | 'grid'>('feed')
-  const [recentlyViewed, setRecentlyViewed]         = useState<any[]>([])
+  const [allProducts, setAllProducts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [viewMode, setViewMode] = useState<'feed' | 'grid'>('feed')
+  const [recentlyViewed, setRecentlyViewed] = useState<any[]>([])
   const [interestCategories, setInterestCategories] = useState<string[]>([])
-  const [searchInput, setSearchInput]               = useState('')
-  const [recentSearches, setRecentSearches]         = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions]       = useState(false)
-  const [mounted, setMounted]                       = useState(false)
-  const [dropdownPos, setDropdownPos]               = useState({ top:0, left:0, width:0 })
-  const [universityShortName, setUniversityShortName] = useState('')
-  const [promoBanner, setPromoBanner]               = useState(0)
-  const [pullDistance, setPullDistance]             = useState(0)
-  const [isRefreshing, setIsRefreshing]             = useState(false)
+  const [searchInput, setSearchInput] = useState('')
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
+  const [universityShortName, setUniversityShortName] = useState<string>('')
+  const [promoBanner, setPromoBanner] = useState(0)
 
-  const inputRef                = useRef<HTMLInputElement>(null)
-  const searchRef               = useRef<HTMLDivElement>(null)
-  const isClickingSuggRef       = useRef(false)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // rotate promo banner
+  const inputRef = useRef<HTMLInputElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const isClickingSuggestionRef = useRef(false)
+
+  // Rotate promo banner
   useEffect(() => {
-    const t = setInterval(() => setPromoBanner(p => (p + 1) % PROMO_BANNERS.length), 4500)
+    const t = setInterval(() => setPromoBanner(p => (p + 1) % PROMO_BANNERS.length), 4000)
     return () => clearInterval(t)
   }, [])
 
   useEffect(() => {
     if (splashDone) return
-    const h = () => setSplashDone(true)
-    window.addEventListener('batamart:splash-done', h)
-    const fb = setTimeout(() => setSplashDone(true), 4000)
-    return () => { window.removeEventListener('batamart:splash-done', h); clearTimeout(fb) }
+    const handler = () => setSplashDone(true)
+    window.addEventListener('batamart:splash-done', handler)
+    const fallback = setTimeout(() => setSplashDone(true), 4000)
+    return () => { window.removeEventListener('batamart:splash-done', handler); clearTimeout(fallback) }
   }, [splashDone])
 
   useEffect(() => {
     if (document.getElementById('BATAMART-anim')) return
-    const s = document.createElement('style'); s.id = 'BATAMART-anim'; s.textContent = ANIM_CSS
+    const s = document.createElement('style')
+    s.id = 'BATAMART-anim'
+    s.textContent = ANIM_CSS
     document.head.appendChild(s)
   }, [])
 
   useEffect(() => {
     setMounted(true)
-    try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
-    try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
+    try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch { }
+    try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch { }
     fetchFeed()
     const token = localStorage.getItem('token')
     if (token) {
-      fetch('/api/auth/me', { headers:{ Authorization:`Bearer ${token}` } })
+      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
-        .then(d => { if (d.user?.university?.shortName) setUniversityShortName(d.user.university.shortName) })
-        .catch(() => {})
+        .then(data => {
+          if (data.user?.university?.shortName) setUniversityShortName(data.user.university.shortName)
+        })
+        .catch(() => { })
     }
   }, [])
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (isClickingSuggRef.current) return
+      if (isClickingSuggestionRef.current) return
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowSuggestions(false)
     }
     document.addEventListener('mousedown', h)
@@ -1063,18 +730,19 @@ export default function MarketplacePage() {
   }, [])
 
   useEffect(() => {
-    if (selectedCategory === 'All') fetchFeed(); else fetchByCategory(selectedCategory)
+    if (selectedCategory === 'All') { fetchFeed() } else { fetchByCategory(selectedCategory) }
   }, [selectedCategory])
 
-  // pull-to-refresh
   useEffect(() => {
-    let startY = 0, latestDelta = 0, inPullMode = false
+    let startY = 0; let latestDelta = 0; let inPullMode = false
     const onTouchStart = (e: TouchEvent) => {
-      if (window.scrollY > 0 || isRefreshing) return
+      if (window.scrollY > 0) return
+      if (isRefreshing) return
       startY = e.touches[0].clientY; latestDelta = 0; inPullMode = false
     }
     const onTouchMove = (e: TouchEvent) => {
-      if (startY === 0 || isRefreshing) return
+      if (startY === 0) return
+      if (isRefreshing) return
       if (window.scrollY > 0) { startY = 0; inPullMode = false; setPullDistance(0); return }
       const delta = e.touches[0].clientY - startY
       if (!inPullMode) {
@@ -1083,7 +751,8 @@ export default function MarketplacePage() {
         inPullMode = true
       }
       latestDelta = delta
-      setPullDistance(Math.min(delta * PULL_RESIST, PULL_MAX))
+      const visual = Math.min(delta * PULL_RESIST, PULL_MAX)
+      setPullDistance(visual)
       e.preventDefault()
     }
     const onTouchEnd = async () => {
@@ -1096,13 +765,13 @@ export default function MarketplacePage() {
         setIsRefreshing(false); setPullDistance(0)
       } else { setPullDistance(0) }
     }
-    document.addEventListener('touchstart', onTouchStart, { passive:true })
-    document.addEventListener('touchmove',  onTouchMove,  { passive:false })
-    document.addEventListener('touchend',   onTouchEnd,   { passive:true })
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend', onTouchEnd, { passive: true })
     return () => {
       document.removeEventListener('touchstart', onTouchStart)
-      document.removeEventListener('touchmove',  onTouchMove)
-      document.removeEventListener('touchend',   onTouchEnd)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRefreshing])
@@ -1110,7 +779,7 @@ export default function MarketplacePage() {
   const updateDropdownPos = useCallback(() => {
     if (!inputRef.current) return
     const r = inputRef.current.getBoundingClientRect()
-    setDropdownPos({ top:r.bottom+8, left:r.left, width:r.width })
+    setDropdownPos({ top: r.bottom + 8, left: r.left, width: r.width })
   }, [])
 
   useEffect(() => {
@@ -1120,9 +789,14 @@ export default function MarketplacePage() {
   }, [updateDropdownPos])
 
   const buildFeedSignals = () => {
-    let viewed='', searched=''
-    try { viewed = Array.from(new Set((JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY)||'[]') as any[]).map(p=>p.category).filter(Boolean))).join(',') } catch {}
-    try { searched = (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY)||'[]') as string[]).join(',') } catch {}
+    let viewed = ''; let searched = ''
+    try {
+      const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+      viewed = Array.from(new Set(rv.map((p: any) => p.category).filter(Boolean))).join(',')
+    } catch { }
+    try {
+      searched = (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]') as string[]).join(',')
+    } catch { }
     return { viewed, searched }
   }
 
@@ -1133,16 +807,23 @@ export default function MarketplacePage() {
       if (!token) return
       const { viewed, searched } = buildFeedSignals()
       const params = new URLSearchParams()
-      if (viewed)   params.set('viewed', viewed)
+      if (viewed) params.set('viewed', viewed)
       if (searched) params.set('searched', searched)
-      const res  = await fetch(`/api/products/feed?${params.toString()}`, { headers:{ Authorization:`Bearer ${token}` } })
+      const res = await fetch(`/api/products/feed?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
       if (res.ok) {
         setAllProducts(data.products || [])
-        const cats = Array.from(new Set((data.products||[]).filter((p:any)=>p.isPersonalised).map((p:any)=>p.category))) as string[]
-        setInterestCategories(cats.slice(0,4))
+        const cats = Array.from(new Set(
+          (data.products || [])
+            .filter((p: any) => p.isPersonalised)
+            .map((p: any) => p.category)
+        )) as string[]
+        setInterestCategories(cats.slice(0, 4))
       }
-    } catch {} finally { setLoading(false) }
+    } catch { }
+    finally { setLoading(false) }
   }
 
   const fetchByCategory = async (category: string) => {
@@ -1150,26 +831,31 @@ export default function MarketplacePage() {
     try {
       const token = localStorage.getItem('token')
       if (!token) return
-      const res  = await fetch(`/api/products?category=${encodeURIComponent(category)}`, { headers:{ Authorization:`Bearer ${token}` } })
+      const res = await fetch(`/api/products?category=${encodeURIComponent(category)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
       if (res.ok) setAllProducts(data.products || [])
-    } catch {} finally { setLoading(false) }
+    } catch { }
+    finally { setLoading(false) }
   }
 
-  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style:'currency', currency:'NGN', maximumFractionDigits:0 }).format(p)
+  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
 
   const handleProductClick = (id: string) => {
     const token = localStorage.getItem('token')
     try {
-      const viewed = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY)||'[]')
+      const viewed = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
       const product = allProducts.find(p => p.id === id)
       if (product) {
-        const updated = [product, ...viewed.filter((v:any) => v.id !== id)].slice(0,20)
+        const updated = [product, ...viewed.filter((v: any) => v.id !== id)].slice(0, 20)
         localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated))
         setRecentlyViewed(updated)
       }
-    } catch {}
-    if (token) fetch(`/api/products/${id}/view`,{ method:'POST', headers:{ Authorization:`Bearer ${token}` } }).catch(()=>{})
+    } catch { }
+    if (token) {
+      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { })
+    }
     window.location.href = token ? `/product/${id}` : '/login'
   }
 
@@ -1177,258 +863,239 @@ export default function MarketplacePage() {
     const q = (searchTerm || searchInput).trim()
     if (!q) return
     try {
-      const updated = [q, ...recentSearches.filter(s=>s!==q)].slice(0,8)
+      const updated = [q, ...recentSearches.filter(s => s !== q)].slice(0, 8)
       setRecentSearches(updated)
       localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated))
-    } catch {}
+    } catch { }
     setShowSuggestions(false)
     router.push(`/search?q=${encodeURIComponent(q)}`)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key==='Enter') { e.preventDefault(); handleSearch() }
+    if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
   }
 
-  const forYouProducts = useMemo(()=>allProducts.filter(p=>p.isPersonalised).slice(0,10), [allProducts])
-  const trendingProducts = useMemo(()=>allProducts.filter(p=>p.isTrending).slice(0,10), [allProducts])
-  const newListings = useMemo(()=>allProducts.filter(p=>p.isNew).slice(0,10), [allProducts])
-  const discoverProducts = useMemo(()=>{
-    const shown = new Set([...forYouProducts,...trendingProducts,...newListings].map(p=>p.id))
-    return allProducts.filter(p=>!shown.has(p.id)).slice(0,16)
+  const forYouProducts = useMemo(() => allProducts.filter(p => p.isPersonalised).slice(0, 8), [allProducts])
+  const trendingProducts = useMemo(() => allProducts.filter(p => p.isTrending).slice(0, 8), [allProducts])
+  const newListings = useMemo(() => allProducts.filter(p => p.isNew).slice(0, 8), [allProducts])
+  const discoverProducts = useMemo(() => {
+    const shown = new Set([...forYouProducts.map(p => p.id), ...trendingProducts.map(p => p.id), ...newListings.map(p => p.id)])
+    return allProducts.filter(p => !shown.has(p.id)).slice(0, 12)
   }, [allProducts, forYouProducts, trendingProducts, newListings])
 
-  const filteredByCategory = useMemo(()=>
-    selectedCategory==='All' ? allProducts : allProducts.filter(p=>p.category===selectedCategory),
+  const filteredByCategory = useMemo(() =>
+    selectedCategory === 'All' ? allProducts : allProducts.filter(p => p.category === selectedCategory),
     [allProducts, selectedCategory]
   )
 
-  const suggestions = useMemo(()=>{
+  const suggestions = useMemo(() => {
     const q = searchInput.trim().toLowerCase()
-    if (!q) return recentSearches.slice(0,6).map(s=>({ type:'recent', label:s }))
-    const pm = allProducts
-      .filter(p=>{ const tags=parseTags(p.description); return p.name.toLowerCase().includes(q)||tags.some((t:string)=>t.toLowerCase().includes(q)) })
-      .slice(0,5).map(p=>({ type:'product', label:p.name, sublabel:fmt(p.price), id:p.id, image:p.images[0] }))
-    const tm = TRENDING_SEARCHES.filter(s=>s.toLowerCase().includes(q)).slice(0,3).map(s=>({ type:'trending', label:s }))
-    return [...pm, ...tm]
+    if (!q) return recentSearches.slice(0, 6).map(s => ({ type: 'recent', label: s }))
+    const productMatches = allProducts
+      .filter(p => { const tags = parseTags(p.description); return p.name.toLowerCase().includes(q) || tags.some((t: string) => t.toLowerCase().includes(q)) })
+      .slice(0, 5).map(p => ({ type: 'product', label: p.name, sublabel: fmt(p.price), id: p.id, image: p.images[0] }))
+    const trendingMatches = TRENDING_SEARCHES.filter(s => s.toLowerCase().includes(q)).slice(0, 3).map(s => ({ type: 'trending', label: s }))
+    return [...productMatches, ...trendingMatches]
   }, [searchInput, allProducts, recentSearches])
 
   const SuggestionsDropdown = mounted && showSuggestions && suggestions.length > 0
     ? createPortal(
-        <div className="drop-in fixed z-[9998] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
-          style={{ top:dropdownPos.top, left:dropdownPos.left, width:dropdownPos.width, maxHeight:'320px', overflowY:'auto' }}>
-          <div className="px-4 py-2.5 border-b border-gray-50 bg-gray-50/80 flex items-center gap-2">
-            <Search className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-[11px] font-black text-gray-400 uppercase tracking-wider">
-              {!searchInput.trim() ? 'Recent Searches' : 'Suggestions'}
-            </span>
-          </div>
-          {suggestions.map((s: any, i) => (
-            <button key={i}
-              onMouseDown={e=>{e.preventDefault();isClickingSuggRef.current=true}}
-              onClick={()=>{isClickingSuggRef.current=false; if(s.type==='product'){handleProductClick(s.id);return}; handleSearch(s.label)}}
-              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-violet-50 transition-colors text-left group">
-              {s.type==='product' && s.image
-                ? <img src={s.image} className="w-9 h-9 rounded-xl object-cover flex-shrink-0 shadow-sm" alt="" />
-                : s.type==='recent'
-                  ? <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center"><Clock className="w-4 h-4 text-gray-400" /></div>
-                  : <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center"><TrendingUp className="w-4 h-4 text-violet-500" /></div>
-              }
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-800 truncate group-hover:text-violet-700 transition-colors">{s.label}</p>
-                {s.sublabel && <p className="text-xs text-violet-500 font-black">{s.sublabel}</p>}
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-violet-400 flex-shrink-0 transition-colors" />
-            </button>
-          ))}
-          {searchInput.trim() && (
-            <button
-              onMouseDown={e=>{e.preventDefault();isClickingSuggRef.current=true}}
-              onClick={()=>{isClickingSuggRef.current=false;handleSearch()}}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-violet-50 transition-colors border-t border-gray-50">
-              <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
-                <Search className="w-4 h-4 text-violet-600" />
-              </div>
-              <span className="text-sm font-black text-violet-600">Search &quot;{searchInput}&quot;</span>
-              <ArrowRight className="w-3.5 h-3.5 text-violet-400 ml-auto flex-shrink-0" />
-            </button>
+      <div
+        className="drop-in fixed z-[9998] bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+        style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, maxHeight: '320px', overflowY: 'auto' }}
+      >
+        <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+            {!searchInput.trim() ? 'Recent Searches' : 'Suggestions'}
+          </span>
+          {!searchInput.trim() && recentSearches.length > 0 && (
+            <span className="text-[10px] text-BATAMART-primary font-bold">RECENT</span>
           )}
-        </div>,
-        document.body
-      ) : null
+        </div>
+        {suggestions.map((s: any, i) => (
+          <button
+            key={i}
+            onMouseDown={(e) => { e.preventDefault(); isClickingSuggestionRef.current = true }}
+            onClick={() => {
+              isClickingSuggestionRef.current = false
+              if (s.type === 'product') { handleProductClick(s.id); return }
+              handleSearch(s.label)
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
+          >
+            {s.type === 'product' && s.image
+              ? <img src={s.image} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
+              : s.type === 'recent'
+                ? <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                : <TrendingUp className="w-4 h-4 text-BATAMART-primary flex-shrink-0" />
+            }
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800 truncate">{s.label}</p>
+              {s.sublabel && <p className="text-xs text-BATAMART-primary font-bold">{s.sublabel}</p>}
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+          </button>
+        ))}
+        {searchInput.trim() && (
+          <button
+            onMouseDown={(e) => { e.preventDefault(); isClickingSuggestionRef.current = true }}
+            onClick={() => { isClickingSuggestionRef.current = false; handleSearch() }}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-BATAMART-primary/5 hover:bg-BATAMART-primary/10 transition-colors border-t border-gray-50"
+          >
+            <div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
+              <Search className="w-4 h-4 text-BATAMART-primary" />
+            </div>
+            <span className="text-sm font-bold text-BATAMART-primary">Search for &quot;{searchInput}&quot;</span>
+            <ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" />
+          </button>
+        )}
+      </div>,
+      document.body
+    ) : null
 
   if (!splashDone) return <div className="min-h-screen bg-white" />
 
   return (
-    <div className="min-h-screen" style={{ background:'#f2f3f7' }}>
+    <div className="min-h-screen bg-[#f4f5f7]">
       {SuggestionsDropdown}
+
+      {/* Pull-to-Refresh */}
       {(pullDistance > 0 || isRefreshing) && (
         <PullIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
       )}
 
-      {/* ═══════════════════════════════════════
-          TICKER
-      ═══════════════════════════════════════ */}
+      {/* ── PROMO TICKER ── */}
       <PromoTicker />
 
-      {/* ═══════════════════════════════════════
-          HERO
-      ═══════════════════════════════════════ */}
+      {/* ── HERO ── */}
       <div
-        className="relative overflow-hidden scanlines"
+        className="relative overflow-hidden"
         style={{
-          background:'linear-gradient(135deg, #2e1065 0%, #4c1d95 30%, #6366f1 65%, #818cf8 100%)',
-          transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance*0.3,28)}px)` : undefined,
-          transition: isRefreshing || pullDistance===0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
+          background: 'linear-gradient(135deg, #4c1d95 0%, #6366f1 50%, #4c1d95 100%)',
+          transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.3, 28)}px)` : undefined,
+          transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
         }}
       >
-        {/* Animated orbs */}
+        {/* Background texture */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="hero-orb-1 absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full"
-            style={{ background:'radial-gradient(circle, rgba(139,92,246,0.4) 0%, transparent 70%)' }} />
-          <div className="hero-orb-2 absolute -bottom-40 -left-40 w-[500px] h-[500px] rounded-full"
-            style={{ background:'radial-gradient(circle, rgba(99,102,241,0.35) 0%, transparent 70%)' }} />
-          <div className="hero-orb-3 absolute top-1/3 left-1/3 w-[300px] h-[300px] rounded-full"
-            style={{ background:'radial-gradient(circle, rgba(168,85,247,0.2) 0%, transparent 70%)' }} />
-
-          {/* dot grid */}
-          <svg className="absolute inset-0 w-full h-full opacity-[0.05]">
-            <defs>
-              <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-                <circle cx="2" cy="2" r="1.5" fill="white" />
-              </pattern>
-            </defs>
+          <div className="absolute -top-24 -right-24 w-[500px] h-[500px] rounded-full bg-white/[0.06] blur-3xl" />
+          <div className="absolute top-1/2 -left-32 w-[400px] h-[400px] rounded-full bg-white/[0.04] blur-3xl" />
+          <div className="absolute bottom-0 right-1/3 w-[300px] h-[300px] rounded-full bg-indigo-300/[0.08] blur-2xl" />
+          <svg className="absolute inset-0 w-full h-full opacity-[0.04]">
+            <defs><pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.5" fill="white" /></pattern></defs>
             <rect width="100%" height="100%" fill="url(#dots)" />
           </svg>
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-5 sm:pt-7 pb-0">
-
-          {/* Rotating promo strip */}
-          <div className="mb-4 h-8 overflow-hidden">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 md:pt-10 pb-0">
+          {/* Promo banner strip */}
+          <div className="mb-4 overflow-hidden">
             {PROMO_BANNERS.map((b, i) => (
-              <div key={i}
-                className={`flex transition-all duration-700 ${i === promoBanner ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 absolute'}`}
-                style={{ position: i !== promoBanner ? 'absolute' : 'relative' }}>
-                <div className={`inline-flex items-center gap-2 bg-gradient-to-r ${b.grad} px-3 py-1.5 rounded-2xl shadow-lg`}>
+              <div key={i} className={`transition-all duration-500 ${i === promoBanner ? 'block' : 'hidden'}`}>
+                <div className={`inline-flex items-center gap-2 bg-gradient-to-r ${b.accent} px-3 py-1.5 rounded-full`}>
                   <span className="text-sm">{b.emoji}</span>
-                  <span className="text-white font-black text-xs tracking-wide">{b.title}</span>
-                  <span className="w-px h-3 bg-white/30" />
-                  <span className="text-white/80 text-[11px] font-medium">{b.sub}</span>
-                  <Zap className="w-3 h-3 text-white/70 bolt-flash" />
+                  <span className="text-white text-[11px] sm:text-xs font-bold">{b.text}</span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Main hero row */}
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-5">
-            <div className="space-y-2.5 w-full sm:w-auto section-enter">
-              {/* LIVE chip */}
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-5 sm:mb-6">
+            <div className="space-y-2 w-full sm:w-auto section-enter">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-white/90 text-[10px] font-black ring-1 ring-white/20 backdrop-blur-sm uppercase tracking-wider">
-                  <Zap className="w-3 h-3 fill-white" /> Campus Marketplace
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-white/90 text-[10px] sm:text-xs font-bold ring-1 ring-white/20 backdrop-blur-sm">
+                  <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-white" /> Campus Marketplace
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/25 text-red-100 text-[10px] font-black ring-1 ring-red-400/40">
-                  <span className="live-dot w-1.5 h-1.5 rounded-full inline-block" />
-                  LIVE
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-400/20 text-emerald-200 text-[10px] font-bold ring-1 ring-emerald-400/30">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" /> LIVE
                 </span>
               </div>
 
-              {/* Big headline */}
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-[1.05]"
-                style={{ fontFamily:"'Syne', sans-serif", textShadow:'0 2px 20px rgba(0,0,0,0.3)' }}>
-                Shop Smart,
-                <br />
-                <span style={{ color:'#c4b5fd' }}>
-                  Buy Local{universityShortName ? ` @ ${universityShortName}` : ''}
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight">
+                Your Campus
+                <span className="text-white/70 block sm:inline">
+                  <br className="hidden sm:block" />
+                  {universityShortName ? ` at ${universityShortName}` : ' Marketplace'}
                 </span>
               </h1>
 
-              <p className="text-white/60 text-sm max-w-xs">
-                Your campus marketplace — products picked just for you, by people who get it.
+              <p className="text-white/65 text-xs sm:text-sm max-w-sm">
+                Discover products picked for you — from your campus, by your campus.
               </p>
 
-              {/* Trust chips */}
+              {/* Trust pills */}
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {[
-                  { icon:<Shield className="w-3 h-3" />, label:'Verified Sellers' },
-                  { icon:<Award className="w-3 h-3" />, label:'Rated Products' },
-                  { icon:<Package className="w-3 h-3" />, label:'Campus Delivery' },
-                  { icon:<CheckCircle className="w-3 h-3" />, label:'Buyer Protection' },
+                  { icon: <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" />, label: 'Verified Sellers' },
+                  { icon: <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5" />, label: 'Rated Products' },
+                  { icon: <Package className="w-3 h-3 sm:w-3.5 sm:h-3.5" />, label: 'Campus Delivery' },
+                  { icon: <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />, label: 'Buyer Protection' },
                 ].map(({ icon, label }, i) => (
-                  <span key={label}
-                    className="section-enter inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/10 text-white/85 text-[10px] font-bold ring-1 ring-white/15 backdrop-blur-sm"
-                    style={{ animationDelay:`${120 + i*60}ms` }}>
+                  <span key={label} className="section-enter inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/10 text-white/85 text-[10px] sm:text-xs font-semibold ring-1 ring-white/15 backdrop-blur-sm"
+                    style={{ animationDelay: `${120 + i * 60}ms` }}>
                     {icon} {label}
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* CTA buttons */}
-            <div className="hidden sm:flex flex-col gap-2.5 mt-2 section-enter flex-shrink-0" style={{ animationDelay:'80ms' }}>
-              <Link href="/sell"
-                className="btn-press shimmer-btn flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm shadow-xl"
-                style={{ boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}>
-                <Sparkles className="w-4 h-4 text-violet-600" /> Start Selling
+            {/* CTA Buttons */}
+            <div className="hidden sm:flex flex-col gap-2 mt-1 section-enter flex-shrink-0" style={{ animationDelay: '80ms' }}>
+              <Link href="/sell" className="btn-press glow-pulse flex items-center gap-2 bg-white text-BATAMART-primary px-5 py-2.5 rounded-xl font-black text-sm shadow-xl">
+                <Sparkles className="w-4 h-4" /> Sell a Product
               </Link>
-              <Link href="/report"
-                className="btn-press flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-semibold text-sm ring-1 ring-white/20 transition-colors backdrop-blur-sm">
+              <Link href="/report" className="btn-press flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-xl font-semibold text-sm ring-1 ring-white/15 transition-colors">
                 <AlertCircle className="w-4 h-4" /> Report Issue
               </Link>
             </div>
           </div>
 
-          {/* ─── SEARCH CARD ─── */}
-          <div ref={searchRef} className="relative section-enter" style={{ animationDelay:'50ms' }}>
-            <div className="bg-white rounded-t-3xl shadow-[0_-8px_32px_rgba(0,0,0,0.2)] p-4">
-
-              {/* Search input row */}
-              <div className="flex gap-2 sm:gap-3">
-                <div className="search-input flex-1 flex items-center gap-2 bg-gray-50 ring-1 ring-gray-200 rounded-2xl px-4 group">
-                  <Search className="w-4 h-4 text-gray-400 flex-shrink-0 group-focus-within:text-violet-500 transition-colors" />
+          {/* Search card */}
+          <div ref={searchRef} className="relative section-enter" style={{ animationDelay: '60ms' }}>
+            <div className="bg-white rounded-t-2xl sm:rounded-t-3xl shadow-[0_-4px_24px_rgba(0,0,0,0.12)] p-3 sm:p-4">
+              {/* Search input */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <div className="search-input flex-1 flex items-center gap-2 bg-gray-50 ring-1 ring-gray-200 rounded-xl px-3 sm:px-4">
+                  <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <input
                     ref={inputRef}
                     type="text"
                     value={searchInput}
-                    onChange={e=>{ setSearchInput(e.target.value); updateDropdownPos(); setShowSuggestions(true) }}
-                    onFocus={()=>{ updateDropdownPos(); setShowSuggestions(true) }}
+                    onChange={e => { setSearchInput(e.target.value); updateDropdownPos(); setShowSuggestions(true) }}
+                    onFocus={() => { updateDropdownPos(); setShowSuggestions(true) }}
                     onKeyDown={handleKeyDown}
-                    placeholder="Search anything on campus..."
-                    className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 py-3.5 font-medium"
+                    placeholder="Search products on campus..."
+                    className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 py-3"
                     autoComplete="off"
                   />
                   {searchInput && (
-                    <button onClick={()=>{ setSearchInput(''); setShowSuggestions(false) }}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg">
+                    <button onClick={() => { setSearchInput(''); setShowSuggestions(false) }} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                <button onClick={()=>handleSearch()}
-                  className="btn-press px-5 sm:px-8 py-3.5 rounded-2xl font-black text-sm text-white shadow-lg transition-colors"
-                  style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow:'0 4px 20px rgba(99,102,241,0.4)' }}>
-                  Search
-                </button>
-                {!isApp && (
-                  <Link href="/sell"
-                    className="btn-press sm:hidden flex items-center justify-center w-12 rounded-2xl text-violet-600 border border-violet-100"
-                    style={{ background:'linear-gradient(135deg,#ede9fe,#ddd6fe)' }}>
-                    <Sparkles className="w-4 h-4" />
-                  </Link>
-                )}
+                <div className="flex gap-2">
+                  <button onClick={() => handleSearch()} className="btn-press flex-1 sm:flex-none px-6 sm:px-8 py-3 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-xl font-black text-sm shadow-md transition-colors">
+                    Search
+                  </button>
+                  {!isApp && (
+                    <Link href="/sell" className="btn-press sm:hidden flex items-center justify-center w-12 h-12 my-auto bg-BATAMART-primary/10 border border-BATAMART-primary/20 rounded-xl">
+                      <Sparkles className="w-4 h-4 text-BATAMART-primary" />
+                    </Link>
+                  )}
+                </div>
               </div>
 
               {/* Trending chips */}
-              <div className="flex items-center gap-2 mt-3">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex-shrink-0 flex items-center gap-1">
-                  <Flame className="w-3 h-3 text-orange-400 fire-flicker" /> HOT:
+              <div className="flex items-center gap-2 mt-3 overflow-hidden">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex-shrink-0 flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-orange-400" /> HOT:
                 </span>
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
                   {TRENDING_SEARCHES.map(tag => (
-                    <button key={tag} onClick={()=>router.push(`/search?q=${encodeURIComponent(tag)}`)}
-                      className="hot-tag flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-violet-100 hover:text-violet-700 text-gray-600 rounded-xl text-[10px] font-bold whitespace-nowrap flex-shrink-0 border border-transparent hover:border-violet-200 transition-colors">
-                      {tag}
+                    <button key={tag} onClick={() => router.push(`/search?q=${encodeURIComponent(tag)}`)}
+                      className="hot-tag flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-BATAMART-primary hover:text-white text-gray-600 rounded-full text-[10px] font-bold whitespace-nowrap flex-shrink-0 transition-colors">
+                      <Tag className="w-2.5 h-2.5" />{tag}
                     </button>
                   ))}
                 </div>
@@ -1438,38 +1105,30 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════
-          TRUST BAR
-      ═══════════════════════════════════════ */}
+      {/* ── TRUST BAR ── */}
       <TrustBar />
 
-      {/* ═══════════════════════════════════════
-          CATEGORY NAV — sticky
-      ═══════════════════════════════════════ */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-gray-200/60"
-        style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.06)' }}>
-        <div className="max-w-7xl mx-auto px-4">
+      {/* ── CATEGORY NAV ── */}
+      <div className="sticky top-0 z-30 bg-white/98 backdrop-blur-md border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between gap-3 py-2">
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar flex-1">
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar flex-1 scroll-section">
               {CATEGORIES.map(cat => (
-                <button key={cat.name} onClick={()=>setSelectedCategory(cat.name)}
-                  className={`cat-btn flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold whitespace-nowrap text-[11px] flex-shrink-0 ${
-                    selectedCategory===cat.name
-                      ? 'cat-active text-white'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}>
-                  <span>{cat.icon}</span>
+                <button key={cat.name} onClick={() => setSelectedCategory(cat.name)}
+                  className={`cat-btn flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold whitespace-nowrap text-[11px] sm:text-xs flex-shrink-0 ${selectedCategory === cat.name
+                    ? 'cat-active bg-BATAMART-primary text-white shadow-md shadow-BATAMART-primary/25'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`}>
+                  <span className="text-sm">{cat.icon}</span>
                   {cat.name}
                 </button>
               ))}
             </div>
             <div className="flex items-center gap-0.5 bg-gray-100 rounded-xl p-1 flex-shrink-0">
-              {(['feed','grid'] as const).map(mode => (
-                <button key={mode} onClick={()=>setViewMode(mode)}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-black capitalize transition-all duration-200"
-                  style={viewMode===mode
-                    ? { background:'white', color:'#6366f1', boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }
-                    : { color:'#9ca3af' }}>
+              {(['feed', 'grid'] as const).map(mode => (
+                <button key={mode} onClick={() => setViewMode(mode)}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold capitalize transition-all duration-200"
+                  style={viewMode === mode ? { background: 'white', color: '#6366f1', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' } : { color: '#6b7280' }}>
                   {mode}
                 </button>
               ))}
@@ -1478,197 +1137,190 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════
-          MAIN CONTENT
-      ═══════════════════════════════════════ */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 pb-28 space-y-4">
+      {/* ── CONTENT ── */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5 pb-28 space-y-4">
 
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-            {Array.from({length:10}).map((_,i)=><SkeletonCard key={i} delay={i*60} />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} delay={i * 60} />)}
           </div>
 
         ) : selectedCategory !== 'All' ? (
-          /* ─── CATEGORY VIEW ─── */
+          /* ── CATEGORY FILTER VIEW ── */
           <div>
-            {/* breadcrumb */}
-            <div className="bg-white rounded-2xl border border-gray-100 px-4 py-3 flex items-center gap-2 mb-4 shadow-sm">
-              <button onClick={()=>setSelectedCategory('All')}
-                className="text-xs font-black text-violet-600 hover:text-violet-800 transition-colors flex items-center gap-1">
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => setSelectedCategory('All')} className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors flex items-center gap-1">
                 <ChevronLeft className="w-3.5 h-3.5" /> All
               </button>
-              <ChevronRight className="w-3 h-3 text-gray-300" />
-              <span className="text-xs font-black text-gray-700">{selectedCategory}</span>
-              <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-black text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
-                <Package className="w-2.5 h-2.5" /> {filteredByCategory.length} items
-              </span>
+              <span className="text-gray-300">/</span>
+              <span className="text-sm font-bold text-gray-700">{selectedCategory}</span>
+              <span className="ml-auto text-[11px] text-gray-400 font-medium">{filteredByCategory.length} items</span>
             </div>
             {filteredByCategory.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-5xl mb-4">🛍️</div>
-                <p className="text-gray-700 font-black text-lg mb-1">Nothing here yet</p>
-                <p className="text-gray-400 text-sm mb-6">Be the first to sell in this category!</p>
-                <Link href="/sell" className="btn-press inline-flex items-center gap-2 px-6 py-3 text-white rounded-2xl font-black text-sm shadow-lg"
-                  style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow:'0 6px 24px rgba(99,102,241,0.35)' }}>
+              <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+                <ShoppingBag className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400 font-semibold mb-4">Nothing here yet</p>
+                <Link href="/sell" className="btn-press inline-flex items-center gap-2 px-5 py-2.5 bg-BATAMART-primary text-white rounded-xl font-bold text-sm shadow-md">
                   <Sparkles className="w-4 h-4" /> List a Product
                 </Link>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-                {filteredByCategory.map((p,i)=><ProductCard key={p.id} product={p} onClick={()=>handleProductClick(p.id)} delay={i*40} />)}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {filteredByCategory.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
               </div>
             )}
           </div>
 
         ) : viewMode === 'grid' ? (
-          /* ─── GRID VIEW ─── */
+          /* ── GRID VIEW ── */
           <div>
-            <div className="bg-white rounded-2xl border border-gray-100 px-4 py-3 mb-4 shadow-sm">
-              <LiveStatsStrip count={allProducts.length} />
+            <div className="flex items-center justify-between mb-3">
+              <LiveStatsBar count={allProducts.length} />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-              {allProducts.map((p,i)=><ProductCard key={p.id} product={p} onClick={()=>handleProductClick(p.id)} delay={i*25} />)}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {allProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />)}
             </div>
           </div>
 
         ) : (
-          /* ─────────────────────────────────────────────
-             PERSONALISED FEED — THE MALL
-          ───────────────────────────────────────────── */
+          /* ── PERSONALISED FEED VIEW ── */
           <div className="space-y-4">
 
-            {/* Live stats bar */}
+            {/* Live stats */}
             {allProducts.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 px-4 py-3 shadow-sm">
-                <LiveStatsStrip count={allProducts.length} />
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+                <LiveStatsBar count={allProducts.length} />
               </div>
             )}
 
-            {/* ── Interest Categories ── */}
+            {/* Interest Categories */}
             {interestCategories.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-                <SectionHeader
-                  title="Your Interests"
-                  icon={<Eye className="w-4 h-4 text-violet-500" />}
-                  sub="Based on your browsing history"
-                  badge="Personalised"
-                  badgeClass="bg-violet-100 text-violet-700"
-                />
+              <MarketSection>
+                <SectionHeader title="Your Interests" icon={<Eye className="w-4 h-4 text-violet-500" />} sub="Based on your browsing" />
                 <div className="flex flex-wrap gap-2">
                   {interestCategories.map((cat, i) => {
-                    const catObj = CATEGORIES.find(c=>c.name===cat)
+                    const catObj = CATEGORIES.find(c => c.name === cat)
                     return (
-                      <button key={cat} onClick={()=>setSelectedCategory(cat)}
-                        className="interest-pill card-enter flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-sm font-bold text-gray-700 shadow-sm"
-                        style={{ animationDelay:`${i*60}ms` }}>
-                        <span className="text-base">{catObj?.icon}</span> {cat}
+                      <button key={cat} onClick={() => setSelectedCategory(cat)}
+                        className="interest-pill card-enter flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm"
+                        style={{ animationDelay: `${i * 50}ms` }}>
+                        <span>{catObj?.icon}</span> {cat}
                       </button>
                     )
                   })}
                 </div>
-              </div>
+              </MarketSection>
             )}
 
-            {/* ── Recently Viewed ── */}
+            {/* Recently Viewed */}
             {recentlyViewed.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-                <SectionHeader
-                  title="Recently Viewed"
-                  icon={<Clock className="w-4 h-4 text-gray-400" />}
-                  sub="Pick up where you left off"
-                  counter={recentlyViewed.slice(0,8).length}
-                />
-                <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 h-scroll-snap">
-                  {recentlyViewed.slice(0,8).map((p, i) => (
-                    <div key={p.id} onClick={()=>handleProductClick(p.id)}
-                      className="rv-card card-enter flex-shrink-0 w-32 sm:w-36 cursor-pointer rounded-2xl overflow-hidden border border-gray-100 bg-gray-50"
-                      style={{ animationDelay:`${i*50}ms` }}>
-                      <div className="overflow-hidden" style={{ aspectRatio:'1/1' }}>
-                        <img src={p.images?.[0]||'/placeholder.png'} alt={p.name} className="product-img w-full h-full object-cover" />
+              <MarketSection>
+                <SectionHeader title="Recently Viewed" icon={<Clock className="w-4 h-4 text-gray-400" />} sub="Pick up where you left off" />
+                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+                  {recentlyViewed.slice(0, 8).map((p, i) => (
+                    <div key={p.id} onClick={() => handleProductClick(p.id)}
+                      className="rv-card card-enter flex-shrink-0 w-36 sm:w-40 cursor-pointer bg-gray-50 rounded-xl overflow-hidden border border-gray-100"
+                      style={{ animationDelay: `${i * 50}ms` }}>
+                      <div className="aspect-square bg-gray-100 overflow-hidden">
+                        <img src={p.images?.[0] || '/placeholder.png'} alt={p.name} className="product-img w-full h-full object-cover" />
                       </div>
                       <div className="p-2">
                         <p className="text-xs font-bold text-gray-800 line-clamp-2 leading-snug">{p.name}</p>
-                        <p className="text-xs font-black mt-1" style={{ color:'#6366f1' }}>{fmt(p.price)}</p>
+                        <p className="text-xs font-black text-BATAMART-primary mt-1">{fmt(p.price)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </MarketSection>
             )}
 
-            {/* ── 🔥 FLASH DEALS (Trending) ── */}
-            <FlashSection
-              title="Flash Deals"
-              sub="Trending hard on campus"
-              badge="🔥 HOT"
-              headerClass="flash-header"
-              iconEl={<Flame className="w-6 h-6 fire-flicker" />}
-              products={trendingProducts}
-              onProductClick={handleProductClick}
-              onSeeAll={()=>setSelectedCategory('All')}
-            />
-
-            {/* divider shimmer */}
-            {trendingProducts.length > 0 && <div className="divider-shimmer rounded-full" />}
-
-            {/* ── ⭐ FOR YOU ── */}
-            {forYouProducts.length > 0 && (
-              <FlashSection
-                title="Picked For You"
-                sub="Based on your vibe & history"
-                badge="✨ Personal"
-                headerClass="flash-header-alt"
-                iconEl={<Heart className="w-6 h-6 text-white fill-white sparkle-spin" />}
-                products={forYouProducts}
-                onProductClick={handleProductClick}
-                onSeeAll={interestCategories[0] ? ()=>setSelectedCategory(interestCategories[0]) : undefined}
-              />
-            )}
-
-            {forYouProducts.length > 0 && <div className="divider-shimmer rounded-full" />}
-
-            {/* ── 🆕 JUST DROPPED ── */}
-            <FlashSection
-              title="Just Dropped"
-              sub="Fresh listings added today"
-              badge="🆕 NEW"
-              headerClass="new-header"
-              iconEl={<Sparkles className="w-6 h-6 text-white sparkle-spin" />}
-              products={newListings}
-              onProductClick={handleProductClick}
-            />
-
-            {newListings.length > 0 && <div className="divider-shimmer rounded-full" />}
-
-            {/* ── 🛍️ DISCOVER MORE (full grid) ── */}
-            {discoverProducts.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm grid-bg">
-                <SectionHeader
-                  title="Discover More"
-                  icon={<ShoppingBag className="w-4 h-4 text-gray-500" />}
-                  sub="Everything available on your campus"
-                  counter={discoverProducts.length}
-                />
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-                  {discoverProducts.map((p,i)=>(
-                    <ProductCard key={p.id} product={p} onClick={()=>handleProductClick(p.id)} delay={i*20} />
-                  ))}
+            {/* 🔥 Flash Deals / Trending */}
+            {trendingProducts.length > 0 && (
+              <div className="rounded-2xl overflow-hidden border border-orange-100 shadow-sm">
+                <div className="section-stripe-orange px-4 pt-4 pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-white" />
+                      <div>
+                        <h2 className="text-base font-black text-white">Flash Deals</h2>
+                        <p className="text-orange-100 text-[11px]">Trending on campus right now</p>
+                      </div>
+                      <span className="badge-pulse ml-1 bg-white/20 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase">HOT</span>
+                    </div>
+                    <button onClick={() => setSelectedCategory('All')} className="text-white/80 text-xs font-bold flex items-center gap-1">
+                      See all <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-white px-4 py-4">
+                  <HScrollRow products={trendingProducts} onProductClick={handleProductClick} />
                 </div>
               </div>
             )}
 
+            {/* ⭐ For You */}
+            {forYouProducts.length > 0 && (
+              <MarketSection>
+                <SectionHeader
+                  title="For You"
+                  icon={<Heart className="w-4 h-4 text-violet-500" />}
+                  sub="Based on what you browse, search, and order"
+                  badge="Personalised"
+                  badgeColor="bg-violet-500"
+                  onSeeAll={interestCategories[0] ? () => setSelectedCategory(interestCategories[0]) : undefined}
+                />
+                <HScrollRow products={forYouProducts} onProductClick={handleProductClick} />
+              </MarketSection>
+            )}
+
+            {/* 🆕 Just Dropped */}
+            {newListings.length > 0 && (
+              <div className="rounded-2xl overflow-hidden border border-emerald-100 shadow-sm">
+                <div className="section-stripe-emerald px-4 pt-4 pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-white" />
+                      <div>
+                        <h2 className="text-base font-black text-white">Just Dropped</h2>
+                        <p className="text-emerald-100 text-[11px]">Fresh listings added today</p>
+                      </div>
+                      <span className="ml-1 bg-white/20 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase">NEW</span>
+                    </div>
+                    <button className="text-white/80 text-xs font-bold flex items-center gap-1">
+                      See all <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-white px-4 py-4">
+                  <HScrollRow products={newListings} onProductClick={handleProductClick} />
+                </div>
+              </div>
+            )}
+
+            {/* 🛍️ Discover More (grid) */}
+            {discoverProducts.length > 0 && (
+              <MarketSection>
+                <SectionHeader
+                  title="Discover More"
+                  icon={<ShoppingBag className="w-4 h-4 text-gray-500" />}
+                  sub="Explore everything on campus"
+                />
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {discoverProducts.map((p, i) => (
+                    <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 25} />
+                  ))}
+                </div>
+              </MarketSection>
+            )}
+
             {/* Empty state */}
             {allProducts.length === 0 && (
-              <div className="text-center py-24 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-6xl mb-4 animate-bounce">🛍️</div>
-                <p className="font-black text-xl text-gray-800 mb-2">No products yet!</p>
-                <p className="text-gray-400 text-sm mb-8 max-w-xs mx-auto">
-                  Your campus marketplace is empty. Be the legend who starts it.
-                </p>
-                <Link href="/sell"
-                  className="btn-press inline-flex items-center gap-2 px-8 py-4 text-white rounded-2xl font-black text-base shadow-xl"
-                  style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow:'0 8px 32px rgba(99,102,241,0.45)' }}>
-                  <Sparkles className="w-5 h-5" /> Be the First Seller
+              <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
+                <ShoppingBag className="w-14 h-14 text-gray-200 mx-auto mb-4" />
+                <p className="text-gray-500 font-black text-lg mb-1">No products yet</p>
+                <p className="text-gray-400 text-sm mb-6">Be the first seller on your campus!</p>
+                <Link href="/sell" className="btn-press inline-flex items-center gap-2 px-6 py-3 bg-BATAMART-primary text-white rounded-xl font-black text-sm shadow-lg shadow-BATAMART-primary/25">
+                  <Sparkles className="w-4 h-4" /> List a Product
                 </Link>
               </div>
             )}
@@ -1677,15 +1329,11 @@ export default function MarketplacePage() {
         )}
       </div>
 
-      {/* ═══════════════════════════════════════
-          FLOATING SELL BUTTON — pulsing rings
-      ═══════════════════════════════════════ */}
+      {/* Floating Sell Button */}
       {!isApp && (
-        <div className="fixed bottom-20 right-4 sm:right-6 z-40 sell-btn-wrap">
-          <Link href="/sell"
-            className="btn-press relative z-10 flex items-center gap-2 px-5 py-3 text-white rounded-2xl font-black text-sm shadow-2xl"
-            style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow:'0 8px 32px rgba(99,102,241,0.6)' }}>
-            <Sparkles className="w-4 h-4 sparkle-spin" /> Sell
+        <div className="fixed bottom-20 right-4 sm:right-6 z-40">
+          <Link href="/sell" className="btn-press glow-pulse flex items-center gap-2 px-5 py-3 bg-BATAMART-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-BATAMART-primary/40">
+            <Sparkles className="w-4 h-4" /> Sell
           </Link>
         </div>
       )}
