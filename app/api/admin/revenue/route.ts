@@ -125,26 +125,56 @@ export async function GET(req: NextRequest) {
     const netPending = pending.platformCommission - pending.paystackFees
 
     // ── Obligations ────────────────────────────────────────────────────
-    const sellersAvailableNow = totalSellersBalance._sum.availableBalance || 0
-    const sellersPending = totalSellersBalance._sum.pendingBalance || 0
-    const ridersAvailableNow = totalRidersBalance._sum.availableBalance || 0
-    const ridersPending = totalRidersBalance._sum.pendingBalance || 0
+    const sellersAvailableNow = Number(totalSellersBalance._sum.availableBalance) || 0
+    const sellersPending      = Number(totalSellersBalance._sum.pendingBalance)   || 0
+    const ridersAvailableNow  = Number(totalRidersBalance._sum.availableBalance)  || 0
+    const ridersPending       = Number(totalRidersBalance._sum.pendingBalance)    || 0
 
     const totalOwedToSellers = sellersAvailableNow + sellersPending
-    const totalOwedToRiders = ridersAvailableNow + ridersPending
+    const totalOwedToRiders  = ridersAvailableNow  + ridersPending
 
-    // ── Safe withdrawal calculation ────────────────────────────────────
-    // Paystack holds: all paid-in money
-    // You must keep: total owed to sellers + total owed to riders
-    // You can withdraw: what's in Paystack minus obligations
-    // Since net platform earnings = gross commission - paystack fees,
-    // and obligations are seller/rider shares already tracked in their wallets,
-    // the safe amount to withdraw = your NET platform earnings (all time)
-    // minus referral rewards already paid out (those went to user wallets)
-    const safeToWithdraw = Math.max(0, netAllTime)
+    // ── FIXED: Safe withdrawal calculation ────────────────────────────────────
+    //
+    // What Paystack physically holds = all money that came in from buyers.
+    // What you MUST keep = everything still owed to sellers + riders:
+    //   • sellersAvailableNow  — seller earnings already released from escrow;
+    //                            the seller can withdraw this at any moment.
+    //   • ridersAvailableNow   — rider earnings already released; same.
+    //   • sellersPending       — still in escrow (delivery not yet confirmed);
+    //                            will become sellers' once buyer confirms.
+    //   • ridersPending        — still in escrow for rider.
+    //
+    // Net platform earnings (netAllTime) = your cut after Paystack fees and
+    // referral payouts. But part of that money is already earmarked for
+    // users who have a positive availableBalance — they just haven't withdrawn
+    // yet. We must subtract those settled-but-undrawn balances so we never
+    // inadvertently spend money that belongs to someone else.
+    //
+    // Formula:
+    //   safeToWithdraw = netAllTime
+    //                  − sellersAvailableNow   (settled, ready for their withdrawal)
+    //                  − ridersAvailableNow    (settled, ready for their withdrawal)
+    //
+    // Note: sellersPending / ridersPending are NOT subtracted here because
+    // those amounts are NOT part of netAllTime yet — they sit in escrow and
+    // will only become part of the platform commission once the buyer confirms.
+    // Subtracting them would double-count.
+    //
+    // BEFORE this fix (WRONG):
+    //   safeToWithdraw = netAllTime
+    //   → admin could withdraw money that belongs to sellers/riders,
+    //     leaving Paystack unable to honour their future withdrawals.
+    //
+    // AFTER this fix (CORRECT):
+    //   safeToWithdraw = netAllTime − sellersAvailableNow − ridersAvailableNow
+    //   → the admin can only ever withdraw their actual profit.
+    // ─────────────────────────────────────────────────────────────────────────
+    const safeToWithdraw = Math.max(
+      0,
+      netAllTime - sellersAvailableNow - ridersAvailableNow,
+    )
 
     // Total Paystack balance estimate (all paid orders - what's been withdrawn by sellers/riders)
-    // This is an approximation since we don't track withdrawals to bank here
     const paystackHoldsApprox = allTime.totalAmount
 
     // ── Enrich top sellers ─────────────────────────────────────────────
@@ -233,10 +263,13 @@ export async function GET(req: NextRequest) {
           safeToWithdraw,
           paystackHoldsApprox,
           breakdown: {
-            grossCommission: allTime.platformCommission,
-            minusPaystackFees: allTime.paystackFees,
+            grossCommission:     allTime.platformCommission,
+            minusPaystackFees:   allTime.paystackFees,
             minusReferralPayouts: referralPaidOut,
-            result: safeToWithdraw,
+            // ── NEW fields shown in the admin UI breakdown ──
+            minusSellersAvailable: sellersAvailableNow,
+            minusRidersAvailable:  ridersAvailableNow,
+            result:              safeToWithdraw,
           },
         },
 

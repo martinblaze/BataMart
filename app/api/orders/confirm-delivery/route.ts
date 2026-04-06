@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
     cleanupOldEntries()
 
     // ── Fetch order ───────────────────────────────────────────
+    // FIXED: include batchId so we can pass it to processReferralReward.
+    // Without batchId, the referral guard falls back to orderId uniqueness,
+    // meaning a referrer could receive one reward per order in a multi-order
+    // batch instead of one reward for the whole batch.
     const order = await prisma.order.findUnique({
       where:   { id: orderId },
       include: { seller: true, rider: true },
@@ -158,12 +162,19 @@ export async function POST(request: NextRequest) {
       // Referrer earns ₦120 (50% of the ₦240 delivery platform cut) on every
       // completed delivery order from their referral — forever.
       // Platform keeps its full 5% product commission plus the other ₦120.
+      //
+      // FIXED: batchId is now forwarded so processReferralReward uses the
+      // DeliveryBatch.referralPaid flag as the idempotency gate instead of
+      // falling back to per-order orderId uniqueness.
+      // This ensures the referrer receives exactly ONE ₦120 reward per
+      // checkout session regardless of how many orders were in the cart.
       await processReferralReward(tx, {
         orderId,
         orderNumber: order.orderNumber,
         orderAmount: order.totalAmount,
         buyerId:     order.buyerId,
-        hasRider,    // ← only delivery orders trigger the reward
+        hasRider,
+        batchId:     order.batchId ?? undefined,  // ← FIXED (was missing)
       })
 
       return updatedOrder

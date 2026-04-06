@@ -13,7 +13,8 @@ interface AnalyticsData {
   newUsers: number; totalUsers: number; newSellers: number; newRiders: number
   newProducts: number; totalProducts: number; totalOrders: number
   completedOrders: number; completionRate: number; revenue: number
-  platformCommission: number; netRevenue: number; revenueTrend: number
+  platformCommission: number; paystackFees: number; netRevenue: number
+  revenueTrend: number | null   // null when range='all' (not applicable)
   dau: number; wau: number; mau: number
   retentionDay1: number; retentionDay7: number; repeatBuyerPct: number
   appOpens: number; productViews: number; addToCart: number; checkoutSuccessPct: number
@@ -48,11 +49,12 @@ function SectionHeader({ label, icon }: { label: string; icon: React.ReactNode }
 }
 
 function KpiCard({
-  label, value, sub, icon, trend, trendGood = 'up', accent = 'red',
+  label, value, sub, icon, trend, trendGood = 'up', accent = 'red', trendNA = false,
 }: {
   label: string; value: string | number; sub?: string; icon: React.ReactNode
-  trend?: number; trendGood?: 'up' | 'down'
+  trend?: number | null; trendGood?: 'up' | 'down'
   accent?: 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'cyan' | 'pink'
+  trendNA?: boolean  // show "N/A" instead of a percentage
 }) {
   const accentMap: Record<string, string> = {
     red: 'border-red-500/30 bg-red-500/5', blue: 'border-blue-500/30 bg-blue-500/5',
@@ -65,8 +67,10 @@ function KpiCard({
     yellow: 'text-yellow-400', purple: 'text-purple-400', orange: 'text-orange-400',
     cyan: 'text-cyan-400', pink: 'text-pink-400',
   }
-  const hasTrend = trend !== undefined
+
+  const hasTrend = trend !== undefined && trend !== null
   const { isPositive, isGood } = hasTrend ? delta(trend!, trendGood) : { isPositive: true, isGood: true }
+
   return (
     <div className={`border ${accentMap[accent]} rounded-lg p-4 flex flex-col gap-2 relative overflow-hidden`}>
       <div className="flex items-start justify-between">
@@ -76,7 +80,10 @@ function KpiCard({
       <p className="text-2xl font-black text-white font-mono leading-none tracking-tight">{value}</p>
       <div className="flex items-center justify-between mt-auto">
         {sub && <span className="text-[11px] text-gray-500">{sub}</span>}
-        {hasTrend && (
+        {trendNA && (
+          <span className="text-[11px] text-gray-600 ml-auto">vs prev: N/A</span>
+        )}
+        {hasTrend && !trendNA && (
           <span className={`flex items-center gap-0.5 text-[11px] font-bold ml-auto ${isGood ? 'text-emerald-400' : 'text-red-400'}`}>
             {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
             {Math.abs(trend!).toFixed(1)}%
@@ -104,9 +111,9 @@ function DataRow({ label, value, sub, flag }: { label: string; value: string; su
 }
 
 export default function AnalyticsPage() {
-  const [data, setData]             = useState<AnalyticsData | null>(null)
-  const [loading, setLoading]       = useState(true)
-  const [range, setRange]           = useState('7days')
+  const [data, setData]               = useState<AnalyticsData | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [range, setRange]             = useState('7days')
   const [selectedUni, setSelectedUni] = useState('all')
   const [universities, setUniversities] = useState<University[]>([])
 
@@ -210,10 +217,10 @@ export default function AnalyticsPage() {
           <div>
             <SectionHeader label="Growth" icon={<TrendingUp className="w-4 h-4" />} />
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard label="New users"     value={fmt(d.newUsers)}     icon={<Users className="w-4 h-4" />}    accent="blue" />
-              <KpiCard label="New sellers"   value={fmt(d.newSellers)}   icon={<Store className="w-4 h-4" />}    accent="green" />
-              <KpiCard label="New riders"    value={fmt(d.newRiders)}    icon={<Bike className="w-4 h-4" />}     accent="cyan" />
-              <KpiCard label="New products"  value={fmt(d.newProducts)}  icon={<Package className="w-4 h-4" />}  accent="purple" />
+              <KpiCard label="New users"    value={fmt(d.newUsers)}    icon={<Users className="w-4 h-4" />}   accent="blue" />
+              <KpiCard label="New sellers"  value={fmt(d.newSellers)}  icon={<Store className="w-4 h-4" />}   accent="green" />
+              <KpiCard label="New riders"   value={fmt(d.newRiders)}   icon={<Bike className="w-4 h-4" />}    accent="cyan" />
+              <KpiCard label="New products" value={fmt(d.newProducts)} icon={<Package className="w-4 h-4" />} accent="purple" />
             </div>
           </div>
 
@@ -221,21 +228,41 @@ export default function AnalyticsPage() {
           <div>
             <SectionHeader label="Revenue" icon={<DollarSign className="w-4 h-4" />} />
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard label="GMV"          value={fmtNgn(d.gmv)}               icon={<ShoppingBag className="w-4 h-4" />} accent="yellow" trend={d.revenueTrend} />
-              <KpiCard label="Commission"   value={fmtNgn(d.platformCommission)} icon={<CreditCard className="w-4 h-4" />}  accent="orange" />
-              <KpiCard label="Net revenue"  value={fmtNgn(d.netRevenue)}         icon={<Shield className="w-4 h-4" />}      accent="green" />
-              <KpiCard label="Orders"       value={fmt(d.totalOrders)}           icon={<CheckCircle className="w-4 h-4" />} accent="blue" sub={`${d.completionRate}% completed`} />
+              {/* FIX #9: revenueTrend is null for 'all' range — show N/A badge */}
+              <KpiCard
+                label="GMV"
+                value={fmtNgn(d.gmv)}
+                icon={<ShoppingBag className="w-4 h-4" />}
+                accent="yellow"
+                trend={d.revenueTrend ?? undefined}
+                trendNA={d.revenueTrend === null}
+              />
+              <KpiCard label="Commission"  value={fmtNgn(d.platformCommission)} icon={<CreditCard className="w-4 h-4" />} accent="orange" />
+              {/* FIX #6: net revenue now correctly deducts Paystack fees — label updated */}
+              <KpiCard
+                label="Net revenue"
+                value={fmtNgn(d.netRevenue)}
+                icon={<Shield className="w-4 h-4" />}
+                accent="green"
+                sub={`−₦${fmt(Math.round(d.paystackFees || 0))} Paystack fees`}
+              />
+              <KpiCard label="Orders" value={fmt(d.totalOrders)} icon={<CheckCircle className="w-4 h-4" />} accent="blue" sub={`${d.completionRate}% completed`} />
             </div>
           </div>
 
           {/* ── Engagement ── */}
           <div>
             <SectionHeader label="Engagement" icon={<Activity className="w-4 h-4" />} />
+            {/* FIX #7: DAU/WAU/MAU labels clarified as rolling windows (not period-scoped) */}
+            <p className="text-[11px] text-gray-600 mb-3 -mt-2">
+              DAU / WAU / MAU are rolling windows (last 24h / 7d / 30d), not scoped to the selected range.
+            </p>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard label="DAU"  value={fmt(d.dau)}  icon={<Zap className="w-4 h-4" />}        accent="red" />
-              <KpiCard label="WAU"  value={fmt(d.wau)}  icon={<Activity className="w-4 h-4" />}   accent="orange" />
-              <KpiCard label="MAU"  value={fmt(d.mau)}  icon={<Users className="w-4 h-4" />}      accent="purple" />
-              <KpiCard label="Repeat buyers" value={fmtPct(d.repeatBuyerPct)} icon={<Repeat className="w-4 h-4" />} accent="cyan" />
+              <KpiCard label="DAU (rolling 24h)"  value={fmt(d.dau)}  icon={<Zap className="w-4 h-4" />}       accent="red" />
+              <KpiCard label="WAU (rolling 7d)"   value={fmt(d.wau)}  icon={<Activity className="w-4 h-4" />}  accent="orange" />
+              <KpiCard label="MAU (rolling 30d)"  value={fmt(d.mau)}  icon={<Users className="w-4 h-4" />}     accent="purple" />
+              {/* FIX #3: repeatBuyerPct now uses total buyers as denominator */}
+              <KpiCard label="Repeat buyers" value={fmtPct(d.repeatBuyerPct)} icon={<Repeat className="w-4 h-4" />} accent="cyan" sub="of all buyers" />
             </div>
           </div>
 
@@ -243,24 +270,33 @@ export default function AnalyticsPage() {
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
               <SectionHeader label="Marketplace health" icon={<BarChart2 className="w-4 h-4" />} />
-              <DataRow label="Active sellers"    value={fmt(d.activeSellers)}    flag={d.activeSellers > 10 ? 'ok' : 'warn'} />
-              <DataRow label="Orders per seller" value={d.ordersPerSeller.toFixed(1)} />
-              <DataRow label="Total products"    value={fmt(d.totalProducts)} />
-              <DataRow label="Referral rewards"  value={fmt(d.referrals.newRewards)} sub={`₦${fmt(d.referrals.totalPaidOut)} paid out`} />
+              {/* FIX #5: activeSellers = sellers who received completed orders (not just listed) */}
+              <DataRow label="Active sellers (with orders)"  value={fmt(d.activeSellers)}    flag={d.activeSellers > 10 ? 'ok' : 'warn'} />
+              <DataRow label="Completed orders per seller"   value={d.ordersPerSeller.toFixed(1)} />
+              <DataRow label="Total products"                value={fmt(d.totalProducts)} />
+              <DataRow label="Referral rewards"              value={fmt(d.referrals.newRewards)} sub={`₦${fmt(d.referrals.totalPaidOut)} paid out`} />
+              {/* FIX #4: retentionDay1 is buyer activation rate — renamed for clarity */}
+              <DataRow label="New buyer activation rate"     value={fmtPct(d.retentionDay1)} sub="new buyers who placed an order" />
             </div>
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
               <SectionHeader label="Logistics" icon={<Bike className="w-4 h-4" />} />
-              <DataRow label="Avg delivery time"   value={fmtMin(d.avgDeliveryMinutes)} flag={d.avgDeliveryMinutes < 60 ? 'ok' : d.avgDeliveryMinutes < 120 ? 'warn' : 'danger'} />
-              <DataRow label="Completion rate"     value={fmtPct(d.riderCompletionRate)} flag={d.riderCompletionRate > 80 ? 'ok' : 'warn'} />
-              <DataRow label="Failed delivery %"   value={fmtPct(d.failedDeliveryPct)}   flag={d.failedDeliveryPct < 5 ? 'ok' : 'danger'} />
+              {/* FIX #2: avgDeliveryMinutes now uses deliveredAt (actual delivery time) */}
+              <DataRow label="Avg delivery time (order→delivery)" value={fmtMin(d.avgDeliveryMinutes)} flag={d.avgDeliveryMinutes < 60 ? 'ok' : d.avgDeliveryMinutes < 120 ? 'warn' : 'danger'} />
+              {/* FIX #1: riderCompletionRate is now actual rider delivery rate */}
+              <DataRow label="Rider delivery rate"          value={fmtPct(d.riderCompletionRate)} flag={d.riderCompletionRate > 80 ? 'ok' : 'warn'} />
+              <DataRow label="Order completion rate"        value={fmtPct(d.completionRate)}       flag={d.completionRate > 70 ? 'ok' : 'warn'} />
+              <DataRow label="Failed delivery %"            value={fmtPct(d.failedDeliveryPct)}    flag={d.failedDeliveryPct < 5 ? 'ok' : 'danger'} />
             </div>
           </div>
 
           {/* ── Top Categories ── */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <SectionHeader label="Top categories" icon={<Target className="w-4 h-4" />} />
+            {/* FIX #8: topCategories is now period-scoped — label updated */}
+            <SectionHeader label={`Top categories (${range === 'all' ? 'all time' : range})`} icon={<Target className="w-4 h-4" />} />
             <div className="space-y-3">
-              {d.topCategories.map((c, i) => {
+              {d.topCategories.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-4">No product listings in this period</p>
+              ) : d.topCategories.map((c) => {
                 const max = d.topCategories[0]?.count || 1
                 return (
                   <div key={c.category} className="space-y-1">

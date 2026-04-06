@@ -2,18 +2,36 @@
 // Extends admin analytics with referral metrics
 
 import { NextRequest, NextResponse } from 'next/server'
+import jwt from 'jsonwebtoken'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+// ── FIXED: use the same JWT-based verifyAdmin pattern as every other admin route.
+// Previously this route used `x-admin-token: ADMIN_SECRET` (a static shared secret),
+// which is weaker than a signed JWT and inconsistent with the rest of the admin API
+// surface. Any code that was calling this with x-admin-token must be updated to send
+// `Authorization: Bearer <adminToken>` instead (same as all other admin fetches).
+async function verifyAdmin(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) return null
   try {
-    // Basic admin auth check (reuse your existing pattern)
-    const adminToken = request.headers.get('x-admin-token')
-    if (adminToken !== process.env.ADMIN_SECRET) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const token = authHeader.substring(7)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    if (decoded.role !== 'ADMIN') return null
+    return decoded
+  } catch {
+    return null
+  }
+}
 
+export async function GET(request: NextRequest) {
+  const admin = await verifyAdmin(request)
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
     const [
       totalReferralUsers,
       totalRewardsPaid,
@@ -40,15 +58,15 @@ export async function GET(request: NextRequest) {
         take:    20,
         orderBy: { createdAt: 'desc' },
         include: {
-          referrer:    { select: { name: true, email: true } },
+          referrer:     { select: { name: true, email: true } },
           referredUser: { select: { name: true } },
-          order:       { select: { orderNumber: true, totalAmount: true } },
+          order:        { select: { orderNumber: true, totalAmount: true } },
         },
       }),
     ])
 
     // Enrich top referrers with names
-    const referrerIds = topReferrers.map(r => r.referrerId)
+    const referrerIds  = topReferrers.map(r => r.referrerId)
     const referrerUsers = await prisma.user.findMany({
       where:  { id: { in: referrerIds } },
       select: { id: true, name: true, email: true },
@@ -62,20 +80,20 @@ export async function GET(request: NextRequest) {
         totalRewardCount:  await prisma.referralReward.count(),
       },
       topReferrers: topReferrers.map(r => ({
-        referrerId:    r.referrerId,
-        name:          referrerMap[r.referrerId]?.name  || 'Unknown',
-        email:         referrerMap[r.referrerId]?.email || '',
-        totalEarned:   r._sum.amount || 0,
+        referrerId:     r.referrerId,
+        name:           referrerMap[r.referrerId]?.name  || 'Unknown',
+        email:          referrerMap[r.referrerId]?.email || '',
+        totalEarned:    r._sum.amount || 0,
         totalReferrals: r._count.id,
       })),
       recentRewards: recentRewards.map(r => ({
-        id:              r.id,
-        referrer:        r.referrer.name,
-        referredUser:    r.referredUser.name,
-        orderNumber:     r.order.orderNumber,
-        orderAmount:     r.order.totalAmount,
-        rewardAmount:    r.amount,
-        earnedAt:        r.createdAt,
+        id:           r.id,
+        referrer:     r.referrer.name,
+        referredUser: r.referredUser.name,
+        orderNumber:  r.order.orderNumber,
+        orderAmount:  r.order.totalAmount,
+        rewardAmount: r.amount,
+        earnedAt:     r.createdAt,
       })),
     })
   } catch (error) {

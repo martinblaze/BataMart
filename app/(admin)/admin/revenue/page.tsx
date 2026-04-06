@@ -61,6 +61,7 @@ export default function RevenuePage() {
   const withdrawal  = revenue?.withdrawal    || {}
   const referrals   = revenue?.referrals     || {}
   const topSellers  = revenue?.topSellers    || []
+  const breakdown   = withdrawal.breakdown   || {}
 
   return (
     <div className="space-y-8">
@@ -102,27 +103,48 @@ export default function RevenuePage() {
           <div className="flex-1">
             <h2 className="text-xl font-bold text-white mb-1">Safe to Withdraw from Paystack</h2>
             <p className="text-gray-300 text-sm mb-4">
-              Your actual profit after all deductions.
+              Your actual profit after ALL deductions — including money still owed to sellers and riders.
               {selectedUni !== 'all' && ` Scoped to ${selectedUniName}.`}
             </p>
             <div className="bg-gray-800/60 rounded-xl p-4 space-y-2 mb-4 font-mono text-sm">
               <div className="flex justify-between text-gray-300">
                 <span>Gross platform commission (all time)</span>
-                <span className="text-white">+ ₦{(gross.allTime || 0).toLocaleString()}</span>
+                <span className="text-white">+ ₦{(breakdown.grossCommission || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-gray-300">
                 <span>Paystack fees (1.5% + ₦100, max ₦2k per order)</span>
-                <span className="text-red-400">− ₦{(fees.allTime || 0).toLocaleString()}</span>
+                <span className="text-red-400">− ₦{(breakdown.minusPaystackFees || 0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-gray-300">
                 <span>Referral rewards paid to users</span>
-                <span className="text-red-400">− ₦{(referrals.totalPaidOut || 0).toLocaleString()}</span>
+                <span className="text-red-400">− ₦{(breakdown.minusReferralPayouts || 0).toLocaleString()}</span>
+              </div>
+              {/* ── NEW: show the seller/rider obligations deductions ── */}
+              <div className="flex justify-between text-gray-300">
+                <span>Seller balances (settled, not yet withdrawn)</span>
+                <span className="text-orange-400">− ₦{(breakdown.minusSellersAvailable || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-gray-300">
+                <span>Rider balances (settled, not yet withdrawn)</span>
+                <span className="text-orange-400">− ₦{(breakdown.minusRidersAvailable || 0).toLocaleString()}</span>
               </div>
               <div className="border-t border-gray-600 pt-2 flex justify-between font-bold text-lg">
-                <span className="text-white">Your NET profit</span>
+                <span className="text-white">Your NET profit (safe to withdraw)</span>
                 <span className="text-green-400">= ₦{(withdrawal.safeToWithdraw || 0).toLocaleString()}</span>
               </div>
             </div>
+
+            {/* Warning if admin obligations eat into profit */}
+            {(breakdown.minusSellersAvailable || 0) + (breakdown.minusRidersAvailable || 0) > 0 && (
+              <div className="flex items-start gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl p-3 mb-4 text-sm text-orange-300">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  ₦{((breakdown.minusSellersAvailable || 0) + (breakdown.minusRidersAvailable || 0)).toLocaleString()} of Paystack balance belongs to sellers/riders who haven't withdrawn yet.
+                  You must leave that amount in Paystack.
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 text-green-300 font-bold text-lg">
               <DollarSign className="w-5 h-5" />
               Withdraw exactly ₦{(withdrawal.safeToWithdraw || 0).toLocaleString()} from Paystack
@@ -134,7 +156,7 @@ export default function RevenuePage() {
       {/* ── Net Profit Cards ── */}
       <div>
         <h2 className="text-xl font-bold text-white mb-1">Net Platform Profit</h2>
-        <p className="text-gray-400 text-sm mb-4">After Paystack fees. Referral payouts deducted from all-time only.</p>
+        <p className="text-gray-400 text-sm mb-4">After Paystack fees. Referral payouts + user obligations deducted from all-time.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: 'All Time NET',    value: withdrawal.safeToWithdraw || 0, sub: `Gross: ₦${(gross.allTime || 0).toLocaleString()}`,    color: 'from-green-500 to-green-600',   textLight: 'text-green-100' },
@@ -165,7 +187,7 @@ export default function RevenuePage() {
             </div>
             <p className="text-2xl font-bold text-white">₦{((obligations.totalOwedToSellers) || 0).toLocaleString()}</p>
             <p className="text-xs text-gray-400 mt-1">
-              ₦{(obligations.sellersAvailableNow || 0).toLocaleString()} available · ₦{(obligations.sellersPending || 0).toLocaleString()} pending
+              ₦{(obligations.sellersAvailableNow || 0).toLocaleString()} available (must keep) · ₦{(obligations.sellersPending || 0).toLocaleString()} in escrow
             </p>
           </div>
           <div className="bg-gray-700/50 rounded-xl p-4">
@@ -175,7 +197,7 @@ export default function RevenuePage() {
             </div>
             <p className="text-2xl font-bold text-white">₦{((obligations.totalOwedToRiders) || 0).toLocaleString()}</p>
             <p className="text-xs text-gray-400 mt-1">
-              ₦{(obligations.ridersAvailableNow || 0).toLocaleString()} available · ₦{(obligations.ridersPending || 0).toLocaleString()} pending
+              ₦{(obligations.ridersAvailableNow || 0).toLocaleString()} available (must keep) · ₦{(obligations.ridersPending || 0).toLocaleString()} in escrow
             </p>
           </div>
         </div>
@@ -194,7 +216,7 @@ export default function RevenuePage() {
           </div>
           <div className="bg-gray-700/50 rounded-xl p-4">
             <p className="text-sm text-gray-400 mb-1">Total Rewards Given</p>
-            <p className="text-2xl font-bold text-white">{(referrals.count || 0).toLocaleString()}</p>
+            <p className="text-2xl font-bold text-white">{(referrals.totalRewards || 0).toLocaleString()}</p>
           </div>
         </div>
       </div>
@@ -205,17 +227,17 @@ export default function RevenuePage() {
           <h3 className="text-lg font-bold text-white mb-4">Top Sellers by Revenue</h3>
           <div className="space-y-3">
             {topSellers.map((seller: any, i: number) => (
-              <div key={seller.sellerId} className="flex items-center justify-between py-2 border-b border-gray-700/50 last:border-0">
+              <div key={i} className="flex items-center justify-between py-2 border-b border-gray-700/50 last:border-0">
                 <div className="flex items-center gap-3">
                   <span className="text-gray-500 text-sm w-5">{i + 1}</span>
                   <div>
-                    <p className="text-white text-sm font-medium">{seller.sellerName}</p>
-                    <p className="text-gray-400 text-xs">{seller.orderCount} orders</p>
+                    <p className="text-white text-sm font-medium">{seller.name}</p>
+                    <p className="text-gray-400 text-xs">{seller.totalOrders} orders</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-white text-sm font-bold">₦{(seller.totalRevenue || 0).toLocaleString()}</p>
-                  <p className="text-gray-400 text-xs">₦{(seller.platformCommission || 0).toLocaleString()} commission</p>
+                  <p className="text-gray-400 text-xs">₦{(seller.platformEarned || 0).toLocaleString()} commission</p>
                 </div>
               </div>
             ))}
@@ -224,4 +246,4 @@ export default function RevenuePage() {
       )}
     </div>
   )
-}
+} 

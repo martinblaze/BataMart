@@ -16,13 +16,25 @@ const MAX_WITHDRAWAL     = 500_000           // ₦500,000 per request
 const WITHDRAW_COOLDOWN  = 30_000            // 30 seconds between requests per user
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX #2 — Per-user rate limiter (in-memory, resets on server restart)
-// For production at scale, replace with Redis via Upstash.
-// This map stores the timestamp of each user's last successful withdrawal request.
+// Per-user rate limiter (in-memory, resets on server restart)
+//
+// ⚠️  KNOWN LIMITATION: On serverless platforms (e.g. Vercel), each function
+// instance has its own copy of this Map, and cold starts clear it entirely.
+// This means two concurrent requests could hit different warm instances and
+// both pass the cooldown check.
+//
+// The real atomicity guarantee is the atomic DB deduction below
+// (updateMany WHERE availableBalance >= amount). The in-memory limiter is a
+// cheap first line of defence against accidental duplicate taps — not a
+// security boundary.
+//
+// TODO: Replace with a Redis-backed rate limiter (e.g. Upstash) before
+// production scale. Key: `withdraw:cooldown:${userId}`, TTL = WITHDRAW_COOLDOWN.
 // ─────────────────────────────────────────────────────────────────────────────
 const lastWithdrawAttempt = new Map<string, number>()
 
-// Periodically clean up stale entries so the map doesn't grow forever
+// Periodically clean up stale entries so the map doesn't grow forever.
+// Safe to call multiple times — only deletes entries older than 2× cooldown.
 setInterval(() => {
   const cutoff = Date.now() - WITHDRAW_COOLDOWN * 2
   Array.from(lastWithdrawAttempt.keys()).forEach((uid) => {
@@ -37,7 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ── FIX #2 — Rate limit check (per user) ──────────────────────────────
+    // ── Rate limit check (per user) ────────────────────────────────────────
     const lastAttempt = lastWithdrawAttempt.get(user.id)
     if (lastAttempt && Date.now() - lastAttempt < WITHDRAW_COOLDOWN) {
       const secondsLeft = Math.ceil((WITHDRAW_COOLDOWN - (Date.now() - lastAttempt)) / 1000)
@@ -46,7 +58,7 @@ export async function POST(request: NextRequest) {
         { status: 429 }
       )
     }
-    // Record the attempt timestamp immediately (before any async work)
+    // Record the attempt timestamp immediately (before any async work).
     // This prevents a burst of concurrent requests from all slipping through
     // before the first one sets the timestamp.
     lastWithdrawAttempt.set(user.id, Date.now())
@@ -54,7 +66,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { amount, bankCode, accountNumber, accountName, pin } = body
 
-    // ── FIX #3 — Input validation with min AND max amount ─────────────────
+    // ── Input validation with min AND max amount ───────────────────────────
     if (
       !amount ||
       typeof amount !== 'number' ||
@@ -62,8 +74,6 @@ export async function POST(request: NextRequest) {
       amount < MIN_WITHDRAWAL ||
       amount > MAX_WITHDRAWAL
     ) {
-      // Clear the rate-limit timestamp so they can retry immediately after a
-      // validation error (rate limiting should only penalise real requests)
       lastWithdrawAttempt.delete(user.id)
       return NextResponse.json(
         { error: `Withdrawal amount must be between ₦${MIN_WITHDRAWAL.toLocaleString()} and ₦${MAX_WITHDRAWAL.toLocaleString()}` },
@@ -85,7 +95,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bank details are required' }, { status: 400 })
     }
 
-    // PIN must be sent with every withdrawal request — never trust a prior verify call
+    // PIN must be sent with every withdrawal request — never trust a prior verify call.
+    // See verify-pin/route.ts for the security contract explaining why.
     if (!pin || !/^\d{6}$/.test(String(pin))) {
       lastWithdrawAttempt.delete(user.id)
       return NextResponse.json({ error: 'A valid 6-digit PIN is required' }, { status: 400 })
@@ -131,6 +142,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Verify PIN — always inside this route, never trust a prior call ────
+    // This is the authoritative PIN check for withdrawals. verify-pin/route.ts
+    // is a UX convenience only and grants no persistent permission.
     const isPinValid = await bcrypt.compare(String(pin), currentUser.withdrawalPin)
 
     if (!isPinValid) {
@@ -165,18 +178,18 @@ export async function POST(request: NextRequest) {
     })
 
     // ─────────────────────────────────────────────────────────────────────
-    // FIX #1 — ATOMIC BALANCE DEDUCTION
+    // ATOMIC BALANCE DEDUCTION
     //
     // We use updateMany with a WHERE availableBalance >= amount guard.
     // This is a single atomic DB operation — no race condition is possible.
     //
-    // BEFORE (vulnerable):
+    // WRONG (vulnerable to double-spend):
     //   1. Read balance ← attacker reads ₦5,000
     //   2. Check balance >= amount ← passes for BOTH concurrent requests
     //   3. Call Paystack ← both succeed
     //   4. Deduct ← ₦10,000 leaves for ₦5,000 account
     //
-    // AFTER (safe):
+    // CORRECT (safe):
     //   1. updateMany WHERE balance >= amount AND id = userId
     //   2. If count === 0 → balance was insufficient (atomic, no race)
     //   3. Only if count === 1 → proceed to Paystack
@@ -186,7 +199,7 @@ export async function POST(request: NextRequest) {
     const deductResult = await prisma.user.updateMany({
       where: {
         id:               user.id,
-        availableBalance: { gte: amount },  // atomic guard — this is the real balance check
+        availableBalance: { gte: amount },  // atomic guard
       },
       data: {
         availableBalance: { decrement: amount },
@@ -222,7 +235,6 @@ export async function POST(request: NextRequest) {
       const recipientData = await recipientResponse.json()
 
       if (!recipientData.status) {
-        // Refund before returning error
         await refundBalance(user.id, amount)
         return NextResponse.json(
           { error: recipientData.message || 'Failed to create transfer recipient' },
@@ -268,7 +280,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // FIX #4 + FIX #5 — Atomic ledger write + WithdrawalRequest + AuditLog
+    // Atomic ledger write + WithdrawalRequest + AuditLog
     //
     // All three DB writes happen in one transaction so a server crash
     // between any of them doesn't leave the books in a broken state.
@@ -308,7 +320,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // FIX #5 — AuditLog entry for forensic trail
+      // AuditLog entry for forensic trail
       await tx.auditLog.create({
         data: {
           userId:     user.id,

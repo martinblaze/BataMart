@@ -1,4 +1,21 @@
 // app/api/wallet/verify-pin/route.ts
+//
+// ── SECURITY CONTRACT ────────────────────────────────────────────────────────
+// This endpoint only verifies a PIN and returns { success: true }.
+// It does NOT grant a "verified" session token or any persistent permission.
+// The /api/wallet/withdraw route re-verifies the PIN independently on every
+// request — it never trusts a prior call to this endpoint.
+//
+// This means:
+//   • A successful response here cannot be replayed to bypass the withdraw check.
+//   • The only purpose of this endpoint is the UX step of showing the PIN-dot
+//     input to the user before they see the withdrawal form proceed.
+//
+// DO NOT change withdraw/route.ts to skip PIN verification based on any
+// client-side signal from this endpoint. Both routes must always verify
+// independently.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -6,7 +23,7 @@ import bcrypt from 'bcryptjs'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_ATTEMPTS = 5
+const MAX_ATTEMPTS    = 5
 const LOCK_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 
 export async function POST(request: NextRequest) {
@@ -28,8 +45,8 @@ export async function POST(request: NextRequest) {
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
-        withdrawalPin: true,
-        withdrawalPinAttempts: true,
+        withdrawalPin:            true,
+        withdrawalPinAttempts:    true,
         withdrawalPinLockedUntil: true,
       },
     })
@@ -58,12 +75,12 @@ export async function POST(request: NextRequest) {
 
     if (!isMatch) {
       const newAttempts = (dbUser.withdrawalPinAttempts ?? 0) + 1
-      const shouldLock = newAttempts >= MAX_ATTEMPTS
+      const shouldLock  = newAttempts >= MAX_ATTEMPTS
 
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          withdrawalPinAttempts: newAttempts,
+          withdrawalPinAttempts:    newAttempts,
           withdrawalPinLockedUntil: shouldLock
             ? new Date(Date.now() + LOCK_DURATION_MS)
             : null,
@@ -85,7 +102,7 @@ export async function POST(request: NextRequest) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        withdrawalPinAttempts: 0,
+        withdrawalPinAttempts:    0,
         withdrawalPinLockedUntil: null,
       },
     })
