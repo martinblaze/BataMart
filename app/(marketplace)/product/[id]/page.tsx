@@ -863,6 +863,8 @@ export default function ProductDetailPage() {
                   { label: 'In Stock', value: `${product.quantity} units` },
                   { label: 'Seller', value: product.seller.name },
                   { label: 'Trust Level', value: product.seller.trustLevel },
+                  { label: 'Location', value: [product.hostelName, product.roomNumber].filter(Boolean).join(', ') || 'Not specified' },
+                  { label: 'Landmark', value: product.landmark || 'Not specified' },
                   { label: 'Listed', value: new Date(product.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
