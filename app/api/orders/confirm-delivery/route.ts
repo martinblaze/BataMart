@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       })
 
       // 2. Release seller payment
-      const sellerAvailable = order.seller.availableBalance || 0
+      const sellerAvailable = Number(order.seller.availableBalance ?? 0)
 
       await tx.user.update({
         where: { id: order.sellerId },
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
           where:  { id: order.riderId },
           select: { availableBalance: true },
         })
-        const riderBalance = rider?.availableBalance || 0
+        const riderBalance = Number(rider?.availableBalance ?? 0)
 
         await tx.user.update({
           where: { id: order.riderId },

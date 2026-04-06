@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ReviewList from '@/components/reviews/ReviewList';
@@ -36,7 +36,6 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
-const RELATED_PAGE_SIZE = 8;
 
 const PAGE_CSS = `
   @keyframes fadeUp {
@@ -327,8 +326,7 @@ export default function ProductPage() {
   // Related products — infinite scroll
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
-  const [relatedPage, setRelatedPage] = useState(0);
-  const [relatedHasMore, setRelatedHasMore] = useState(true);
+  const [relatedVisible, setRelatedVisible] = useState(8);
   const [relatedLoadingMore, setRelatedLoadingMore] = useState(false);
   const relatedSentinelRef = useRef<HTMLDivElement>(null);
 
@@ -348,28 +346,33 @@ export default function ProductPage() {
   useEffect(() => {
     if (product?.sellerId) fetchSellerReviews();
     if (product?.id) fetchProductReviews();
-    if (product?.name && product?.id) {
+    if (product?.id) {
+      setRelatedVisible(8);
       setRelatedProducts([]);
-      setRelatedPage(0);
-      setRelatedHasMore(true);
-      loadRelated(0, product.name, product.id);
+      setRelatedLoadingMore(false);
+      loadRelated(product);
     }
-  }, [product?.sellerId, product?.id, product?.name]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.sellerId, product?.id, product?.category]);
 
   // Infinite scroll for related products
   useEffect(() => {
     if (!relatedSentinelRef.current) return;
     const obs = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && relatedHasMore && !relatedLoadingMore && product) {
-          loadMoreRelated();
+        if (entries[0].isIntersecting && !relatedLoadingMore && relatedVisible < relatedProducts.length) {
+          setRelatedLoadingMore(true);
+          setTimeout(() => {
+            setRelatedVisible(v => v + 8);
+            setRelatedLoadingMore(false);
+          }, 500);
         }
       },
       { threshold: 0.1 }
     );
     obs.observe(relatedSentinelRef.current);
     return () => obs.disconnect();
-  }, [relatedHasMore, relatedLoadingMore, product, relatedPage]);
+  }, [relatedLoadingMore, relatedVisible, relatedProducts.length]);
 
   const fetchProduct = async () => {
     try {
@@ -406,54 +409,34 @@ export default function ProductPage() {
     finally { setReviewsLoading(false); }
   };
 
-  // Load related by product NAME similarity (not just category)
-  const loadRelated = async (page: number, name: string, excludeId: string) => {
-    if (page === 0) setRelatedLoading(true);
-    else setRelatedLoadingMore(true);
-
+  // Fetch ALL products (same as search page), then filter client-side by name similarity
+  const loadRelated = async (currentProduct: any) => {
+    setRelatedLoading(true);
     try {
-      // Try name-based search first, fallback to category
-      const q = name.split(' ').slice(0, 3).join(' ');
-      const res = await fetch(
-        `/api/products?search=${encodeURIComponent(q)}&limit=${RELATED_PAGE_SIZE}&offset=${page * RELATED_PAGE_SIZE}`
-      );
-      let items: any[] = [];
-      if (res.ok) {
-        const data = await res.json();
-        items = (data.products || []).filter((p: any) => p.id !== excludeId);
-      }
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch('/api/products', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const all: any[] = data.products || [];
 
-      // If not enough, supplement with category results
-      if (items.length < 4 && product?.category) {
-        const catRes = await fetch(
-          `/api/products?category=${encodeURIComponent(product.category)}&limit=${RELATED_PAGE_SIZE}&offset=${page * RELATED_PAGE_SIZE}`
-        );
-        if (catRes.ok) {
-          const catData = await catRes.json();
-          const catItems = (catData.products || []).filter(
-            (p: any) => p.id !== excludeId && !items.find(x => x.id === p.id)
-          );
-          items = [...items, ...catItems].slice(0, RELATED_PAGE_SIZE);
-        }
-      }
+      // Score each product by how many name tokens it shares with current product
+      const currentTokens = currentProduct.name.toLowerCase().split(/\s+/).filter((t: string) => t.length > 1);
+      const scored = all
+        .filter((p: any) => p.id !== currentProduct.id)
+        .map((p: any) => {
+          const pTokens = p.name.toLowerCase().split(/\s+/);
+          const nameMatches = currentTokens.filter((t: string) => pTokens.some((pt: string) => pt.includes(t) || t.includes(pt))).length;
+          const sameCategory = p.category === currentProduct.category ? 2 : 0;
+          return { ...p, _score: nameMatches + sameCategory };
+        })
+        .sort((a: any, b: any) => b._score - a._score);
 
-      if (page === 0) {
-        setRelatedProducts(items);
-      } else {
-        setRelatedProducts(prev => {
-          const ids = new Set(prev.map(p => p.id));
-          return [...prev, ...items.filter(p => !ids.has(p.id))];
-        });
-      }
-      setRelatedHasMore(items.length === RELATED_PAGE_SIZE);
-      setRelatedPage(page + 1);
-    } catch { setRelatedHasMore(false); }
-    finally { setRelatedLoading(false); setRelatedLoadingMore(false); }
-  };
-
-  const loadMoreRelated = () => {
-    if (!product) return;
-    loadRelated(relatedPage, product.name, product.id);
+      setRelatedProducts(scored);
+    } catch { }
+    finally { setRelatedLoading(false); }
   };
 
   const addToCart = () => {
@@ -1059,7 +1042,7 @@ export default function ProductPage() {
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {relatedProducts.map((item) => (
+                {relatedProducts.slice(0, relatedVisible).map((item) => (
                   <RelatedCard
                     key={item.id}
                     product={item}
@@ -1077,7 +1060,7 @@ export default function ProductPage() {
                     <Loader2 className="w-4 h-4 spin" />
                     Loading more deals…
                   </div>
-                ) : relatedHasMore ? (
+                ) : relatedVisible < relatedProducts.length ? (
                   <div className="w-full h-4" />
                 ) : (
                   <div className="flex flex-col items-center gap-1 text-gray-300">
