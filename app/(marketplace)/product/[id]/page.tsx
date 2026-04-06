@@ -273,6 +273,113 @@ function RelatedCard({ product, onClick }: { product: RelatedProduct; onClick: (
 }
 
 // ─────────────────────────────────────────────────────────
+// You Might Also Like — lazy grid, loads 8 rows at a time
+// via IntersectionObserver sentinel at the bottom
+// ─────────────────────────────────────────────────────────
+const PAGE_SIZE_GRID = 8
+
+function YouMightAlsoLike({
+  products,
+  onNavigate,
+  fmt,
+}: {
+  products: RelatedProduct[]
+  onNavigate: (id: string) => void
+  fmt: (n: number) => string
+}) {
+  const [visible, setVisible] = useState(PAGE_SIZE_GRID)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const hasMore = visible < products.length
+
+  useEffect(() => {
+    if (!hasMore) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !loadingMore) {
+          setLoadingMore(true)
+          // Simulate a brief load delay so it feels natural, not instant dump
+          setTimeout(() => {
+            setVisible(v => Math.min(v + PAGE_SIZE_GRID, products.length))
+            setLoadingMore(false)
+          }, 400)
+        }
+      },
+      { rootMargin: '200px' } // start loading 200px before the sentinel
+    )
+    const el = sentinelRef.current
+    if (el) observer.observe(el)
+    return () => { if (el) observer.unobserve(el) }
+  }, [hasMore, loadingMore, products.length])
+
+  return (
+    <div className="fade-up" style={{ animationDelay: '0.2s' }}>
+      <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+        <TrendingUp className="w-4 h-4 text-orange-500" />
+        You might also like
+      </h2>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {products.slice(0, visible).map(p => (
+          <div
+            key={p.id}
+            onClick={() => onNavigate(p.id)}
+            className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer"
+            style={{ border: '1px solid #f0f0f0' }}
+          >
+            <div className="aspect-square overflow-hidden bg-gray-50">
+              {p.images?.[0] ? (
+                <img
+                  src={p.images[0]}
+                  alt={p.name}
+                  className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Package className="w-8 h-8 text-gray-300" />
+                </div>
+              )}
+            </div>
+            <div className="p-2.5">
+              <p className="text-xs sm:text-sm font-semibold text-gray-800 line-clamp-2 leading-tight mb-1">
+                {p.name}
+              </p>
+              <p className="text-sm font-bold text-indigo-600">{fmt(p.price)}</p>
+              <div className="flex items-center gap-1 mt-1">
+                <StarRow rating={p.seller?.avgRating || 0} />
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Shimmer placeholders while loading next batch */}
+        {loadingMore && Array.from({ length: Math.min(PAGE_SIZE_GRID, products.length - visible) }).map((_, i) => (
+          <div key={`skel-${i}`} className="rounded-2xl overflow-hidden" style={{ border: '1px solid #f0f0f0' }}>
+            <div className="shimmer aspect-square w-full" />
+            <div className="bg-white p-2.5 space-y-2">
+              <div className="shimmer h-3 w-full rounded" />
+              <div className="shimmer h-3 w-2/3 rounded" />
+              <div className="shimmer h-4 w-1/2 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Invisible sentinel that triggers the next load */}
+      {hasMore && <div ref={sentinelRef} className="h-4 w-full" />}
+
+      {/* End of list message */}
+      {!hasMore && products.length > PAGE_SIZE_GRID && (
+        <p className="text-center text-xs text-gray-400 mt-4 py-2">
+          — You've seen all {products.length} related products —
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────
 export default function ProductDetailPage() {
@@ -294,6 +401,9 @@ export default function ProductDetailPage() {
   const [relatedOthers, setRelatedOthers] = useState<RelatedProduct[]>([])
   const [relatedSourceName, setRelatedSourceName] = useState('')
   const [relatedLoading, setRelatedLoading] = useState(false)
+  const [relatedVisible, setRelatedVisible] = useState(8)
+  const [relatedLoadingMore, setRelatedLoadingMore] = useState(false)
+  const relatedScrollRef = useRef<HTMLDivElement>(null)
   const [reviews, setReviews] = useState<any[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [showStickyBar, setShowStickyBar] = useState(false)
@@ -427,8 +537,6 @@ export default function ProductDetailPage() {
   const navigateRelated = (id: string) => {
     router.push(`/product/${id}`)
   }
-
-  const allRelated = [...relatedNameRelated, ...relatedOthers]
 
   // ── Description text (clean the pipe-separated tags out) ──────────────────
   const descriptionClean = product?.description
@@ -747,15 +855,6 @@ export default function ProductDetailPage() {
 
             {/* Delivery info */}
             <div className="bg-white rounded-2xl p-3 space-y-2 ring-1 ring-gray-100">
-              <div className="flex items-start gap-2.5">
-                <MapPin className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold text-gray-700">Pickup / Delivery</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {[product.hostelName, product.roomNumber, product.landmark].filter(Boolean).join(', ') || 'Location on request'}
-                  </p>
-                </div>
-              </div>
               <div className="flex items-center gap-2.5">
                 <Truck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                 <p className="text-xs text-gray-600">Campus delivery available via BataMart riders</p>
@@ -763,6 +862,10 @@ export default function ProductDetailPage() {
               <div className="flex items-center gap-2.5">
                 <Shield className="w-4 h-4 text-blue-500 flex-shrink-0" />
                 <p className="text-xs text-gray-600">Protected by BataMart buyer guarantee</p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <MessageCircle className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <p className="text-xs text-gray-600">Contact the seller below to arrange pickup or delivery</p>
               </div>
             </div>
 
@@ -863,8 +966,6 @@ export default function ProductDetailPage() {
                   { label: 'In Stock', value: `${product.quantity} units` },
                   { label: 'Seller', value: product.seller.name },
                   { label: 'Trust Level', value: product.seller.trustLevel },
-                  { label: 'Location', value: [product.hostelName, product.roomNumber].filter(Boolean).join(', ') || 'Not specified' },
-                  { label: 'Landmark', value: product.landmark || 'Not specified' },
                   { label: 'Listed', value: new Date(product.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
@@ -938,12 +1039,6 @@ export default function ProductDetailPage() {
                   <p className="text-xs text-gray-400 mt-0.5">Similar to "{relatedSourceName}"</p>
                 )}
               </div>
-              <Link
-                href={`/search?q=${encodeURIComponent(relatedSourceName.split(' ').slice(0,2).join(' '))}`}
-                className="text-xs font-semibold text-indigo-600 hover:underline flex items-center gap-0.5"
-              >
-                See all <ArrowRight className="w-3 h-3" />
-              </Link>
             </div>
 
             {relatedLoading ? (
@@ -959,84 +1054,90 @@ export default function ProductDetailPage() {
                   </div>
                 ))}
               </div>
-            ) : (
-              <div>
-                {/* Name-related first (if any) */}
-                {relatedNameRelated.length > 0 && (
-                  <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
-                    {relatedNameRelated.map(p => (
-                      <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
-                    ))}
-                    {/* Divider card before "others" in the same row if there are also others */}
-                    {relatedOthers.length > 0 && (
-                      <>
-                        <div className="flex-shrink-0 flex items-center px-1">
-                          <div className="w-px h-24 bg-gray-200" />
-                        </div>
-                        {relatedOthers.slice(0, 6).map(p => (
-                          <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
-                        ))}
-                      </>
-                    )}
-                  </div>
-                )}
+            ) : (() => {
+              // Merge name-related first, then others — single flat list
+              const allDeals = [...relatedNameRelated, ...relatedOthers]
+              const visible = allDeals.slice(0, relatedVisible)
+              const hasMore = relatedVisible < allDeals.length
 
-                {/* If there were no name-related, just show others */}
-                {relatedNameRelated.length === 0 && relatedOthers.length > 0 && (
-                  <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
-                    {relatedOthers.map(p => (
-                      <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+              return (
+                <div>
+                  <div ref={relatedScrollRef} className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
+                    {visible.map((p, idx) => (
+                      <div key={p.id}>
+                        {/* Soft divider between name-related and others */}
+                        {idx === relatedNameRelated.length && relatedNameRelated.length > 0 && relatedOthers.length > 0 && (
+                          <div className="flex items-center self-stretch mr-3">
+                            <div className="w-px h-24 bg-gray-200 my-auto" />
+                          </div>
+                        )}
+                        <RelatedCard product={p} onClick={() => navigateRelated(p.id)} />
+                      </div>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* ── You might also like (grid) ────────────────────────────────── */}
-        {allRelated.length >= 4 && (
-          <div className="fade-up" style={{ animationDelay: '0.2s' }}>
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-orange-500" />
-              You might also like
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {allRelated.slice(0, 8).map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => navigateRelated(p.id)}
-                  className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer"
-                  style={{ border: '1px solid #f0f0f0' }}
-                >
-                  <div className="aspect-square overflow-hidden bg-gray-50">
-                    {p.images?.[0] ? (
-                      <img
-                        src={p.images[0]}
-                        alt={p.name}
-                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-8 h-8 text-gray-300" />
+                    {/* See more card — inline at the end of the scroll row */}
+                    {hasMore && (
+                      <div
+                        onClick={() => {
+                          setRelatedLoadingMore(true)
+                          // Small delay so user sees the shimmer cards appear
+                          setTimeout(() => {
+                            setRelatedVisible(v => v + 8)
+                            setRelatedLoadingMore(false)
+                            // Scroll the row right to reveal new cards
+                            if (relatedScrollRef.current) {
+                              relatedScrollRef.current.scrollBy({ left: 400, behavior: 'smooth' })
+                            }
+                          }, 350)
+                        }}
+                        className="rv-card flex-shrink-0 w-36 sm:w-44 bg-indigo-50 rounded-2xl overflow-hidden cursor-pointer flex flex-col items-center justify-center gap-2 p-4 border border-indigo-100"
+                      >
+                        {relatedLoadingMore ? (
+                          <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                              <ArrowRight className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <p className="text-xs font-bold text-indigo-600 text-center leading-tight">
+                              See more<br />
+                              <span className="font-normal text-indigo-400">{allDeals.length - relatedVisible} more</span>
+                            </p>
+                          </>
+                        )}
                       </div>
                     )}
-                  </div>
-                  <div className="p-2.5">
-                    <p className="text-xs sm:text-sm font-semibold text-gray-800 line-clamp-2 leading-tight mb-1">
-                      {p.name}
-                    </p>
-                    <p className="text-sm font-bold text-indigo-600">{fmt(p.price)}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <StarRow rating={p.seller?.avgRating || 0} />
-                    </div>
+
+                    {/* Loading shimmer cards that appear after clicking See more */}
+                    {relatedLoadingMore && [1,2,3].map(i => (
+                      <div key={`shimmer-${i}`} className="flex-shrink-0 w-36 sm:w-44 rounded-2xl overflow-hidden">
+                        <div className="shimmer aspect-square w-full" />
+                        <div className="bg-white p-2 space-y-1.5">
+                          <div className="shimmer h-3 w-full rounded" />
+                          <div className="shimmer h-3 w-2/3 rounded" />
+                          <div className="shimmer h-4 w-1/2 rounded" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
+              )
+            })()}
           </div>
         )}
+
+        {/* ── You might also like (grid, lazy-loaded in batches of 8) ───── */}
+        {(() => {
+          const allRelated = [...relatedNameRelated, ...relatedOthers]
+          if (allRelated.length < 4) return null
+          return (
+            <YouMightAlsoLike
+              products={allRelated}
+              onNavigate={navigateRelated}
+              fmt={fmt}
+            />
+          )
+        })()}
 
       </div>
     </div>
