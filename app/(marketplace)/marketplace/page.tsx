@@ -14,12 +14,25 @@ import {
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
-const PULL_THRESHOLD = 130
-const PULL_MAX = 175
-const PULL_DEAD_ZONE = 12
-const PULL_RESIST = 0.38
+// ─────────────────────────────────────────────
+// Pull-to-refresh constants
+// ─────────────────────────────────────────────
+const PULL_THRESHOLD = 80        // visual distance to trigger refresh
+const PULL_MAX = 110             // cap how far indicator travels
+const PULL_DEAD_ZONE = 8        // ignore tiny jitters
+const PULL_RESIST = 0.4         // rubber-band resistance (< 1 = softer)
 
+// ─────────────────────────────────────────────
+// CSS – all animations injected once
+// ─────────────────────────────────────────────
 const ANIM_CSS = `
+  /* ── Global scroll quality ── */
+  html, body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+  }
+
+  /* ── Animations ── */
   @keyframes fadeSlideUp {
     from { opacity: 0; transform: translateY(18px) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -40,7 +53,7 @@ const ANIM_CSS = `
 
   @keyframes shimmer {
     0%   { background-position: -600px 0; }
-    100% { background-position: 600px 0; }
+    100% { background-position:  600px 0; }
   }
   .shimmer {
     background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
@@ -50,7 +63,7 @@ const ANIM_CSS = `
 
   @keyframes pulse-badge {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.85; transform: scale(1.04); }
+    50%       { opacity: 0.85; transform: scale(1.04); }
   }
   .badge-pulse { animation: pulse-badge 2s ease-in-out infinite; }
 
@@ -62,13 +75,17 @@ const ANIM_CSS = `
   .ticker-wrap:hover .ticker-inner { animation-play-state: paused; }
 
   @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
-    50% { box-shadow: 0 0 0 6px rgba(99,102,241,0.15); }
+    0%, 100% { box-shadow: 0 0 0 0   rgba(99,102,241,0); }
+    50%       { box-shadow: 0 0 0 6px rgba(99,102,241,0.15); }
   }
   .glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
 
+  /* ── Product card ── */
   .product-card {
     transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
+    -webkit-transform: translateZ(0);   /* GPU layer on iOS */
+    transform: translateZ(0);
+    will-change: transform;
   }
   .product-card:hover {
     transform: translateY(-4px) scale(1.015);
@@ -95,7 +112,10 @@ const ANIM_CSS = `
   .btn-press:hover  { transform: scale(1.03); }
   .btn-press:active { transform: scale(0.96); }
 
-  .cat-btn { transition: background 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s ease; }
+  .cat-btn {
+    transition: background 0.2s ease, color 0.2s ease,
+                transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s ease;
+  }
   .cat-btn:hover:not(.cat-active) { transform: scale(1.05); }
   .cat-btn:active { transform: scale(0.95); }
 
@@ -111,6 +131,7 @@ const ANIM_CSS = `
   }
   .drop-in { animation: dropIn 0.18s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
+  /* ── Horizontal scroll rows – smooth on iOS ── */
   .rv-card {
     transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
   }
@@ -119,7 +140,9 @@ const ANIM_CSS = `
   .rv-card:hover .product-img { transform: scale(1.06); }
 
   .interest-pill {
-    transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1),
+                background 0.2s ease, box-shadow 0.2s ease,
+                color 0.2s ease, border-color 0.2s ease;
   }
   .interest-pill:hover {
     transform: scale(1.05) translateY(-1px);
@@ -130,48 +153,50 @@ const ANIM_CSS = `
   }
   .interest-pill:active { transform: scale(0.96); }
 
-  .hot-tag { transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), background 0.15s ease, color 0.15s ease; }
+  .hot-tag {
+    transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1),
+                background 0.15s ease, color 0.15s ease;
+  }
   .hot-tag:hover { transform: scale(1.07) translateY(-1px); }
   .hot-tag:active { transform: scale(0.95); }
 
+  /* ── Scrollbar hiding (cross-browser) ── */
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;  /* momentum on iOS */
+  }
 
+  /* ── Horizontal scroll snap ── */
+  .scroll-section {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-section > * { scroll-snap-align: start; }
+
+  /* ── Pull-to-refresh indicator ── */
   @keyframes ptr-spin {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
   }
   .ptr-spinning { animation: ptr-spin 0.7s linear infinite; }
 
-  @keyframes ptr-bounce-in {
-    0%   { opacity: 0; transform: translateY(-16px) scale(0.85); }
-    60%  { transform: translateY(4px) scale(1.05); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+  .ptr-indicator {
+    transition: opacity 0.2s ease;
+    pointer-events: none;
   }
-  .ptr-bounce { animation: ptr-bounce-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .ptr-indicator { transition: opacity 0.2s ease; }
 
+  /* ── Misc ── */
   @keyframes viewerCount {
     0%, 100% { color: #ef4444; }
-    50% { color: #f97316; }
+    50%       { color: #f97316; }
   }
   .viewer-anim { animation: viewerCount 2.5s ease-in-out infinite; }
 
-  .section-stripe {
-    background: linear-gradient(135deg, #6366f1 0%, #4c1d95 100%);
-  }
-  .section-stripe-orange {
-    background: linear-gradient(135deg, #f97316 0%, #dc2626 100%);
-  }
-  .section-stripe-emerald {
-    background: linear-gradient(135deg, #059669 0%, #0891b2 100%);
-  }
-
-  @keyframes countUp {
-    from { transform: translateY(4px); opacity: 0; }
-    to   { transform: translateY(0); opacity: 1; }
-  }
-  .count-appear { animation: countUp 0.3s ease forwards; }
+  .section-stripe         { background: linear-gradient(135deg, #6366f1 0%, #4c1d95 100%); }
+  .section-stripe-orange  { background: linear-gradient(135deg, #f97316 0%, #dc2626 100%); }
+  .section-stripe-emerald { background: linear-gradient(135deg, #059669 0%, #0891b2 100%); }
 
   .discount-badge {
     background: linear-gradient(135deg, #ef4444, #dc2626);
@@ -179,8 +204,8 @@ const ANIM_CSS = `
   }
 
   @keyframes floatBadge {
-    0%, 100% { transform: translateY(0) rotate(-2deg); }
-    50% { transform: translateY(-2px) rotate(-2deg); }
+    0%, 100% { transform: translateY(0)   rotate(-2deg); }
+    50%       { transform: translateY(-2px) rotate(-2deg); }
   }
   .float-badge { animation: floatBadge 3s ease-in-out infinite; }
 
@@ -190,7 +215,7 @@ const ANIM_CSS = `
     animation: shimmerBg 4s linear infinite;
   }
   @keyframes shimmerBg {
-    0% { background-position: 0% 50%; }
+    0%   { background-position:   0% 50%; }
     100% { background-position: 200% 50%; }
   }
 
@@ -198,16 +223,10 @@ const ANIM_CSS = `
     background: linear-gradient(135deg, #4c1d95 0%, #6366f1 60%, #4c1d95 100%);
   }
 
-  .scroll-section {
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-  }
-  .scroll-section > * {
-    scroll-snap-align: start;
-  }
-
   .cat-tile {
     transition: transform 0.25s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.25s ease;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
   }
   .cat-tile:hover {
     transform: translateY(-4px) scale(1.04);
@@ -221,14 +240,6 @@ const ANIM_CSS = `
   .deal-card:hover { transform: translateY(-5px); box-shadow: 0 20px 48px rgba(0,0,0,0.13); }
   .deal-card:active { transform: scale(0.97); }
   .deal-card:hover .product-img { transform: scale(1.07); }
-
-  @keyframes heroBannerIn {
-    from { opacity: 0; transform: translateX(30px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-  .hero-banner-enter {
-    animation: heroBannerIn 0.6s cubic-bezier(0.22,1,0.36,1) forwards;
-  }
 
   .mini-card {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -249,104 +260,63 @@ const ANIM_CSS = `
 
   @keyframes spinLoader {
     from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    to   { transform: rotate(360deg); }
   }
   .spin { animation: spinLoader 0.8s linear infinite; }
 
   .just-dropped-card {
     transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.3s ease;
   }
-  .just-dropped-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 16px 40px rgba(0,0,0,0.1);
-  }
+  .just-dropped-card:hover  { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,0.1); }
   .just-dropped-card:active { transform: scale(0.97); }
   .just-dropped-card:hover .product-img { transform: scale(1.06); }
+
+  /* ── iOS rubber-band safe area ── */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  }
 `
 
+// ─────────────────────────────────────────────
+// Static data
+// ─────────────────────────────────────────────
 const CATEGORIES = [
-  { name: 'All', icon: '🛍️', color: '#6366f1' },
+  { name: 'All',              icon: '🛍️', color: '#6366f1' },
   { name: 'Fashion & Clothing', icon: '👔', color: '#ec4899' },
-  { name: 'Food Services', icon: '🍔', color: '#f97316' },
-  { name: 'Room Essentials', icon: '🏠', color: '#0891b2' },
-  { name: 'School Supplies', icon: '🎒', color: '#16a34a' },
-  { name: 'Tech Gadgets', icon: '🎧', color: '#7c3aed' },
-  { name: 'Cosmetics', icon: '💄', color: '#db2777' },
-  { name: 'Snacks', icon: '🍿', color: '#d97706' },
-  { name: 'Books', icon: '📚', color: '#2563eb' },
+  { name: 'Food Services',    icon: '🍔', color: '#f97316' },
+  { name: 'Room Essentials',  icon: '🏠', color: '#0891b2' },
+  { name: 'School Supplies',  icon: '🎒', color: '#16a34a' },
+  { name: 'Tech Gadgets',     icon: '🎧', color: '#7c3aed' },
+  { name: 'Cosmetics',        icon: '💄', color: '#db2777' },
+  { name: 'Snacks',           icon: '🍿', color: '#d97706' },
+  { name: 'Books',            icon: '📚', color: '#2563eb' },
 ]
 
-const TRENDING_SEARCHES = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
-const RECENT_SEARCHES_KEY = 'BATAMART-recent-searches'
-const RECENTLY_VIEWED_KEY = 'BATAMART-recently-viewed'
+const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
+const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
+const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
 
 const ACTIVITY_SIGNALS = [
   { icon: '🔥', text: (n: number) => `${n} viewing now` },
-  { icon: '🛒', text: (n: number) => `${n} sold today` },
-  { icon: '⚡', text: () => 'Selling fast' },
-  { icon: '👀', text: () => 'Recently added' },
-]
-
-const PROMO_BANNERS = [
-  { emoji: '🔥', text: 'Hot Deals — Up to 40% OFF campus picks', accent: 'from-orange-500 to-red-500' },
-  { emoji: '⚡', text: 'Flash Sale — Limited stock, grab yours now!', accent: 'from-violet-500 to-purple-600' },
-  { emoji: '🚀', text: 'Free Campus Delivery on orders over ₦30,000', accent: 'from-emerald-500 to-teal-500' },
-  { emoji: '🎓', text: 'Student Exclusive — Verified sellers only', accent: 'from-blue-500 to-indigo-600' },
+  { icon: '🛒', text: (n: number) => `${n} sold today`  },
+  { icon: '⚡', text: () => 'Selling fast'               },
+  { icon: '👀', text: () => 'Recently added'             },
 ]
 
 const CATEGORY_SPOTLIGHTS = [
-  {
-    title: 'Level up your Tech',
-    categories: ['Earbuds', 'Laptops', 'Power Banks', 'Accessories'],
-    icon: '🎧',
-    bg: 'from-violet-50 to-indigo-50',
-    accent: '#6366f1',
-    catFilter: 'Tech Gadgets',
-  },
-  {
-    title: 'Campus Fashion',
-    categories: ['Hoodies', 'Sneakers', 'Bags', 'Accessories'],
-    icon: '👔',
-    bg: 'from-pink-50 to-rose-50',
-    accent: '#ec4899',
-    catFilter: 'Fashion & Clothing',
-  },
-  {
-    title: 'Room Essentials',
-    categories: ['Bedding', 'Storage', 'Lighting', 'Decor'],
-    icon: '🏠',
-    bg: 'from-sky-50 to-blue-50',
-    accent: '#0891b2',
-    catFilter: 'Room Essentials',
-  },
-  {
-    title: 'Food & Snacks',
-    categories: ['Jollof Rice', 'Snacks', 'Drinks', 'Meal Prep'],
-    icon: '🍔',
-    bg: 'from-orange-50 to-amber-50',
-    accent: '#f97316',
-    catFilter: 'Food Services',
-  },
-  {
-    title: 'School Supplies',
-    categories: ['Textbooks', 'Stationery', 'Calculators', 'Notes'],
-    icon: '🎒',
-    bg: 'from-emerald-50 to-green-50',
-    accent: '#16a34a',
-    catFilter: 'School Supplies',
-  },
-  {
-    title: 'Beauty & Care',
-    categories: ['Skincare', 'Makeup', 'Hair', 'Perfume'],
-    icon: '💄',
-    bg: 'from-fuchsia-50 to-pink-50',
-    accent: '#db2777',
-    catFilter: 'Cosmetics',
-  },
+  { title: 'Level up your Tech',  categories: ['Earbuds','Laptops','Power Banks','Accessories'], icon: '🎧', bg: 'from-violet-50 to-indigo-50', accent: '#6366f1', catFilter: 'Tech Gadgets' },
+  { title: 'Campus Fashion',      categories: ['Hoodies','Sneakers','Bags','Accessories'],       icon: '👔', bg: 'from-pink-50 to-rose-50',    accent: '#ec4899', catFilter: 'Fashion & Clothing' },
+  { title: 'Room Essentials',     categories: ['Bedding','Storage','Lighting','Decor'],          icon: '🏠', bg: 'from-sky-50 to-blue-50',     accent: '#0891b2', catFilter: 'Room Essentials' },
+  { title: 'Food & Snacks',       categories: ['Jollof Rice','Snacks','Drinks','Meal Prep'],     icon: '🍔', bg: 'from-orange-50 to-amber-50', accent: '#f97316', catFilter: 'Food Services' },
+  { title: 'School Supplies',     categories: ['Textbooks','Stationery','Calculators','Notes'],  icon: '🎒', bg: 'from-emerald-50 to-green-50', accent: '#16a34a', catFilter: 'School Supplies' },
+  { title: 'Beauty & Care',       categories: ['Skincare','Makeup','Hair','Perfume'],             icon: '💄', bg: 'from-fuchsia-50 to-pink-50', accent: '#db2777', catFilter: 'Cosmetics' },
 ]
 
 const JUST_DROPPED_PAGE_SIZE = 12
 
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 function getSignal(productId: string, index: number) {
   const hash = productId.charCodeAt(0) + productId.charCodeAt(productId.length - 1)
   const signalIndex = (hash + index) % ACTIVITY_SIGNALS.length
@@ -357,20 +327,17 @@ function getSignal(productId: string, index: number) {
 
 function getDiscount(productId: string) {
   const hash = productId.charCodeAt(0) * 3 + productId.charCodeAt(productId.length - 1)
-  const discounts = [10, 15, 20, 25, 30, 0, 0, 0]
-  return discounts[hash % discounts.length]
+  return [10, 15, 20, 25, 30, 0, 0, 0][hash % 8]
 }
 
 function getStockLevel(productId: string) {
   const hash = productId.charCodeAt(0) + productId.charCodeAt(1)
-  const levels = [null, null, null, 3, 5, 7, null, null]
-  return levels[hash % levels.length]
+  return [null, null, null, 3, 5, 7, null, null][hash % 8]
 }
 
 function getDeliveryTag(productId: string) {
   const hash = productId.charCodeAt(0)
-  const tags = ['Campus Pickup', 'Fast Delivery', 'Free Delivery', null, null]
-  return tags[hash % tags.length]
+  return ['Campus Pickup', 'Fast Delivery', 'Free Delivery', null, null][hash % 5]
 }
 
 function parseTags(description: string): string[] {
@@ -379,12 +346,17 @@ function parseTags(description: string): string[] {
   return []
 }
 
+const fmt = (p: number) =>
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
+
+// ─────────────────────────────────────────────
+// Small UI atoms
+// ─────────────────────────────────────────────
 function TrustPill({ level }: { level: string }) {
-  const tone = level === 'GOLD'
-    ? { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-200', dot: 'bg-amber-400' }
-    : level === 'SILVER'
-      ? { bg: 'bg-slate-50', text: 'text-slate-600', ring: 'ring-slate-200', dot: 'bg-slate-400' }
-      : { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-200', dot: 'bg-orange-400' }
+  const tone =
+    level === 'GOLD'   ? { bg: 'bg-amber-50', text: 'text-amber-700',  ring: 'ring-amber-200',  dot: 'bg-amber-400'  } :
+    level === 'SILVER' ? { bg: 'bg-slate-50',  text: 'text-slate-600',  ring: 'ring-slate-200',  dot: 'bg-slate-400'  } :
+                         { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-200', dot: 'bg-orange-400' }
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${tone.bg} ${tone.text} ${tone.ring}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} /> {level}
@@ -403,7 +375,7 @@ function VerifiedBadge() {
 function StarRating({ rating }: { rating: number }) {
   return (
     <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map(i => (
+      {[1,2,3,4,5].map(i => (
         <Star key={i} className={`w-3 h-3 ${i <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`} />
       ))}
       <span className="text-xs font-semibold text-gray-500 ml-0.5">{rating.toFixed(1)}</span>
@@ -417,17 +389,19 @@ function StarRating({ rating }: { rating: number }) {
 function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
   product: any; onClick: () => void; delay?: number; showSignal?: boolean
 }) {
-  const tags = parseTags(product.description)
-  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
-  const discount = getDiscount(product.id)
-  const stockLeft = getStockLevel(product.id)
-  const deliveryTag = getDeliveryTag(product.id)
-  const signal = showSignal ? getSignal(product.id, delay) : null
+  const tags         = parseTags(product.description)
+  const discount     = getDiscount(product.id)
+  const stockLeft    = getStockLevel(product.id)
+  const deliveryTag  = getDeliveryTag(product.id)
+  const signal       = showSignal ? getSignal(product.id, delay) : null
   const originalPrice = discount ? Math.round(product.price * (1 + discount / 100)) : null
 
   return (
-    <div onClick={onClick} className="product-card card-enter bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer flex flex-col group"
-      style={{ animationDelay: `${delay}ms` }}>
+    <div
+      onClick={onClick}
+      className="product-card card-enter bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer flex flex-col group"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="relative aspect-square bg-gray-50 overflow-hidden">
         <img src={product.images[0] || '/placeholder.png'} alt={product.name} className="product-img w-full h-full object-cover" />
         <div className="absolute top-2 left-2 flex flex-col gap-1">
@@ -458,10 +432,10 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
           </div>
         )}
         <div className="quick-actions absolute bottom-2 left-2 flex gap-1.5">
-          <button onClick={e => { e.stopPropagation(); }} className="w-7 h-7 bg-white/95 hover:bg-red-50 rounded-lg flex items-center justify-center shadow-sm transition-colors">
+          <button onClick={e => e.stopPropagation()} className="w-7 h-7 bg-white/95 hover:bg-red-50 rounded-lg flex items-center justify-center shadow-sm transition-colors">
             <Heart className="w-3.5 h-3.5 text-gray-500 hover:text-red-500" />
           </button>
-          <button onClick={e => { e.stopPropagation(); onClick(); }} className="w-7 h-7 bg-white/95 rounded-lg flex items-center justify-center shadow-sm transition-colors">
+          <button onClick={e => { e.stopPropagation(); onClick() }} className="w-7 h-7 bg-white/95 rounded-lg flex items-center justify-center shadow-sm transition-colors">
             <Eye className="w-3.5 h-3.5 text-gray-500" />
           </button>
         </div>
@@ -511,7 +485,11 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
 
         <div className="flex items-center justify-between pt-2 mt-1.5 border-t border-gray-50">
           <div className="min-w-0 flex items-center gap-1 flex-wrap">
-            <Link href={`/seller/${product.seller?.id}`} className="text-[10px] font-semibold text-gray-500 hover:text-BATAMART-primary truncate transition-colors" onClick={e => e.stopPropagation()}>
+            <Link
+              href={`/seller/${product.seller?.id}`}
+              className="text-[10px] font-semibold text-gray-500 hover:text-BATAMART-primary truncate transition-colors"
+              onClick={e => e.stopPropagation()}
+            >
               {product.seller?.name}
             </Link>
             <VerifiedBadge />
@@ -524,10 +502,9 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
 }
 
 // ─────────────────────────────────────────────
-// Mini Product Card (for recently viewed)
+// Mini Product Card (recently viewed)
 // ─────────────────────────────────────────────
 function MiniProductCard({ product, onClick }: { product: any; onClick: () => void }) {
-  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
   return (
     <div onClick={onClick} className="mini-card cursor-pointer group">
       <div className="aspect-square rounded-xl overflow-hidden bg-gray-50 mb-2">
@@ -547,14 +524,14 @@ function SkeletonCard({ delay = 0 }: { delay?: number }) {
         <div className="h-2.5 shimmer rounded-full w-1/2" />
         <div className="h-3.5 shimmer rounded-full w-full" />
         <div className="h-3.5 shimmer rounded-full w-3/4" />
-        <div className="h-5 shimmer rounded-full w-1/3 mt-3" />
+        <div className="h-5   shimmer rounded-full w-1/3 mt-3" />
       </div>
     </div>
   )
 }
 
 // ─────────────────────────────────────────────
-// Promo Ticker Bar
+// Promo Ticker
 // ─────────────────────────────────────────────
 function PromoTicker() {
   const items = [
@@ -580,8 +557,7 @@ function PromoTicker() {
 }
 
 // ─────────────────────────────────────────────
-// Amazon-style Category Spotlight Grid
-// Clicking any product image → go to that CATEGORY view, not product page
+// Category Spotlight Grid
 // ─────────────────────────────────────────────
 function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
   allProducts: any[]
@@ -589,10 +565,8 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      {CATEGORY_SPOTLIGHTS.map((spot) => {
-        const catProducts = allProducts
-          .filter(p => p.category === spot.catFilter)
-          .slice(0, 4)
+      {CATEGORY_SPOTLIGHTS.map(spot => {
+        const catProducts = allProducts.filter(p => p.category === spot.catFilter).slice(0, 4)
         return (
           <div
             key={spot.title}
@@ -605,7 +579,6 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
             {catProducts.length > 0 ? (
               <div className="grid grid-cols-2 gap-1 p-2 pt-1">
                 {catProducts.map(p => (
-                  /* Clicking a product image inside the tile also navigates to the category */
                   <div
                     key={p.id}
                     onClick={e => { e.stopPropagation(); onCategorySelect(spot.catFilter) }}
@@ -619,7 +592,6 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
                 ))}
               </div>
             ) : (
-              /* No products yet — show placeholder tiles with sub-category names */
               <div className="grid grid-cols-2 gap-1 p-2 pt-1">
                 {spot.categories.slice(0, 4).map((cat, i) => (
                   <div key={i} className="aspect-square rounded-lg bg-white/70 flex flex-col items-center justify-center p-1">
@@ -642,17 +614,13 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
 }
 
 // ─────────────────────────────────────────────
-// Best Sellers Row — "See all" wired to category
+// Best Sellers Row
 // ─────────────────────────────────────────────
 function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }: {
-  products: any[]
-  onProductClick: (id: string) => void
-  onSeeAll?: () => void
-  title: string
-  subtitle?: string
+  products: any[]; onProductClick: (id: string) => void;
+  onSeeAll?: () => void; title: string; subtitle?: string
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
-  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
   const scrollBy = (dir: number) => rowRef.current?.scrollBy({ left: dir * 240, behavior: 'smooth' })
 
   return (
@@ -663,10 +631,7 @@ function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }:
           {subtitle && <p className="text-xs text-gray-400 font-medium mt-1">{subtitle}</p>}
         </div>
         {onSeeAll && (
-          <button
-            onClick={onSeeAll}
-            className="text-xs font-bold text-BATAMART-primary flex items-center gap-1 hover:underline"
-          >
+          <button onClick={onSeeAll} className="text-xs font-bold text-BATAMART-primary flex items-center gap-1 hover:underline">
             See all <ChevronRight className="w-3.5 h-3.5" />
           </button>
         )}
@@ -677,9 +642,8 @@ function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }:
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div ref={rowRef} className="flex gap-4 overflow-x-auto no-scrollbar scroll-section">
-          {products.map((p) => (
-            <div key={p.id} onClick={() => onProductClick(p.id)}
-              className="deal-card flex-shrink-0 w-36 sm:w-44 cursor-pointer group/card">
+          {products.map(p => (
+            <div key={p.id} onClick={() => onProductClick(p.id)} className="deal-card flex-shrink-0 w-36 sm:w-44 cursor-pointer group/card">
               <div className="aspect-square rounded-xl overflow-hidden bg-gray-50 mb-2.5">
                 <img src={p.images[0] || '/placeholder.png'} alt={p.name} className="product-img w-full h-full object-cover" />
               </div>
@@ -704,17 +668,11 @@ function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }:
 }
 
 // ─────────────────────────────────────────────
-// Deals Row — "See all" wired to category
+// Deals Section
 // ─────────────────────────────────────────────
 function DealsSection({ products, onProductClick, onSeeAll, sectionClass, icon, title, subtitle, badge }: {
-  products: any[]
-  onProductClick: (id: string) => void
-  onSeeAll?: () => void
-  sectionClass: string
-  icon: React.ReactNode
-  title: string
-  subtitle: string
-  badge?: string
+  products: any[]; onProductClick: (id: string) => void; onSeeAll?: () => void;
+  sectionClass: string; icon: React.ReactNode; title: string; subtitle: string; badge?: string
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
   const scrollBy = (dir: number) => rowRef.current?.scrollBy({ left: dir * 200, behavior: 'smooth' })
@@ -761,22 +719,30 @@ function DealsSection({ products, onProductClick, onSeeAll, sectionClass, icon, 
 }
 
 // ─────────────────────────────────────────────
-// Pull-to-Refresh
+// Pull-to-Refresh Indicator
 // ─────────────────────────────────────────────
 function PullIndicator({ pullDistance, isRefreshing }: { pullDistance: number; isRefreshing: boolean }) {
   const progress = Math.min(pullDistance / PULL_THRESHOLD, 1)
-  const ready = pullDistance >= PULL_THRESHOLD
+  const ready    = pullDistance >= PULL_THRESHOLD
   return (
-    <div className="ptr-indicator pointer-events-none fixed top-0 left-0 right-0 z-50 flex justify-center"
+    <div
+      className="ptr-indicator fixed top-0 left-0 right-0 z-50 flex justify-center"
       style={{
-        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 64}px)`,
-        transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
+        transform: `translateY(${Math.min(pullDistance, PULL_MAX) - 60}px)`,
+        transition: isRefreshing || pullDistance === 0
+          ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)'
+          : 'none',
         opacity: isRefreshing ? 1 : progress,
-      }}>
-      <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white shadow-lg border border-gray-100"
-        style={{ transform: `scale(${0.85 + progress * 0.15})` }}>
-        <RefreshCw className={`w-4 h-4 text-BATAMART-primary ${isRefreshing ? 'ptr-spinning' : ''}`}
-          style={{ transform: isRefreshing ? undefined : `rotate(${progress * 220}deg)` }} />
+      }}
+    >
+      <div
+        className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white shadow-lg border border-gray-100"
+        style={{ transform: `scale(${0.85 + progress * 0.15})` }}
+      >
+        <RefreshCw
+          className={`w-4 h-4 text-BATAMART-primary ${isRefreshing ? 'ptr-spinning' : ''}`}
+          style={{ transform: isRefreshing ? undefined : `rotate(${progress * 220}deg)` }}
+        />
         <span className="text-xs font-bold text-gray-600">
           {isRefreshing ? 'Refreshing…' : ready ? 'Release to refresh' : 'Pull to refresh'}
         </span>
@@ -808,18 +774,16 @@ function LiveStatsBar({ count }: { count: number }) {
 }
 
 // ─────────────────────────────────────────────
-// Just Dropped — infinite vertical scroll section (ALWAYS last)
+// Just Dropped Section (infinite vertical scroll)
 // ─────────────────────────────────────────────
 function JustDroppedSection({ allProducts, onProductClick }: {
-  allProducts: any[]
-  onProductClick: (id: string) => void
+  allProducts: any[]; onProductClick: (id: string) => void
 }) {
-  const [search, setSearch] = useState('')
+  const [search, setSearch]           = useState('')
   const [visibleCount, setVisibleCount] = useState(JUST_DROPPED_PAGE_SIZE)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingMore, setLoadingMore]  = useState(false)
   const loaderRef = useRef<HTMLDivElement>(null)
 
-  // Filter just-dropped products
   const allNew = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
 
   const filtered = useMemo(() => {
@@ -836,7 +800,6 @@ function JustDroppedSection({ allProducts, onProductClick }: {
   const visible = filtered.slice(0, visibleCount)
   const hasMore = visibleCount < filtered.length
 
-  // Infinite scroll via IntersectionObserver
   useEffect(() => {
     if (!loaderRef.current) return
     const obs = new IntersectionObserver(
@@ -855,14 +818,12 @@ function JustDroppedSection({ allProducts, onProductClick }: {
     return () => obs.disconnect()
   }, [hasMore, loadingMore])
 
-  // Reset visible count when search changes
   useEffect(() => { setVisibleCount(JUST_DROPPED_PAGE_SIZE) }, [search])
 
   if (allNew.length === 0) return null
 
   return (
     <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-      {/* Header */}
       <div className="section-stripe-emerald px-5 py-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
@@ -877,8 +838,6 @@ function JustDroppedSection({ allProducts, onProductClick }: {
           </div>
           <span className="text-white/60 text-[11px] font-bold">{filtered.length} items</span>
         </div>
-
-        {/* Search bar inside the section */}
         <div className="flex items-center gap-2 bg-white/15 hover:bg-white/20 rounded-xl px-3 py-2.5 transition-colors ring-1 ring-white/20 focus-within:ring-white/40 focus-within:bg-white/25">
           <Search className="w-4 h-4 text-white/70 flex-shrink-0" />
           <input
@@ -896,7 +855,6 @@ function JustDroppedSection({ allProducts, onProductClick }: {
         </div>
       </div>
 
-      {/* Products grid */}
       <div className="bg-white p-4">
         {filtered.length === 0 ? (
           <div className="text-center py-12">
@@ -910,28 +868,19 @@ function JustDroppedSection({ allProducts, onProductClick }: {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {visible.map((p, i) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  onClick={() => onProductClick(p.id)}
-                  delay={i * 25}
-                />
+                <ProductCard key={p.id} product={p} onClick={() => onProductClick(p.id)} delay={i * 25} />
               ))}
-              {/* Skeleton placeholders while loading more */}
               {loadingMore && Array.from({ length: 4 }).map((_, i) => (
                 <SkeletonCard key={`skel-${i}`} delay={i * 60} />
               ))}
             </div>
-
-            {/* Infinite scroll sentinel */}
             <div ref={loaderRef} className="flex justify-center items-center py-8 mt-2">
               {loadingMore ? (
                 <div className="flex items-center gap-2 text-gray-400 text-sm font-medium">
-                  <Loader2 className="w-4 h-4 spin" />
-                  Loading more…
+                  <Loader2 className="w-4 h-4 spin" /> Loading more…
                 </div>
               ) : hasMore ? (
-                <div className="w-full h-4" /> // invisible sentinel
+                <div className="w-full h-4" />
               ) : (
                 <div className="flex flex-col items-center gap-1 text-gray-300">
                   <CheckCircle className="w-5 h-5" />
@@ -947,10 +896,10 @@ function JustDroppedSection({ allProducts, onProductClick }: {
 }
 
 // ─────────────────────────────────────────────
-// Main Component
+// ══ MAIN PAGE ══
 // ─────────────────────────────────────────────
 export default function MarketplacePage() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
 
   const isApp = searchParams.get('app') === 'true' ||
@@ -961,32 +910,34 @@ export default function MarketplacePage() {
     return !isSplashPending()
   })
 
-  const [allProducts, setAllProducts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedCategory, setSelectedCategory] = useState('All')
-  const [viewMode, setViewMode] = useState<'feed' | 'grid'>('feed')
-  const [recentlyViewed, setRecentlyViewed] = useState<any[]>([])
-  const [interestCategories, setInterestCategories] = useState<string[]>([])
-  const [searchInput, setSearchInput] = useState('')
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
+  const [allProducts,       setAllProducts]       = useState<any[]>([])
+  const [loading,           setLoading]           = useState(true)
+  const [selectedCategory,  setSelectedCategory]  = useState('All')
+  const [viewMode,          setViewMode]          = useState<'feed' | 'grid'>('feed')
+  const [recentlyViewed,    setRecentlyViewed]    = useState<any[]>([])
+  const [interestCategories,setInterestCategories]= useState<string[]>([])
+  const [searchInput,       setSearchInput]       = useState('')
+  const [recentSearches,    setRecentSearches]    = useState<string[]>([])
+  const [showSuggestions,   setShowSuggestions]   = useState(false)
+  const [mounted,           setMounted]           = useState(false)
+  const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
-  const [promoBanner, setPromoBanner] = useState(0)
 
-  const [pullDistance, setPullDistance] = useState(0)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  // Pull-to-refresh state
+  const [pullDistance,  setPullDistance]  = useState(0)
+  const [isRefreshing,  setIsRefreshing]  = useState(false)
 
-  const inputRef = useRef<HTMLInputElement>(null)
-  const searchRef = useRef<HTMLDivElement>(null)
+  const inputRef    = useRef<HTMLInputElement>(null)
+  const searchRef   = useRef<HTMLDivElement>(null)
   const isClickingSuggestionRef = useRef(false)
 
-  useEffect(() => {
-    const t = setInterval(() => setPromoBanner(p => (p + 1) % PROMO_BANNERS.length), 4000)
-    return () => clearInterval(t)
-  }, [])
+  // Pull-to-refresh touch tracking (refs avoid stale closure issues)
+  const ptrStartY     = useRef(0)
+  const ptrDelta      = useRef(0)
+  const ptrActive     = useRef(false)
+  const ptrLocked     = useRef(false)   // locked = decided this is a vertical pull gesture
 
+  // ── Splash ──
   useEffect(() => {
     if (splashDone) return
     const handler = () => setSplashDone(true)
@@ -995,6 +946,7 @@ export default function MarketplacePage() {
     return () => { window.removeEventListener('batamart:splash-done', handler); clearTimeout(fallback) }
   }, [splashDone])
 
+  // ── Inject CSS ──
   useEffect(() => {
     if (document.getElementById('BATAMART-anim')) return
     const s = document.createElement('style')
@@ -1003,20 +955,22 @@ export default function MarketplacePage() {
     document.head.appendChild(s)
   }, [])
 
+  // ── Init ──
   useEffect(() => {
     setMounted(true)
-    try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch { }
-    try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch { }
+    try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
+    try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
     fetchFeed()
     const token = localStorage.getItem('token')
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
-        .then(data => { if (data.user?.university?.shortName) setUniversityShortName(data.user.university.shortName) })
-        .catch(() => { })
+        .then(d => { if (d.user?.university?.shortName) setUniversityShortName(d.user.university.shortName) })
+        .catch(() => {})
     }
   }, [])
 
+  // ── Close dropdown on outside click ──
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (isClickingSuggestionRef.current) return
@@ -1026,53 +980,88 @@ export default function MarketplacePage() {
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
+  // ── Category change ──
   useEffect(() => {
     if (selectedCategory === 'All') { fetchFeed() } else { fetchByCategory(selectedCategory) }
   }, [selectedCategory])
 
+  // ─────────────────────────────────────────────
+  // Pull-to-Refresh — iOS-safe implementation
+  //
+  // KEY RULES:
+  //   1. Never call preventDefault() on touchmove — that kills iOS momentum.
+  //   2. Only show the PTR indicator; let the page scroll freely underneath.
+  //   3. Track touch deltas with refs (not state) to avoid re-renders mid-gesture.
+  //   4. Only trigger refresh when the user releases at the top of the page.
+  // ─────────────────────────────────────────────
   useEffect(() => {
-    let startY = 0; let latestDelta = 0; let inPullMode = false
-    const onTouchStart = (e: TouchEvent) => {
-      if (window.scrollY > 0) return
-      if (isRefreshing) return
-      startY = e.touches[0].clientY; latestDelta = 0; inPullMode = false
+    if (isRefreshing) return   // don't re-attach during active refresh
+
+    function onTouchStart(e: TouchEvent) {
+      ptrStartY.current  = e.touches[0].clientY
+      ptrDelta.current   = 0
+      ptrActive.current  = false
+      ptrLocked.current  = false
     }
-    const onTouchMove = (e: TouchEvent) => {
-      if (startY === 0) return
-      if (isRefreshing) return
-      if (window.scrollY > 0) { startY = 0; inPullMode = false; setPullDistance(0); return }
-      const delta = e.touches[0].clientY - startY
-      if (!inPullMode) {
-        if (delta < PULL_DEAD_ZONE) return
-        if (delta < 0) { startY = 0; return }
-        inPullMode = true
+
+    function onTouchMove(e: TouchEvent) {
+      // Only consider PTR when page is scrolled to the very top
+      if (window.scrollY > 0) {
+        ptrStartY.current = 0
+        ptrActive.current = false
+        return
       }
-      latestDelta = delta
+
+      const delta = e.touches[0].clientY - ptrStartY.current
+      if (delta <= 0) return            // scrolling up — ignore
+      if (delta < PULL_DEAD_ZONE) return // tiny jitter — ignore
+
+      // First time we cross the dead zone, decide this is a downward pull
+      if (!ptrLocked.current) {
+        ptrLocked.current = true
+        ptrActive.current = true
+      }
+
+      ptrDelta.current = delta
+      // Rubber-band: visual distance grows slower than finger travel
       const visual = Math.min(delta * PULL_RESIST, PULL_MAX)
       setPullDistance(visual)
-      e.preventDefault()
+      // NOTE: We do NOT call e.preventDefault() here.
+      //       iOS will handle the native overscroll; we just overlay our indicator.
     }
-    const onTouchEnd = async () => {
-      if (!inPullMode) return
-      const triggered = latestDelta * PULL_RESIST >= PULL_THRESHOLD
-      inPullMode = false; startY = 0; latestDelta = 0
+
+    async function onTouchEnd() {
+      if (!ptrActive.current) return
+
+      const triggered = ptrDelta.current * PULL_RESIST >= PULL_THRESHOLD
+      ptrActive.current  = false
+      ptrLocked.current  = false
+      ptrStartY.current  = 0
+
       if (triggered) {
-        setIsRefreshing(true); setPullDistance(PULL_THRESHOLD)
+        setIsRefreshing(true)
+        setPullDistance(PULL_THRESHOLD)
         await fetchFeed()
-        setIsRefreshing(false); setPullDistance(0)
-      } else { setPullDistance(0) }
+        setIsRefreshing(false)
+      }
+      // Animate indicator back to hidden
+      setPullDistance(0)
     }
+
+    // All listeners passive — never block iOS touch handling
     document.addEventListener('touchstart', onTouchStart, { passive: true })
-    document.addEventListener('touchmove', onTouchMove, { passive: false })
-    document.addEventListener('touchend', onTouchEnd, { passive: true })
+    document.addEventListener('touchmove',  onTouchMove,  { passive: true })
+    document.addEventListener('touchend',   onTouchEnd,   { passive: true })
+
     return () => {
       document.removeEventListener('touchstart', onTouchStart)
-      document.removeEventListener('touchmove', onTouchMove)
-      document.removeEventListener('touchend', onTouchEnd)
+      document.removeEventListener('touchmove',  onTouchMove)
+      document.removeEventListener('touchend',   onTouchEnd)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRefreshing])
 
+  // ── Search dropdown position ──
   const updateDropdownPos = useCallback(() => {
     if (!inputRef.current) return
     const r = inputRef.current.getBoundingClientRect()
@@ -1082,16 +1071,20 @@ export default function MarketplacePage() {
   useEffect(() => {
     window.addEventListener('resize', updateDropdownPos)
     window.addEventListener('scroll', updateDropdownPos)
-    return () => { window.removeEventListener('resize', updateDropdownPos); window.removeEventListener('scroll', updateDropdownPos) }
+    return () => {
+      window.removeEventListener('resize', updateDropdownPos)
+      window.removeEventListener('scroll', updateDropdownPos)
+    }
   }, [updateDropdownPos])
 
+  // ── API calls ──
   const buildFeedSignals = () => {
     let viewed = ''; let searched = ''
     try {
       const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
       viewed = Array.from(new Set(rv.map((p: any) => p.category).filter(Boolean))).join(',')
-    } catch { }
-    try { searched = (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]') as string[]).join(',') } catch { }
+    } catch {}
+    try { searched = (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]') as string[]).join(',') } catch {}
     return { viewed, searched }
   }
 
@@ -1102,11 +1095,9 @@ export default function MarketplacePage() {
       if (!token) return
       const { viewed, searched } = buildFeedSignals()
       const params = new URLSearchParams()
-      if (viewed) params.set('viewed', viewed)
+      if (viewed)   params.set('viewed', viewed)
       if (searched) params.set('searched', searched)
-      const res = await fetch(`/api/products/feed?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res  = await fetch(`/api/products/feed?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) {
         setAllProducts(data.products || [])
@@ -1115,7 +1106,7 @@ export default function MarketplacePage() {
         )) as string[]
         setInterestCategories(cats.slice(0, 4))
       }
-    } catch { }
+    } catch {}
     finally { setLoading(false) }
   }
 
@@ -1124,30 +1115,27 @@ export default function MarketplacePage() {
     try {
       const token = localStorage.getItem('token')
       if (!token) return
-      const res = await fetch(`/api/products?category=${encodeURIComponent(category)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res  = await fetch(`/api/products?category=${encodeURIComponent(category)}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) setAllProducts(data.products || [])
-    } catch { }
+    } catch {}
     finally { setLoading(false) }
   }
 
-  const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
-
+  // ── Interaction handlers ──
   const handleProductClick = (id: string) => {
     const token = localStorage.getItem('token')
     try {
-      const viewed = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+      const viewed  = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
       const product = allProducts.find(p => p.id === id)
       if (product) {
         const updated = [product, ...viewed.filter((v: any) => v.id !== id)].slice(0, 20)
         localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated))
         setRecentlyViewed(updated)
       }
-    } catch { }
+    } catch {}
     if (token) {
-      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => { })
+      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
     }
     window.location.href = token ? `/product/${id}` : '/login'
   }
@@ -1159,7 +1147,7 @@ export default function MarketplacePage() {
       const updated = [q, ...recentSearches.filter(s => s !== q)].slice(0, 8)
       setRecentSearches(updated)
       localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated))
-    } catch { }
+    } catch {}
     setShowSuggestions(false)
     router.push(`/search?q=${encodeURIComponent(q)}`)
   }
@@ -1168,11 +1156,12 @@ export default function MarketplacePage() {
     if (e.key === 'Enter') { e.preventDefault(); handleSearch() }
   }
 
+  // ── Derived data ──
   const forYouProducts = useMemo(() => allProducts.filter(p => p.isPersonalised).slice(0, 12), [allProducts])
   const trendingProducts = useMemo(() => allProducts.filter(p => p.isTrending).slice(0, 12), [allProducts])
   const newListings = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
   const discoverProducts = useMemo(() => {
-    const shown = new Set([...forYouProducts.map(p => p.id), ...trendingProducts.map(p => p.id), ...newListings.map(p => p.id)])
+    const shown = new Set([...forYouProducts, ...trendingProducts, ...newListings].map(p => p.id))
     return allProducts.filter(p => !shown.has(p.id)).slice(0, 16)
   }, [allProducts, forYouProducts, trendingProducts, newListings])
 
@@ -1181,7 +1170,6 @@ export default function MarketplacePage() {
     [allProducts, selectedCategory]
   )
 
-  // Group products by category for "Best Sellers" rows
   const productsByCategory = useMemo(() => {
     const map: Record<string, any[]> = {}
     for (const cat of CATEGORIES.slice(1)) {
@@ -1194,61 +1182,75 @@ export default function MarketplacePage() {
     const q = searchInput.trim().toLowerCase()
     if (!q) return recentSearches.slice(0, 6).map(s => ({ type: 'recent', label: s }))
     const productMatches = allProducts
-      .filter(p => { const tags = parseTags(p.description); return p.name.toLowerCase().includes(q) || tags.some((t: string) => t.toLowerCase().includes(q)) })
-      .slice(0, 5).map(p => ({ type: 'product', label: p.name, sublabel: fmt(p.price), id: p.id, image: p.images[0] }))
-    const trendingMatches = TRENDING_SEARCHES.filter(s => s.toLowerCase().includes(q)).slice(0, 3).map(s => ({ type: 'trending', label: s }))
+      .filter(p => {
+        const tags = parseTags(p.description)
+        return p.name.toLowerCase().includes(q) || tags.some((t: string) => t.toLowerCase().includes(q))
+      })
+      .slice(0, 5)
+      .map(p => ({ type: 'product', label: p.name, sublabel: fmt(p.price), id: p.id, image: p.images[0] }))
+    const trendingMatches = TRENDING_SEARCHES
+      .filter(s => s.toLowerCase().includes(q))
+      .slice(0, 3)
+      .map(s => ({ type: 'trending', label: s }))
     return [...productMatches, ...trendingMatches]
   }, [searchInput, allProducts, recentSearches])
 
+  // ── Search suggestions portal ──
   const SuggestionsDropdown = mounted && showSuggestions && suggestions.length > 0
     ? createPortal(
-      <div className="drop-in fixed z-[9998] bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
-        style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, maxHeight: '320px', overflowY: 'auto' }}>
-        <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-            {!searchInput.trim() ? 'Recent Searches' : 'Suggestions'}
-          </span>
-          {!searchInput.trim() && recentSearches.length > 0 && (
-            <span className="text-[10px] text-BATAMART-primary font-bold">RECENT</span>
+        <div
+          className="drop-in fixed z-[9998] bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+          style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, maxHeight: '320px', overflowY: 'auto' }}
+        >
+          <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              {!searchInput.trim() ? 'Recent Searches' : 'Suggestions'}
+            </span>
+            {!searchInput.trim() && recentSearches.length > 0 && (
+              <span className="text-[10px] text-BATAMART-primary font-bold">RECENT</span>
+            )}
+          </div>
+          {suggestions.map((s: any, i) => (
+            <button
+              key={i}
+              onMouseDown={e => { e.preventDefault(); isClickingSuggestionRef.current = true }}
+              onClick={() => {
+                isClickingSuggestionRef.current = false
+                if (s.type === 'product') { handleProductClick(s.id); return }
+                handleSearch(s.label)
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
+            >
+              {s.type === 'product' && s.image
+                ? <img src={s.image} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
+                : s.type === 'recent'
+                  ? <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  : <TrendingUp className="w-4 h-4 text-BATAMART-primary flex-shrink-0" />
+              }
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate">{s.label}</p>
+                {s.sublabel && <p className="text-xs text-BATAMART-primary font-bold">{s.sublabel}</p>}
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+            </button>
+          ))}
+          {searchInput.trim() && (
+            <button
+              onMouseDown={e => { e.preventDefault(); isClickingSuggestionRef.current = true }}
+              onClick={() => { isClickingSuggestionRef.current = false; handleSearch() }}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-BATAMART-primary/5 hover:bg-BATAMART-primary/10 transition-colors border-t border-gray-50"
+            >
+              <div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
+                <Search className="w-4 h-4 text-BATAMART-primary" />
+              </div>
+              <span className="text-sm font-bold text-BATAMART-primary">Search for &quot;{searchInput}&quot;</span>
+              <ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" />
+            </button>
           )}
-        </div>
-        {suggestions.map((s: any, i) => (
-          <button key={i}
-            onMouseDown={(e) => { e.preventDefault(); isClickingSuggestionRef.current = true }}
-            onClick={() => {
-              isClickingSuggestionRef.current = false
-              if (s.type === 'product') { handleProductClick(s.id); return }
-              handleSearch(s.label)
-            }}
-            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left">
-            {s.type === 'product' && s.image
-              ? <img src={s.image} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="" />
-              : s.type === 'recent'
-                ? <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                : <TrendingUp className="w-4 h-4 text-BATAMART-primary flex-shrink-0" />
-            }
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 truncate">{s.label}</p>
-              {s.sublabel && <p className="text-xs text-BATAMART-primary font-bold">{s.sublabel}</p>}
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-          </button>
-        ))}
-        {searchInput.trim() && (
-          <button
-            onMouseDown={(e) => { e.preventDefault(); isClickingSuggestionRef.current = true }}
-            onClick={() => { isClickingSuggestionRef.current = false; handleSearch() }}
-            className="w-full flex items-center gap-3 px-4 py-3 bg-BATAMART-primary/5 hover:bg-BATAMART-primary/10 transition-colors border-t border-gray-50">
-            <div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
-              <Search className="w-4 h-4 text-BATAMART-primary" />
-            </div>
-            <span className="text-sm font-bold text-BATAMART-primary">Search for &quot;{searchInput}&quot;</span>
-            <ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" />
-          </button>
-        )}
-      </div>,
-      document.body
-    ) : null
+        </div>,
+        document.body
+      )
+    : null
 
   if (!splashDone) return <div className="min-h-screen bg-white" />
 
@@ -1256,19 +1258,23 @@ export default function MarketplacePage() {
     <div className="min-h-screen bg-[#f0f2f5]">
       {SuggestionsDropdown}
 
+      {/* Pull-to-refresh indicator */}
       {(pullDistance > 0 || isRefreshing) && (
         <PullIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
       )}
 
-      {/* ── PROMO TICKER ── */}
+      {/* Promo ticker */}
       <PromoTicker />
 
       {/* ══ HEADER ══ */}
-      <header className="batamart-header sticky top-0 z-40 shadow-lg"
+      <header
+        className="batamart-header sticky top-0 z-40 shadow-lg"
         style={{
-          transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.2, 20)}px)` : undefined,
+          // Subtle push-down effect during PTR — keeps header anchored-feeling
+          transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.15, 16)}px)` : undefined,
           transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
-        }}>
+        }}
+      >
         <div className="max-w-7xl mx-auto px-3 sm:px-6">
 
           {/* Top row */}
@@ -1290,8 +1296,10 @@ export default function MarketplacePage() {
             {/* Search bar */}
             <div ref={searchRef} className="flex-1 min-w-0">
               <div className="search-input flex items-center gap-2 bg-white rounded-xl shadow-md px-3 sm:px-4 ring-2 ring-transparent">
-                <div className="hidden sm:flex items-center gap-1 border-r border-gray-200 pr-3 mr-1 flex-shrink-0 cursor-pointer hover:text-BATAMART-primary transition-colors"
-                  onClick={() => {}}>
+                <div
+                  className="hidden sm:flex items-center gap-1 border-r border-gray-200 pr-3 mr-1 flex-shrink-0 cursor-pointer hover:text-BATAMART-primary transition-colors"
+                  onClick={() => {}}
+                >
                   <span className="text-xs font-bold text-gray-500 whitespace-nowrap">All</span>
                   <ChevronDown className="w-3 h-3 text-gray-400" />
                 </div>
@@ -1312,8 +1320,10 @@ export default function MarketplacePage() {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
-                <button onClick={() => handleSearch()}
-                  className="flex-shrink-0 px-4 py-2 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-lg font-black text-sm transition-colors">
+                <button
+                  onClick={() => handleSearch()}
+                  className="flex-shrink-0 px-4 py-2 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-lg font-black text-sm transition-colors"
+                >
                   <span className="hidden sm:inline">Search</span>
                   <Search className="w-4 h-4 sm:hidden" />
                 </button>
@@ -1341,12 +1351,15 @@ export default function MarketplacePage() {
           <div className="flex items-center justify-between gap-2 pb-2 border-t border-white/10 pt-2">
             <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1">
               {CATEGORIES.map(cat => (
-                <button key={cat.name} onClick={() => setSelectedCategory(cat.name)}
+                <button
+                  key={cat.name}
+                  onClick={() => setSelectedCategory(cat.name)}
                   className={`cat-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold whitespace-nowrap text-[11px] sm:text-xs flex-shrink-0 transition-all ${
                     selectedCategory === cat.name
                       ? 'cat-active bg-white text-BATAMART-primary shadow-sm'
                       : 'text-white/80 hover:text-white hover:bg-white/15'
-                  }`}>
+                  }`}
+                >
                   <span>{cat.icon}</span>
                   <span className="hidden sm:inline">{cat.name}</span>
                   <span className="sm:hidden">{cat.name.split(' ')[0]}</span>
@@ -1355,11 +1368,12 @@ export default function MarketplacePage() {
             </div>
             <div className="flex items-center gap-0.5 bg-white/10 rounded-lg p-0.5 flex-shrink-0">
               {(['feed', 'grid'] as const).map(mode => (
-                <button key={mode} onClick={() => setViewMode(mode)}
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
                   className="px-2.5 py-1.5 rounded-md text-[11px] font-bold capitalize transition-all"
-                  style={viewMode === mode
-                    ? { background: 'white', color: '#6366f1' }
-                    : { color: 'rgba(255,255,255,0.65)' }}>
+                  style={viewMode === mode ? { background: 'white', color: '#6366f1' } : { color: 'rgba(255,255,255,0.65)' }}
+                >
                   {mode === 'feed' ? <List className="w-3.5 h-3.5" /> : <Grid3X3 className="w-3.5 h-3.5" />}
                 </button>
               ))}
@@ -1373,8 +1387,11 @@ export default function MarketplacePage() {
             </span>
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
               {TRENDING_SEARCHES.map(tag => (
-                <button key={tag} onClick={() => router.push(`/search?q=${encodeURIComponent(tag)}`)}
-                  className="hot-tag flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white text-white/80 hover:text-BATAMART-primary rounded-full text-[10px] font-bold whitespace-nowrap flex-shrink-0 transition-all">
+                <button
+                  key={tag}
+                  onClick={() => router.push(`/search?q=${encodeURIComponent(tag)}`)}
+                  className="hot-tag flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white text-white/80 hover:text-BATAMART-primary rounded-full text-[10px] font-bold whitespace-nowrap flex-shrink-0 transition-all"
+                >
                   {tag}
                 </button>
               ))}
@@ -1383,8 +1400,8 @@ export default function MarketplacePage() {
         </div>
       </header>
 
-      {/* ── CONTENT ── */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5 pb-28 space-y-4">
+      {/* ── MAIN CONTENT ── */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5 pb-28 safe-bottom space-y-4">
 
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -1395,7 +1412,10 @@ export default function MarketplacePage() {
           /* ── CATEGORY FILTER VIEW ── */
           <div>
             <div className="flex items-center gap-2 mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-              <button onClick={() => setSelectedCategory('All')} className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors flex items-center gap-1">
+              <button
+                onClick={() => setSelectedCategory('All')}
+                className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors flex items-center gap-1"
+              >
                 <ChevronLeft className="w-3.5 h-3.5" /> All
               </button>
               <span className="text-gray-300">/</span>
@@ -1412,7 +1432,9 @@ export default function MarketplacePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {filteredByCategory.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />)}
+                {filteredByCategory.map((p, i) => (
+                  <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />
+                ))}
               </div>
             )}
           </div>
@@ -1424,35 +1446,31 @@ export default function MarketplacePage() {
               <LiveStatsBar count={allProducts.length} />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {allProducts.map((p, i) => <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />)}
+              {allProducts.map((p, i) => (
+                <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />
+              ))}
             </div>
           </div>
 
         ) : (
-          /* ══ AMAZON-STYLE PERSONALISED FEED ══ */
+          /* ══ PERSONALISED FEED ══ */
           <div className="space-y-4">
 
-            {/* Live stats */}
             {allProducts.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
                 <LiveStatsBar count={allProducts.length} />
               </div>
             )}
 
-            {/* ── SHOP BY CATEGORY (spotlight grid) ── */}
             {allProducts.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-base font-black text-gray-800 section-header-line">Shop by Category</h2>
                 </div>
-                <CategorySpotlightGrid
-                  allProducts={allProducts}
-                  onCategorySelect={setSelectedCategory}
-                />
+                <CategorySpotlightGrid allProducts={allProducts} onCategorySelect={setSelectedCategory} />
               </div>
             )}
 
-            {/* ── FLASH DEALS (trending, orange stripe) ── */}
             {trendingProducts.length > 0 && (
               <DealsSection
                 products={trendingProducts}
@@ -1466,7 +1484,6 @@ export default function MarketplacePage() {
               />
             )}
 
-            {/* ── FOR YOU (personalised) ── */}
             {forYouProducts.length > 0 && (
               <BestSellersRow
                 products={forYouProducts}
@@ -1477,7 +1494,6 @@ export default function MarketplacePage() {
               />
             )}
 
-            {/* ── RECENTLY VIEWED ── */}
             {recentlyViewed.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-end justify-between px-5 pt-5 pb-3 border-b border-gray-50">
@@ -1488,7 +1504,7 @@ export default function MarketplacePage() {
                 </div>
                 <div className="px-5 py-4">
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                    {recentlyViewed.slice(0, 8).map((p) => (
+                    {recentlyViewed.slice(0, 8).map(p => (
                       <MiniProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} />
                     ))}
                   </div>
@@ -1496,40 +1512,16 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* ── BEST SELLERS: TECH GADGETS ── */}
             {productsByCategory['Tech Gadgets']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Tech Gadgets']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Tech Gadgets')}
-                title="Best Sellers in Tech Gadgets"
-                subtitle="Top picks from campus techies"
-              />
+              <BestSellersRow products={productsByCategory['Tech Gadgets']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Tech Gadgets')} title="Best Sellers in Tech Gadgets" subtitle="Top picks from campus techies" />
             )}
-
-            {/* ── BEST SELLERS: FASHION ── */}
             {productsByCategory['Fashion & Clothing']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Fashion & Clothing']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Fashion & Clothing')}
-                title="Best Sellers in Campus Fashion"
-                subtitle="Style up your university life"
-              />
+              <BestSellersRow products={productsByCategory['Fashion & Clothing']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Fashion & Clothing')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" />
             )}
-
-            {/* ── BEST SELLERS: FOOD ── */}
             {productsByCategory['Food Services']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Food Services']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Food Services')}
-                title="Best Sellers in Food & Dining"
-                subtitle="Eat well, study harder"
-              />
+              <BestSellersRow products={productsByCategory['Food Services']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Food Services')} title="Best Sellers in Food & Dining" subtitle="Eat well, study harder" />
             )}
 
-            {/* ── INTEREST CATEGORIES ── */}
             {interestCategories.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center gap-2 mb-3">
@@ -1541,9 +1533,12 @@ export default function MarketplacePage() {
                   {interestCategories.map((cat, i) => {
                     const catObj = CATEGORIES.find(c => c.name === cat)
                     return (
-                      <button key={cat} onClick={() => setSelectedCategory(cat)}
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedCategory(cat)}
                         className="interest-pill card-enter flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm"
-                        style={{ animationDelay: `${i * 50}ms` }}>
+                        style={{ animationDelay: `${i * 50}ms` }}
+                      >
                         <span>{catObj?.icon}</span> {cat}
                       </button>
                     )
@@ -1552,29 +1547,13 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* ── BEST SELLERS: SCHOOL SUPPLIES ── */}
             {productsByCategory['School Supplies']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['School Supplies']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('School Supplies')}
-                title="Best Sellers in School Supplies"
-                subtitle="Gear up for the semester"
-              />
+              <BestSellersRow products={productsByCategory['School Supplies']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('School Supplies')} title="Best Sellers in School Supplies" subtitle="Gear up for the semester" />
             )}
-
-            {/* ── BEST SELLERS: COSMETICS ── */}
             {productsByCategory['Cosmetics']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Cosmetics']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Cosmetics')}
-                title="Best Sellers in Beauty & Cosmetics"
-                subtitle="Top-rated by campus students"
-              />
+              <BestSellersRow products={productsByCategory['Cosmetics']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Cosmetics')} title="Best Sellers in Beauty & Cosmetics" subtitle="Top-rated by campus students" />
             )}
 
-            {/* ── DISCOVER MORE (full grid) ── */}
             {discoverProducts.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
@@ -1595,46 +1574,19 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* ── ROOM ESSENTIALS ── */}
             {productsByCategory['Room Essentials']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Room Essentials']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Room Essentials')}
-                title="Finds for Your Room"
-                subtitle="Make your hostel feel like home"
-              />
+              <BestSellersRow products={productsByCategory['Room Essentials']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Room Essentials')} title="Finds for Your Room" subtitle="Make your hostel feel like home" />
             )}
-
-            {/* ── BOOKS ── */}
             {productsByCategory['Books']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Books']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Books')}
-                title="Books & Academic Resources"
-                subtitle="Study smarter with the right materials"
-              />
+              <BestSellersRow products={productsByCategory['Books']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Books')} title="Books & Academic Resources" subtitle="Study smarter with the right materials" />
             )}
-
-            {/* ── SNACKS ── */}
             {productsByCategory['Snacks']?.length > 0 && (
-              <BestSellersRow
-                products={productsByCategory['Snacks']}
-                onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('Snacks')}
-                title="Snacks & Treats"
-                subtitle="Fuel your study sessions"
-              />
+              <BestSellersRow products={productsByCategory['Snacks']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Snacks')} title="Snacks & Treats" subtitle="Fuel your study sessions" />
             )}
 
-            {/* ══ JUST DROPPED — ALWAYS LAST, INFINITE SCROLL ══ */}
-            <JustDroppedSection
-              allProducts={allProducts}
-              onProductClick={handleProductClick}
-            />
+            {/* Just Dropped — always last, infinite scroll */}
+            <JustDroppedSection allProducts={allProducts} onProductClick={handleProductClick} />
 
-            {/* Empty state */}
             {allProducts.length === 0 && (
               <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
                 <ShoppingBag className="w-14 h-14 text-gray-200 mx-auto mb-4" />
@@ -1645,7 +1597,6 @@ export default function MarketplacePage() {
                 </Link>
               </div>
             )}
-
           </div>
         )}
       </div>
