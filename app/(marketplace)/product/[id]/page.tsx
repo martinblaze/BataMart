@@ -1,1079 +1,1044 @@
-'use client';
+'use client'
 
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import ReviewList from '@/components/reviews/ReviewList';
-import { useCartStore } from '@/lib/cart-store';
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import {
-  ShoppingCart,
-  Star,
-  Share2,
-  ChevronLeft,
-  ChevronRight,
-  Package,
-  CheckCircle,
-  Check,
-  Shield,
-  TrendingUp,
-  MessageSquare,
-  ArrowRight,
-  Zap,
-  Tag,
-  BadgeCheck,
-  Minus,
-  Plus,
-  Copy,
-  Search,
-  X,
-  Truck,
-  Heart,
-  MapPin,
-  ShoppingBag,
-  Sparkles,
-  Loader2,
-  AlertCircle,
-  ChevronDown,
-} from 'lucide-react';
+  ChevronLeft, ShoppingCart, Star, Shield, Package, Truck,
+  Heart, Share2, ChevronRight, Plus, Minus, Eye, Zap,
+  MapPin, Clock, CheckCircle, AlertCircle, Store, Award,
+  MessageCircle, ThumbsUp, Camera, Tag, ArrowRight, Flame,
+  BadgeCheck, Info, RefreshCw, ChevronDown, ChevronUp,
+  StarHalf, Users, TrendingUp, Sparkles,
+} from 'lucide-react'
+import { useCartStore } from '@/lib/cart-store'
 
+// ─────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────
+interface Product {
+  id: string
+  name: string
+  description: string
+  price: number
+  category: string
+  quantity: number
+  images: string[]
+  viewCount: number
+  hostelName: string
+  roomNumber: string
+  landmark: string
+  createdAt: string
+  seller: {
+    id: string
+    name: string
+    avgRating: number
+    trustLevel: string
+    completedOrders: number
+    profilePhoto?: string
+  }
+  _count?: { orders: number }
+}
 
+interface RelatedProduct {
+  id: string
+  name: string
+  price: number
+  images: string[]
+  category: string
+  seller: { name: string; trustLevel: string; avgRating: number }
+  _isNameRelated: boolean
+}
+
+// ─────────────────────────────────────────────────────────
+// Injected CSS
+// ─────────────────────────────────────────────────────────
 const PAGE_CSS = `
+  html { scroll-behavior: smooth; }
+
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  .fade-up { animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) forwards; }
+  .fade-up { animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both; }
 
   @keyframes shimmer {
     0%   { background-position: -600px 0; }
-    100% { background-position: 600px 0; }
+    100% { background-position:  600px 0; }
   }
   .shimmer {
-    background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
+    background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);
     background-size: 1200px 100%;
-    animation: shimmer 1.5s ease-in-out infinite;
+    animation: shimmer 1.4s ease-in-out infinite;
   }
 
-  @keyframes toastIn {
-    from { opacity: 0; transform: translateX(24px); }
-    to   { opacity: 1; transform: translateX(0); }
+  .img-thumb {
+    transition: all 0.2s cubic-bezier(0.34,1.4,0.64,1);
+    cursor: pointer;
   }
-  .toast-enter { animation: toastIn 0.28s cubic-bezier(0.22,1,0.36,1) forwards; }
-
-  .thumb-btn { transition: transform 0.15s ease, opacity 0.15s ease; }
-  .thumb-btn:hover { transform: scale(1.05); }
-  .thumb-btn:active { transform: scale(0.96); }
-
-  .cta-main {
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  .img-thumb:hover { transform: scale(1.06); }
+  .img-thumb.active {
+    outline: 2.5px solid #6366f1;
+    outline-offset: 2px;
   }
-  .cta-main:hover { box-shadow: 0 16px 40px rgba(99,102,241,0.35); transform: translateY(-1px); }
-  .cta-main:active { transform: scale(0.98); }
 
-  .related-card {
-    transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.3s ease;
+  .main-img {
+    transition: opacity 0.22s ease, transform 0.22s ease;
   }
-  .related-card:hover { transform: translateY(-3px); box-shadow: 0 14px 36px rgba(0,0,0,0.1); }
-  .related-card:active { transform: scale(0.97); }
-  .related-card:hover .rc-img { transform: scale(1.06); }
-  .rc-img { transition: transform 0.5s cubic-bezier(0.22,1,0.36,1); }
+  .main-img.switching {
+    opacity: 0;
+    transform: scale(0.98);
+  }
 
-  .product-img-main { transition: transform 0.5s cubic-bezier(0.22,1,0.36,1); }
-  .img-wrap:hover .product-img-main { transform: scale(1.04); }
+  .add-btn {
+    background: linear-gradient(135deg,#6366f1 0%,#4c1d95 100%);
+    transition: all 0.22s cubic-bezier(0.34,1.4,0.64,1);
+    box-shadow: 0 4px 16px rgba(99,102,241,0.35);
+  }
+  .add-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(99,102,241,0.45);
+  }
+  .add-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .add-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .buy-btn {
+    background: linear-gradient(135deg,#f97316 0%,#dc2626 100%);
+    transition: all 0.22s cubic-bezier(0.34,1.4,0.64,1);
+    box-shadow: 0 4px 16px rgba(249,115,22,0.35);
+  }
+  .buy-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(249,115,22,0.45);
+  }
+  .buy-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
 
   .qty-btn {
-    transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+    transition: all 0.15s cubic-bezier(0.34,1.4,0.64,1);
   }
-  .qty-btn:hover { background: #6366f1; color: white; }
-  .qty-btn:active { transform: scale(0.93); }
+  .qty-btn:hover:not(:disabled) { transform: scale(1.12); background:#6366f1; color:white; }
+  .qty-btn:active:not(:disabled) { transform: scale(0.92); }
 
-  .section-accent::after {
-    content: '';
-    display: block;
-    height: 3px;
-    width: 36px;
-    background: #6366f1;
-    border-radius: 2px;
-    margin-top: 4px;
+  .rv-card {
+    transition: transform 0.25s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.25s ease;
   }
+  .rv-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.1); }
+  .rv-card:active { transform: scale(0.97); }
 
-  @keyframes spinIt {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+  .tab-btn {
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
   }
-  .spin { animation: spinIt 0.8s linear infinite; }
-
-  .search-bar {
-    transition: box-shadow 0.2s ease;
-  }
-  .search-bar:focus-within {
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+  .tab-btn.active {
+    border-bottom-color: #6366f1;
+    color: #6366f1;
+    font-weight: 700;
   }
 
-  .batamart-header {
-    background: linear-gradient(135deg, #4c1d95 0%, #6366f1 60%, #4c1d95 100%);
+  .trust-gold   { color: #d97706; background: #fef3c7; }
+  .trust-silver { color: #475569; background: #f1f5f9; }
+  .trust-bronze { color: #c2410c; background: #fff7ed; }
+
+  .tag-pill {
+    transition: all 0.18s cubic-bezier(0.34,1.4,0.64,1);
   }
+  .tag-pill:hover { transform: scale(1.06) translateY(-1px); background:#6366f1; color:white; }
 
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
 
-  @keyframes pulseDot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+  /* Sticky add-to-cart bar on mobile */
+  .sticky-bar {
+    transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
   }
-  .pulse-dot { animation: pulseDot 1.5s ease-in-out infinite; }
-`;
+
+  @media (max-width: 640px) {
+    .product-grid { grid-template-columns: 1fr !important; }
+  }
+`
+
+// ─────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────
+const fmt = (n: number) =>
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(n)
+
+function StarRow({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
+  const sz = size === 'md' ? 'w-4 h-4' : 'w-3 h-3'
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1,2,3,4,5].map(i => (
+        <Star
+          key={i}
+          className={`${sz} ${i <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`}
+        />
+      ))}
+    </div>
+  )
+}
+
+function TrustBadge({ level }: { level: string }) {
+  const cls = level === 'GOLD'
+    ? 'trust-gold'
+    : level === 'SILVER' ? 'trust-silver' : 'trust-bronze'
+  const icon = level === 'GOLD' ? '🥇' : level === 'SILVER' ? '🥈' : '🥉'
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${cls}`}>
+      {icon} {level}
+    </span>
+  )
+}
 
 function parseTags(description: string): string[] {
-  if (!description) return [];
-  if (description.includes(' | ')) return description.split(' | ').map(t => t.trim()).filter(Boolean);
-  return [];
+  if (!description) return []
+  if (description.includes(' | '))
+    return description.split(' | ').map(t => t.trim()).filter(Boolean)
+  return []
 }
 
-// ─────────────────────────────────────────────
-// Mini Related Product Card (vertical scroll grid)
-// ─────────────────────────────────────────────
-function RelatedCard({ product, currentProductName }: { product: any; currentProductName: string }) {
-  const fmt = (p: number) =>
-    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p);
-
-  // Highlight shared words between names
-  const sharedWords = currentProductName
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(w => w.length > 2 && product.name.toLowerCase().includes(w));
-
+// ─────────────────────────────────────────────────────────
+// Skeleton
+// ─────────────────────────────────────────────────────────
+function Skeleton() {
   return (
-    <Link href={`/product/${product.id}`} className="related-card block bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm group">
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
-        <img
-          src={product.images?.[0] || '/placeholder.png'}
-          alt={product.name}
-          className="rc-img w-full h-full object-cover"
-        />
-        {product.quantity === 0 && (
-          <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
-            <span className="text-xs font-black text-red-500 bg-red-50 px-2.5 py-1 rounded-lg ring-1 ring-red-200">
-              Out of stock
-            </span>
+    <div className="min-h-screen bg-[#f7f8fa]">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-4 space-y-4">
+        <div className="shimmer h-8 w-32 rounded-xl" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="shimmer h-64 sm:h-96 rounded-2xl" />
+          <div className="space-y-3">
+            <div className="shimmer h-6 w-3/4 rounded-lg" />
+            <div className="shimmer h-8 w-1/2 rounded-lg" />
+            <div className="shimmer h-4 w-full rounded-lg" />
+            <div className="shimmer h-4 w-5/6 rounded-lg" />
+            <div className="shimmer h-12 w-full rounded-xl mt-6" />
+            <div className="shimmer h-12 w-full rounded-xl" />
           </div>
-        )}
-        {product.quantity > 0 && product.quantity <= 5 && (
-          <div className="absolute top-2 left-2">
-            <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md">
-              {product.quantity} left
-            </span>
-          </div>
-        )}
-        {product.isNew && (
-          <div className="absolute top-2 right-2">
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gradient-to-r from-emerald-500 to-green-500 text-white text-[9px] font-black rounded-md">
-              <Sparkles className="w-2 h-2" /> NEW
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="p-3">
-        <p className="text-[10px] font-bold text-BATAMART-primary uppercase tracking-wider mb-0.5">{product.category}</p>
-        <p className="text-xs font-semibold text-gray-900 line-clamp-2 leading-snug mb-1.5 group-hover:text-BATAMART-primary transition-colors">
-          {product.name}
-        </p>
-
-        {/* Shared-trait chips */}
-        {sharedWords.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1.5">
-            {sharedWords.slice(0, 2).map(w => (
-              <span key={w} className="text-[9px] font-bold px-1.5 py-0.5 bg-BATAMART-primary/8 text-BATAMART-primary rounded-full capitalize">
-                {w}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {product.avgRating > 0 && (
-          <div className="flex items-center gap-0.5 mb-1.5">
-            {[1, 2, 3, 4, 5].map(s => (
-              <Star key={s} className={`w-2.5 h-2.5 ${s <= Math.round(product.avgRating) ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}`} />
-            ))}
-            <span className="text-[10px] text-gray-500 font-semibold ml-0.5">{product.avgRating.toFixed(1)}</span>
-          </div>
-        )}
-
-        <p className="text-sm font-black text-BATAMART-primary">{fmt(product.price)}</p>
-        <p className="text-[10px] text-gray-400 mt-0.5 truncate">{product.seller?.name || 'Seller'}</p>
-      </div>
-    </Link>
-  );
-}
-
-// ─────────────────────────────────────────────
-// Skeleton cards
-// ─────────────────────────────────────────────
-function RelatedSkeleton() {
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-      <div className="aspect-square shimmer" />
-      <div className="p-3 space-y-2">
-        <div className="h-2.5 shimmer rounded-full w-1/2" />
-        <div className="h-3.5 shimmer rounded-full w-full" />
-        <div className="h-3.5 shimmer rounded-full w-3/4" />
-        <div className="h-4 shimmer rounded-full w-1/3 mt-2" />
+        </div>
       </div>
     </div>
-  );
+  )
 }
 
-// ─────────────────────────────────────────────
-// Sticky Amazon-style header with search
-// ─────────────────────────────────────────────
-function ProductHeader({ productName, onBack }: { productName: string; onBack: () => void }) {
-  const router = useRouter();
-  const [search, setSearch] = useState('');
-
-  const handleSearch = () => {
-    const q = search.trim();
-    if (!q) return;
-    router.push(`/search?q=${encodeURIComponent(q)}`);
-  };
-
+// ─────────────────────────────────────────────────────────
+// Related Product Card
+// ─────────────────────────────────────────────────────────
+function RelatedCard({ product, onClick }: { product: RelatedProduct; onClick: () => void }) {
   return (
-    <header className="batamart-header sticky top-0 z-40 shadow-lg">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6">
-        <div className="flex items-center gap-2 sm:gap-3 py-3">
-
-          {/* Back + Logo */}
-          <button
-            onClick={onBack}
-            className="flex-shrink-0 flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
-          >
-            <ChevronLeft className="w-5 h-5" />
-            <div className="hidden sm:flex items-center gap-1.5">
-              <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center">
-                <ShoppingBag className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-white font-black text-base tracking-tight">BATAMART</span>
+    <div
+      onClick={onClick}
+      className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer flex-shrink-0 w-36 sm:w-44"
+      style={{ border: '1px solid #f0f0f0' }}
+    >
+      <div className="relative">
+        <div className="aspect-square overflow-hidden bg-gray-50">
+          {product.images?.[0] ? (
+            <img
+              src={product.images[0]}
+              alt={product.name}
+              className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Package className="w-8 h-8 text-gray-300" />
             </div>
-          </button>
-
-          {/* Search bar */}
-          <div className="flex-1 min-w-0">
-            <div className="search-bar flex items-center gap-2 bg-white rounded-xl shadow-md px-3 ring-2 ring-transparent">
-              <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                placeholder="Search products, sellers…"
-                className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 py-3 min-w-0"
-                autoComplete="off"
-              />
-              {search && (
-                <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button
-                onClick={handleSearch}
-                className="flex-shrink-0 px-3 py-1.5 bg-BATAMART-primary hover:bg-BATAMART-dark text-white rounded-lg font-black text-xs transition-colors"
-              >
-                <span className="hidden sm:inline">Search</span>
-                <Search className="w-3.5 h-3.5 sm:hidden" />
-              </button>
-            </div>
-          </div>
-
-          {/* Cart link */}
-          <Link
-            href="/cart"
-            className="flex-shrink-0 flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white px-3 py-2 rounded-xl text-xs font-bold transition-colors"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span className="hidden sm:inline">Cart</span>
-          </Link>
+          )}
         </div>
-
-        {/* Breadcrumb strip */}
-        <div className="pb-2 flex items-center gap-1 text-[11px] text-white/50 overflow-hidden">
-          <Link href="/marketplace" className="hover:text-white/80 transition-colors flex-shrink-0">Marketplace</Link>
-          <ChevronRight className="w-3 h-3 flex-shrink-0" />
-          <span className="text-white/80 truncate font-semibold">{productName}</span>
+        {product._isNameRelated && (
+          <span className="absolute top-1.5 left-1.5 bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+            Similar
+          </span>
+        )}
+      </div>
+      <div className="p-2">
+        <p className="text-[11px] font-semibold text-gray-800 leading-tight line-clamp-2 mb-1">
+          {product.name}
+        </p>
+        <p className="text-[12px] font-bold text-indigo-600">{fmt(product.price)}</p>
+        <div className="flex items-center gap-1 mt-1">
+          <StarRow rating={product.seller.avgRating || 0} />
         </div>
       </div>
-    </header>
-  );
+    </div>
+  )
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
 // Main Page
-// ─────────────────────────────────────────────
-export default function ProductPage() {
-  const params = useParams();
-  const router = useRouter();
+// ─────────────────────────────────────────────────────────
+export default function ProductDetailPage() {
+  const router = useRouter()
+  const params = useParams()
+  const productId = params?.id as string
 
-  const [product, setProduct] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [quantity, setQuantity] = useState(1);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [sellerReviews, setSellerReviews] = useState<any[]>([]);
-  const [productReviews, setProductReviews] = useState<any[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
-  const [showAddedToCart, setShowAddedToCart] = useState(false);
-  const [showLinkCopied, setShowLinkCopied] = useState(false);
-  const [wishlisted, setWishlisted] = useState(false);
+  const [product, setProduct] = useState<Product | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [activeImg, setActiveImg] = useState(0)
+  const [imgSwitching, setImgSwitching] = useState(false)
+  const [qty, setQty] = useState(1)
+  const [addingToCart, setAddingToCart] = useState(false)
+  const [cartMsg, setCartMsg] = useState('')
+  const [activeTab, setActiveTab] = useState<'desc' | 'details' | 'reviews'>('desc')
+  const [descExpanded, setDescExpanded] = useState(false)
+  const [relatedNameRelated, setRelatedNameRelated] = useState<RelatedProduct[]>([])
+  const [relatedOthers, setRelatedOthers] = useState<RelatedProduct[]>([])
+  const [relatedSourceName, setRelatedSourceName] = useState('')
+  const [relatedLoading, setRelatedLoading] = useState(false)
+  const [reviews, setReviews] = useState<any[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [showStickyBar, setShowStickyBar] = useState(false)
 
-  // Related products — infinite scroll
-  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
-  const [relatedLoading, setRelatedLoading] = useState(false);
-  const [relatedVisible, setRelatedVisible] = useState(8);
-  const [relatedLoadingMore, setRelatedLoadingMore] = useState(false);
-  const relatedSentinelRef = useRef<HTMLDivElement>(null);
+  const { addItem } = useCartStore()
+  const mainRef = useRef<HTMLDivElement>(null)
+  const buyBoxRef = useRef<HTMLDivElement>(null)
 
-  const addItem = useCartStore((state) => state.addItem);
-
-  // Inject CSS
+  // Sticky CTA bar logic
   useEffect(() => {
-    if (document.getElementById('product-page-css')) return;
-    const s = document.createElement('style');
-    s.id = 'product-page-css';
-    s.textContent = PAGE_CSS;
-    document.head.appendChild(s);
-  }, []);
+    const observer = new IntersectionObserver(
+      ([e]) => setShowStickyBar(!e.isIntersecting),
+      { threshold: 0 }
+    )
+    if (buyBoxRef.current) observer.observe(buyBoxRef.current)
+    return () => observer.disconnect()
+  }, [product])
 
-  useEffect(() => { if (params.id) fetchProduct(); }, [params.id]);
-
+  // Fetch product
   useEffect(() => {
-    if (product?.sellerId) fetchSellerReviews();
-    if (product?.id) fetchProductReviews();
-    if (product?.id) {
-      setRelatedVisible(8);
-      setRelatedProducts([]);
-      setRelatedLoadingMore(false);
-      loadRelated(product);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.sellerId, product?.id, product?.category]);
-
-  // Infinite scroll for related products
-  useEffect(() => {
-    if (!relatedSentinelRef.current) return;
-    const obs = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && !relatedLoadingMore && relatedVisible < relatedProducts.length) {
-          setRelatedLoadingMore(true);
-          setTimeout(() => {
-            setRelatedVisible(v => v + 8);
-            setRelatedLoadingMore(false);
-          }, 500);
-        }
-      },
-      { threshold: 0.1 }
-    );
-    obs.observe(relatedSentinelRef.current);
-    return () => obs.disconnect();
-  }, [relatedLoadingMore, relatedVisible, relatedProducts.length]);
+    if (!productId) return
+    fetchProduct()
+  }, [productId])
 
   const fetchProduct = async () => {
+    setLoading(true)
     try {
-      const response = await fetch(`/api/products/${params.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setProduct(data.product);
-      }
-    } catch (error) {
-      console.error('Error fetching product:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSellerReviews = async () => {
-    try {
-      const response = await fetch(`/api/reviews?userId=${product.sellerId}&type=SELLER`);
-      if (response.ok) {
-        const data = await response.json();
-        setSellerReviews(data.reviews || []);
-      }
-    } catch { }
-  };
-
-  const fetchProductReviews = async () => {
-    try {
-      const response = await fetch(`/api/reviews/product?productId=${params.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setProductReviews(data.reviews || []);
-      }
-    } catch { }
-    finally { setReviewsLoading(false); }
-  };
-
-  // Fetch ALL products (same as search page), then filter client-side by name similarity
-  const loadRelated = async (currentProduct: any) => {
-    setRelatedLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const res = await fetch('/api/products', {
+      const token = localStorage.getItem('token')
+      if (!token) { router.push('/login'); return }
+      const res = await fetch(`/api/products/${productId}`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const all: any[] = data.products || [];
+      })
+      if (!res.ok) {
+        if (res.status === 401) { router.push('/login'); return }
+        setError('Product not found')
+        return
+      }
+      const data = await res.json()
+      const p = data.product || data
+      setProduct(p)
 
-      // Score each product by how many name tokens it shares with current product
-      const currentTokens = currentProduct.name.toLowerCase().split(/\s+/).filter((t: string) => t.length > 1);
-      const scored = all
-        .filter((p: any) => p.id !== currentProduct.id)
-        .map((p: any) => {
-          const pTokens = p.name.toLowerCase().split(/\s+/);
-          const nameMatches = currentTokens.filter((t: string) => pTokens.some((pt: string) => pt.includes(t) || t.includes(pt))).length;
-          const sameCategory = p.category === currentProduct.category ? 2 : 0;
-          return { ...p, _score: nameMatches + sameCategory };
-        })
-        .sort((a: any, b: any) => b._score - a._score);
+      // Track view
+      try {
+        fetch(`/api/products/${productId}/view`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {})
 
-      setRelatedProducts(scored);
-    } catch { }
-    finally { setRelatedLoading(false); }
-  };
+        // Store in recently viewed
+        const viewed = JSON.parse(localStorage.getItem('BATAMART-recently-viewed') || '[]')
+        const updated = [p, ...viewed.filter((v: any) => v.id !== p.id)].slice(0, 20)
+        localStorage.setItem('BATAMART-recently-viewed', JSON.stringify(updated))
+      } catch {}
 
-  const addToCart = () => {
-    if (!product) return;
-    addItem({
-      productId: product.id,
-      name: product.name,
-      price: product.price,
-      quantity,
-      maxQuantity: product.quantity,
-      image: product.images?.[0] || '/placeholder.png',
-      sellerId: product.sellerId,
-      sellerName: product.seller?.name || 'Seller',
-    });
-    setShowAddedToCart(true);
-    setTimeout(() => setShowAddedToCart(false), 3000);
-    setQuantity(1);
-  };
-
-  const handleShare = async () => {
-    const productLink = `${window.location.origin}/product/${product?.id}`;
-    try {
-      await navigator.clipboard.writeText(productLink);
+      fetchRelated(token)
     } catch {
-      const ta = document.createElement('textarea');
-      ta.value = productLink;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
+      setError('Failed to load product')
+    } finally {
+      setLoading(false)
     }
-    setShowLinkCopied(true);
-    setTimeout(() => setShowLinkCopied(false), 3000);
-  };
-
-  const handlePreviousImage = () =>
-    setCurrentImageIndex(prev => prev === 0 ? (product.images?.length || 1) - 1 : prev - 1);
-  const handleNextImage = () =>
-    setCurrentImageIndex(prev => prev === (product.images?.length || 1) - 1 ? 0 : prev + 1);
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(price);
-
-  const stockStatus = product
-    ? product.quantity > 10
-      ? { label: 'In Stock', color: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-200', dot: 'bg-emerald-500' }
-      : product.quantity > 0
-        ? { label: `Only ${product.quantity} left`, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-200', dot: 'bg-amber-500' }
-        : { label: 'Out of Stock', color: 'text-red-600', bg: 'bg-red-50', ring: 'ring-red-200', dot: 'bg-red-500' }
-    : null;
-
-  // ── Loading skeleton ──
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f7f8fa]">
-        <div className="h-14 batamart-header" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-          <div className="grid lg:grid-cols-[1fr_420px] gap-8">
-            <div className="space-y-4">
-              <div className="aspect-square shimmer rounded-2xl" />
-              <div className="flex gap-2">
-                {[1, 2, 3].map(i => <div key={i} className="w-20 h-20 shimmer rounded-xl flex-shrink-0" />)}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="h-8 shimmer rounded-xl w-3/4" />
-              <div className="h-6 shimmer rounded-xl w-1/2" />
-              <div className="h-16 shimmer rounded-2xl" />
-              <div className="h-32 shimmer rounded-2xl" />
-              <div className="h-14 shimmer rounded-xl" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   }
 
-  if (!product) {
+  const fetchRelated = async (token: string) => {
+    setRelatedLoading(true)
+    try {
+      const res = await fetch(`/api/products/${productId}/related?limit=16`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.success) {
+        setRelatedNameRelated(data.related?.nameRelated || [])
+        setRelatedOthers(data.related?.others || [])
+        setRelatedSourceName(data.sourceProduct?.name || '')
+      }
+    } catch {}
+    finally { setRelatedLoading(false) }
+  }
+
+  const fetchReviews = async () => {
+    if (reviews.length || reviewsLoading || !product) return
+    setReviewsLoading(true)
+    try {
+      const token = localStorage.getItem('token') || ''
+      const res = await fetch(`/api/reviews/product?productId=${product.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setReviews(data.reviews || [])
+    } catch {}
+    finally { setReviewsLoading(false) }
+  }
+
+  const switchImg = (idx: number) => {
+    if (idx === activeImg) return
+    setImgSwitching(true)
+    setTimeout(() => {
+      setActiveImg(idx)
+      setImgSwitching(false)
+    }, 180)
+  }
+
+  const handleAddToCart = async () => {
+    if (!product) return
+    setAddingToCart(true)
+    try {
+      addItem({
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        image: product.images?.[0] || '',
+        sellerId: product.seller.id,
+        sellerName: product.seller.name,
+        maxQuantity: product.quantity,
+        quantity: qty,
+      })
+      setCartMsg('Added to cart!')
+      setTimeout(() => setCartMsg(''), 2500)
+    } catch {
+      setCartMsg('Failed to add')
+    } finally {
+      setAddingToCart(false)
+    }
+  }
+
+  const handleBuyNow = () => {
+    if (!product) return
+    handleAddToCart()
+    router.push('/cart')
+  }
+
+  const navigateRelated = (id: string) => {
+    router.push(`/product/${id}`)
+  }
+
+  const allRelated = [...relatedNameRelated, ...relatedOthers]
+
+  // ── Description text (clean the pipe-separated tags out) ──────────────────
+  const descriptionClean = product?.description
+    ? product.description.split(' | ')[0].trim()
+    : ''
+  const tags = product ? parseTags(product.description) : []
+
+  const ageDays = product
+    ? (Date.now() - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+    : 999
+  const isNew = ageDays <= 7
+
+  if (loading) return <Skeleton />
+
+  if (error || !product) {
     return (
-      <div className="min-h-screen bg-[#f7f8fa] flex items-center justify-center px-4">
-        <div className="text-center bg-white rounded-2xl p-12 shadow-sm border border-gray-100 max-w-md">
-          <div className="w-20 h-20 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-5 ring-1 ring-gray-200">
-            <Package className="w-10 h-10 text-gray-300" />
-          </div>
-          <h1 className="text-2xl font-black text-gray-900 mb-2">Product Not Found</h1>
-          <p className="text-gray-500 mb-6">This product doesn&apos;t exist or has been removed.</p>
-          <button
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 bg-BATAMART-primary hover:bg-BATAMART-dark text-white px-6 py-3 rounded-xl font-bold transition-all shadow-md"
-          >
-            <ChevronLeft className="w-4 h-4" /> Go Back
+      <div className="min-h-screen flex items-center justify-center bg-[#f7f8fa] px-4">
+        <div className="text-center space-y-4">
+          <AlertCircle className="w-16 h-16 text-red-400 mx-auto" />
+          <p className="text-lg font-semibold text-gray-700">{error || 'Product not found'}</p>
+          <button onClick={() => router.back()} className="text-indigo-600 font-semibold underline text-sm">
+            Go back
           </button>
         </div>
       </div>
-    );
+    )
   }
 
-  const descriptionTags = parseTags(product.description);
-  const isTagDescription = descriptionTags.length > 0;
-
   return (
-    <div className="min-h-screen bg-[#f7f8fa] pb-24">
+    <div className="min-h-screen bg-[#f7f8fa]" ref={mainRef}>
+      <style>{PAGE_CSS}</style>
 
-      {/* ── Toast notifications ── */}
-      {showAddedToCart && (
-        <div className="toast-enter fixed top-20 right-4 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
-          <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <Check className="w-3.5 h-3.5" />
+      {/* ── Sticky bottom bar (mobile only) ──────────────────────────────── */}
+      <div
+        className={`sticky-bar fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 p-3 flex gap-2 sm:hidden ${
+          showStickyBar ? 'translate-y-0 shadow-2xl' : 'translate-y-full'
+        }`}
+        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      >
+        <button
+          onClick={handleAddToCart}
+          disabled={product.quantity === 0 || addingToCart}
+          className="add-btn flex-1 text-white font-bold text-sm py-3 rounded-xl"
+        >
+          {addingToCart ? 'Adding…' : '🛒 Add to Cart'}
+        </button>
+        <button
+          onClick={handleBuyNow}
+          disabled={product.quantity === 0}
+          className="buy-btn flex-1 text-white font-bold text-sm py-3 rounded-xl"
+        >
+          Buy Now
+        </button>
+      </div>
+
+      {/* ── Top nav ─────────────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-1 text-gray-600 hover:text-indigo-600 transition-colors flex-shrink-0"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            <span className="text-sm font-medium hidden xs:inline">Back</span>
+          </button>
+
+          <p className="text-[13px] font-semibold text-gray-700 truncate flex-1 text-center">
+            {product.name}
+          </p>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                if (navigator.share) {
+                  navigator.share({ title: product.name, url: window.location.href }).catch(() => {})
+                } else {
+                  navigator.clipboard.writeText(window.location.href).catch(() => {})
+                }
+              }}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+            <Link
+              href="/cart"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+            >
+              <ShoppingCart className="w-4 h-4" />
+            </Link>
           </div>
-          <span className="font-semibold text-sm">Added to cart!</span>
         </div>
-      )}
-      {showLinkCopied && (
-        <div className="toast-enter fixed top-20 right-4 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
-          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <Copy className="w-3 h-3" />
-          </div>
-          <span className="font-semibold text-sm">Link copied!</span>
+      </div>
+
+      {/* ── Breadcrumb (tablet+) ─────────────────────────────────────────── */}
+      <div className="hidden sm:block max-w-5xl mx-auto px-4 py-2">
+        <div className="flex items-center gap-1 text-[11px] text-gray-400">
+          <Link href="/marketplace" className="hover:text-indigo-600 transition-colors">Marketplace</Link>
+          <ChevronRight className="w-3 h-3" />
+          <span className="hover:text-indigo-600 cursor-pointer transition-colors">{product.category}</span>
+          <ChevronRight className="w-3 h-3" />
+          <span className="text-gray-600 font-medium truncate max-w-[200px]">{product.name}</span>
         </div>
-      )}
+      </div>
 
-      {/* ── Amazon-style sticky header ── */}
-      <ProductHeader productName={product.name} onBack={() => router.back()} />
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 pb-24 sm:pb-8 space-y-4">
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-8">
+        {/* ── Main product section ──────────────────────────────────────── */}
+        <div className="grid sm:grid-cols-2 gap-4 fade-up">
 
-        {/* ══ MAIN PRODUCT SECTION ══ */}
-        <div className="grid lg:grid-cols-[1fr_420px] gap-6 lg:gap-10 items-start">
-
-          {/* ── LEFT: Images ── */}
-          <div className="space-y-3 fade-up">
-
-            {/* Main image — Amazon-style white bg with zoom */}
-            <div className="relative bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm group img-wrap aspect-square">
-              <img
-                src={product.images?.[currentImageIndex] || '/placeholder.png'}
-                alt={product.name}
-                className="product-img-main w-full h-full object-contain p-6 sm:p-10"
-              />
-
-              {product.images?.length > 1 && (
-                <>
-                  <button
-                    onClick={handlePreviousImage}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow-lg border border-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-105 hover:shadow-xl"
-                  >
-                    <ChevronLeft className="w-5 h-5 text-gray-700" />
-                  </button>
-                  <button
-                    onClick={handleNextImage}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white rounded-full shadow-lg border border-gray-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-105 hover:shadow-xl"
-                  >
-                    <ChevronRight className="w-5 h-5 text-gray-700" />
-                  </button>
-                  <div className="absolute bottom-3 right-3 px-2.5 py-1 bg-gray-900/60 text-white text-xs font-bold rounded-full backdrop-blur-sm">
-                    {currentImageIndex + 1}/{product.images.length}
+          {/* LEFT — Images */}
+          <div className="space-y-2">
+            {/* Main image */}
+            <div className="relative bg-white rounded-2xl overflow-hidden shadow-sm" style={{ border: '1px solid #f0f0f0' }}>
+              <div className="relative aspect-square sm:aspect-[4/3] overflow-hidden">
+                {product.images?.[activeImg] ? (
+                  <img
+                    src={product.images[activeImg]}
+                    alt={product.name}
+                    className={`main-img w-full h-full object-contain p-2 ${imgSwitching ? 'switching' : ''}`}
+                    style={{ background: '#fafafa' }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                    <Package className="w-16 h-16 text-gray-300" />
                   </div>
-                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                    {product.images.map((_: any, i: number) => (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentImageIndex(i)}
-                        className={`rounded-full transition-all duration-200 ${i === currentImageIndex ? 'w-5 h-1.5 bg-BATAMART-primary' : 'w-1.5 h-1.5 bg-gray-300 hover:bg-gray-400'}`}
-                      />
-                    ))}
+                )}
+
+                {/* Badges */}
+                <div className="absolute top-2 left-2 flex flex-col gap-1">
+                  {isNew && (
+                    <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">NEW</span>
+                  )}
+                  {product.quantity <= 3 && product.quantity > 0 && (
+                    <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {product.quantity} left
+                    </span>
+                  )}
+                  {product.quantity === 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Out of stock
+                    </span>
+                  )}
+                </div>
+
+                {/* View count */}
+                {(product.viewCount || 0) > 5 && (
+                  <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Eye className="w-3 h-3" />
+                    {product.viewCount} views
                   </div>
-                </>
+                )}
+
+                {/* Image nav arrows */}
+                {product.images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => switchImg((activeImg - 1 + product.images.length) % product.images.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={() => switchImg((activeImg + 1) % product.images.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-all"
+                    >
+                      <ChevronRight className="w-4 h-4 text-gray-700" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Dot indicators */}
+              {product.images.length > 1 && (
+                <div className="flex items-center justify-center gap-1.5 py-2">
+                  {product.images.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => switchImg(i)}
+                      className={`rounded-full transition-all duration-200 ${
+                        i === activeImg ? 'w-4 h-1.5 bg-indigo-600' : 'w-1.5 h-1.5 bg-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
               )}
-
-              {/* Wishlist button */}
-              <button
-                onClick={() => setWishlisted(w => !w)}
-                className="absolute top-3 right-3 w-9 h-9 bg-white rounded-full shadow-md border border-gray-100 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-              >
-                <Heart className={`w-4 h-4 transition-colors ${wishlisted ? 'fill-red-500 text-red-500' : 'text-gray-400'}`} />
-              </button>
             </div>
 
-            {/* Thumbnails */}
-            {product.images?.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {product.images.map((img: string, index: number) => (
+            {/* Thumbnails (≥2 images) */}
+            {product.images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                {product.images.map((img, i) => (
                   <button
-                    key={index}
-                    onClick={() => setCurrentImageIndex(index)}
-                    className={`thumb-btn flex-shrink-0 w-16 sm:w-20 h-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all duration-200 ${
-                      currentImageIndex === index
-                        ? 'border-BATAMART-primary shadow-md shadow-BATAMART-primary/20'
-                        : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100'
-                    }`}
+                    key={i}
+                    onClick={() => switchImg(i)}
+                    className={`img-thumb flex-shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-gray-50 ${i === activeImg ? 'active' : 'ring-1 ring-gray-200'}`}
                   >
                     <img src={img} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>
             )}
-
-            {/* Amazon-style trust badges */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { icon: <Shield className="w-4 h-4 text-BATAMART-primary" />, label: 'Verified Seller', sub: 'Trust Guaranteed' },
-                { icon: <Zap className="w-4 h-4 text-amber-500" />, label: 'Fast Delivery', sub: 'Campus-wide' },
-                { icon: <BadgeCheck className="w-4 h-4 text-emerald-500" />, label: 'Campus Safe', sub: 'UNIZIK Only' },
-              ].map(({ icon, label, sub }) => (
-                <div key={label} className="flex flex-col items-center gap-1 bg-white rounded-xl p-3 border border-gray-100 text-center">
-                  {icon}
-                  <span className="text-[11px] font-black text-gray-700">{label}</span>
-                  <span className="text-[9px] text-gray-400 font-medium">{sub}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Share */}
-            <button
-              onClick={handleShare}
-              className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-200 hover:border-BATAMART-primary hover:bg-BATAMART-primary/5 rounded-xl text-sm font-bold text-gray-500 hover:text-BATAMART-primary transition-all"
-            >
-              <Share2 className="w-4 h-4" /> Share this product
-            </button>
           </div>
 
-          {/* ── RIGHT: Product info (Amazon buy-box style) ── */}
-          <div className="space-y-4 fade-up" style={{ animationDelay: '80ms' }}>
+          {/* RIGHT — Buy box */}
+          <div ref={buyBoxRef} className="space-y-3">
 
-            {/* Category + stock */}
+            {/* Category pill + trust */}
             <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/marketplace?category=${encodeURIComponent(product.category)}`}
-                className="text-[11px] font-bold text-BATAMART-primary uppercase tracking-widest bg-BATAMART-primary/8 hover:bg-BATAMART-primary/15 px-3 py-1 rounded-full transition-colors"
-              >
+              <span className="bg-indigo-50 text-indigo-700 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
                 {product.category}
-              </Link>
-              {stockStatus && (
-                <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full ring-1 ${stockStatus.bg} ${stockStatus.color} ${stockStatus.ring}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full pulse-dot ${stockStatus.dot}`} />
-                  {stockStatus.label}
+              </span>
+              <TrustBadge level={product.seller.trustLevel} />
+              {(product._count?.orders || 0) >= 5 && (
+                <span className="bg-red-50 text-red-600 text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Flame className="w-3 h-3" /> Popular
                 </span>
               )}
             </div>
 
-            {/* Title */}
-            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 leading-tight">
-              {product.name}
-            </h1>
+            {/* Product name */}
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900 leading-tight">{product.name}</h1>
 
-            {/* Rating */}
-            {product.avgRating > 0 && (
+            {/* Rating row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <StarRow rating={product.seller.avgRating || 0} size="md" />
+              <span className="text-sm font-semibold text-amber-600">{(product.seller.avgRating || 0).toFixed(1)}</span>
+              <span className="text-sm text-gray-400">·</span>
+              <span className="text-sm text-gray-500">{product._count?.orders || 0} sold</span>
+              {product.viewCount > 0 && (
+                <>
+                  <span className="text-sm text-gray-400">·</span>
+                  <span className="text-sm text-gray-500 flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5" /> {product.viewCount}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Price */}
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-3 sm:p-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-extrabold text-indigo-700">{fmt(product.price)}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                <Shield className="w-3 h-3 text-emerald-500" />
+                Secure checkout · Buyer protection
+              </p>
+            </div>
+
+            {/* Stock indicator */}
+            {product.quantity > 0 && (
               <div className="flex items-center gap-2">
-                <div className="flex">
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <Star key={s} className={`w-4 h-4 ${s <= Math.round(product.avgRating) ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}`} />
-                  ))}
-                </div>
-                <span className="text-sm font-black text-gray-700">{product.avgRating?.toFixed(1)}</span>
-                <span className="text-sm text-BATAMART-primary font-semibold hover:underline cursor-pointer">
-                  {product.totalReviews || 0} ratings
+                <div className={`w-2 h-2 rounded-full ${product.quantity <= 5 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                <span className={`text-sm font-medium ${product.quantity <= 5 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {product.quantity <= 5 ? `Only ${product.quantity} left` : `${product.quantity} in stock`}
                 </span>
               </div>
             )}
 
-            <div className="h-px bg-gray-100" />
-
-            {/* ── PRICE BOX (Amazon buy-box) ── */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-
-              {/* Price */}
-              <div>
-                <p className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">
-                  {formatPrice(product.price)}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5 font-medium">Per unit · inclusive of all fees</p>
-              </div>
-
-              {/* Delivery info */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <Truck className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <span className="text-gray-600">
-                    <span className="font-bold text-gray-900">FREE</span> campus delivery for orders over ₦30,000
-                  </span>
+            {/* Quantity selector */}
+            {product.quantity > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-gray-700">Qty:</span>
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-1 ring-1 ring-gray-200">
+                  <button
+                    onClick={() => setQty(q => Math.max(1, q - 1))}
+                    disabled={qty <= 1}
+                    className="qty-btn w-8 h-8 rounded-lg bg-white ring-1 ring-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-40"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="w-8 text-center text-sm font-bold text-gray-800">{qty}</span>
+                  <button
+                    onClick={() => setQty(q => Math.min(product.quantity, q + 1))}
+                    disabled={qty >= product.quantity}
+                    className="qty-btn w-8 h-8 rounded-lg bg-white ring-1 ring-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-40"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <span className="text-gray-600">Delivers within <span className="font-bold text-gray-900">UNIZIK campus</span></span>
-                </div>
+                <span className="text-xs text-gray-400">({product.quantity} available)</span>
               </div>
+            )}
 
-              <div className="h-px bg-gray-100" />
-
-              {/* Stock */}
-              {stockStatus && (
-                <p className={`text-base font-black ${stockStatus.color}`}>{stockStatus.label}</p>
-              )}
-
-              {/* Quantity selector */}
+            {/* CTA buttons */}
+            <div className="flex gap-2.5">
+              <button
+                onClick={handleAddToCart}
+                disabled={product.quantity === 0 || addingToCart}
+                className="add-btn flex-1 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm sm:text-base"
+              >
+                {addingToCart
+                  ? <RefreshCw className="w-4 h-4 animate-spin" />
+                  : <ShoppingCart className="w-4 h-4" />
+                }
+                {product.quantity === 0 ? 'Out of Stock' : addingToCart ? 'Adding…' : 'Add to Cart'}
+              </button>
               {product.quantity > 0 && (
-                <div>
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Quantity</p>
-                  <div className="inline-flex items-center border-2 border-gray-100 rounded-xl overflow-hidden bg-gray-50">
-                    <button
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="qty-btn w-11 h-11 flex items-center justify-center text-gray-600 rounded-none"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="w-12 text-center font-black text-lg text-gray-900 select-none">{quantity}</span>
-                    <button
-                      onClick={() => setQuantity(Math.min(product.quantity, quantity + 1))}
-                      className="qty-btn w-11 h-11 flex items-center justify-center text-gray-600 rounded-none"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <span className="ml-3 text-sm text-gray-400 font-medium">
-                    <span className="font-black text-gray-900">{product.quantity}</span> available
-                  </span>
-                </div>
-              )}
-
-              {/* CTA buttons */}
-              <div className="space-y-2.5 pt-1">
                 <button
-                  onClick={addToCart}
-                  disabled={product.quantity === 0}
-                  className="cta-main w-full flex items-center justify-center gap-2.5 bg-BATAMART-primary disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black text-base shadow-lg shadow-BATAMART-primary/25 transition-all"
+                  onClick={handleBuyNow}
+                  className="buy-btn flex-1 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm sm:text-base"
                 >
-                  <ShoppingCart className="w-5 h-5" />
-                  Add to Cart · {formatPrice(product.price * quantity)}
+                  <Zap className="w-4 h-4" />
+                  Buy Now
                 </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => router.push('/cart')}
-                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl border-2 border-gray-200 hover:border-BATAMART-primary hover:bg-BATAMART-primary/5 text-gray-700 hover:text-BATAMART-primary font-bold text-sm transition-all"
-                  >
-                    <ShoppingCart className="w-4 h-4" /> View Cart
-                  </button>
-                  <button
-                    onClick={() => router.back()}
-                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-sm transition-all"
-                  >
-                    Keep Shopping
-                  </button>
+              )}
+            </div>
+
+            {/* Cart feedback */}
+            {cartMsg && (
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium px-3 py-2 rounded-xl">
+                <CheckCircle className="w-4 h-4" />
+                {cartMsg}
+              </div>
+            )}
+
+            {/* Delivery info */}
+            <div className="bg-white rounded-2xl p-3 space-y-2 ring-1 ring-gray-100">
+              <div className="flex items-start gap-2.5">
+                <MapPin className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-gray-700">Pickup / Delivery</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[product.hostelName, product.roomNumber, product.landmark].filter(Boolean).join(', ') || 'Location on request'}
+                  </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Truck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                <p className="text-xs text-gray-600">Campus delivery available via BataMart riders</p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Shield className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                <p className="text-xs text-gray-600">Protected by BataMart buyer guarantee</p>
               </div>
             </div>
 
-            {/* Description / Tags */}
-            {product.description && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">About this product</p>
-                {isTagDescription ? (
-                  <div className="flex flex-wrap gap-2">
-                    {descriptionTags.map((tag: string) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-BATAMART-primary/8 text-BATAMART-primary text-sm font-semibold rounded-full ring-1 ring-BATAMART-primary/15"
+            {/* Seller card */}
+            <Link
+              href={`/seller/${product.seller.id}`}
+              className="flex items-center gap-3 bg-white rounded-2xl p-3 ring-1 ring-gray-100 hover:ring-indigo-200 hover:shadow-sm transition-all group"
+            >
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm sm:text-base flex-shrink-0">
+                {product.seller.name?.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-bold text-gray-900 truncate">{product.seller.name}</p>
+                  {product.seller.trustLevel === 'GOLD' && (
+                    <BadgeCheck className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <StarRow rating={product.seller.avgRating || 0} />
+                  <span className="text-[11px] text-gray-500">{product.seller.completedOrders || 0} orders</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-indigo-500 group-hover:translate-x-0.5 transition-transform">
+                <span className="text-xs font-semibold hidden sm:block">Visit Shop</span>
+                <ChevronRight className="w-4 h-4" />
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* ── Tabs: Description · Details · Reviews ─────────────────────── */}
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm fade-up" style={{ border: '1px solid #f0f0f0', animationDelay: '0.1s' }}>
+          {/* Tab bar */}
+          <div className="flex border-b border-gray-100">
+            {(['desc', 'details', 'reviews'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => {
+                  setActiveTab(tab)
+                  if (tab === 'reviews') fetchReviews()
+                }}
+                className={`tab-btn flex-1 py-3 text-sm font-semibold text-gray-500 transition-all ${activeTab === tab ? 'active' : ''}`}
+              >
+                {tab === 'desc' ? 'Description' : tab === 'details' ? 'Details' : `Reviews`}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-4">
+            {/* Description tab */}
+            {activeTab === 'desc' && (
+              <div>
+                {descriptionClean ? (
+                  <div>
+                    <p className={`text-sm text-gray-700 leading-relaxed whitespace-pre-wrap ${!descExpanded && descriptionClean.length > 200 ? 'line-clamp-4' : ''}`}>
+                      {descriptionClean}
+                    </p>
+                    {descriptionClean.length > 200 && (
+                      <button
+                        onClick={() => setDescExpanded(e => !e)}
+                        className="flex items-center gap-1 text-indigo-600 text-sm font-semibold mt-2 hover:underline"
                       >
-                        <Tag className="w-3 h-3" /> {tag}
-                      </span>
-                    ))}
+                        {descExpanded ? <><ChevronUp className="w-3.5 h-3.5" /> Show less</> : <><ChevronDown className="w-3.5 h-3.5" /> Read more</>}
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  <p className="text-gray-600 text-sm leading-relaxed">{product.description}</p>
+                  <p className="text-sm text-gray-400 italic">No description provided.</p>
+                )}
+
+                {/* Tags */}
+                {tags.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1">
+                      <Tag className="w-3 h-3" /> Tags
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tags.map((tag, i) => (
+                        <span
+                          key={i}
+                          className="tag-pill bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full cursor-default"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* ── Seller card (Amazon-style) ── */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="p-5 flex items-center gap-4">
-                <div className="relative flex-shrink-0">
-                  {product.seller?.profilePhoto ? (
-                    <img
-                      src={product.seller.profilePhoto}
-                      alt={product.seller.name}
-                      className="w-14 h-14 rounded-full object-cover ring-2 ring-gray-100"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-full bg-BATAMART-primary/10 flex items-center justify-center ring-2 ring-BATAMART-primary/20">
-                      <span className="text-BATAMART-primary font-black text-xl">
-                        {(product.seller?.name || 'S')[0]}
-                      </span>
-                    </div>
-                  )}
-                  <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-white" />
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Sold by</p>
-                  <Link
-                    href={`/seller/${product.sellerId}`}
-                    className="text-lg font-black text-gray-900 hover:text-BATAMART-primary transition-colors truncate block"
-                  >
-                    {product.seller?.name || 'Seller'}
-                  </Link>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {product.seller?.trustLevel === 'GOLD' && <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full ring-1 ring-amber-200">⭐ Gold Seller</span>}
-                    {product.seller?.trustLevel === 'SILVER' && <span className="text-[11px] font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded-full ring-1 ring-slate-200">🥈 Silver Seller</span>}
-                    {product.seller?.trustLevel === 'BRONZE' && <span className="text-[11px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full ring-1 ring-orange-200">🥉 Bronze Seller</span>}
-                  </div>
-                </div>
-                <Link
-                  href={`/seller/${product.sellerId}`}
-                  className="flex-shrink-0 text-xs font-bold text-BATAMART-primary hover:underline flex items-center gap-0.5"
-                >
-                  Visit store <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-
-              {/* Seller stats */}
-              <div className="grid grid-cols-3 border-t border-gray-50">
+            {/* Details tab */}
+            {activeTab === 'details' && (
+              <dl className="space-y-3 text-sm">
                 {[
-                  { icon: <TrendingUp className="w-4 h-4 text-BATAMART-primary" />, value: product.seller?.completedOrders || 0, label: 'Orders' },
-                  { icon: <Star className="w-4 h-4 text-amber-400 fill-amber-400" />, value: product.seller?.avgRating?.toFixed(1) || '0.0', label: 'Rating' },
-                  { icon: <Shield className="w-4 h-4 text-purple-500" />, value: product.seller?.trustLevel || 'Bronze', label: 'Level' },
-                ].map(({ icon, value, label }, i) => (
-                  <div key={label} className={`flex flex-col items-center justify-center py-4 gap-1 ${i < 2 ? 'border-r border-gray-50' : ''}`}>
-                    <div className="flex items-center gap-1.5">
-                      {icon}
-                      <span className="font-black text-sm text-gray-900">{value}</span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-gray-400">{label}</span>
+                  { label: 'Category', value: product.category },
+                  { label: 'In Stock', value: `${product.quantity} units` },
+                  { label: 'Seller', value: product.seller.name },
+                  { label: 'Trust Level', value: product.seller.trustLevel },
+                  { label: 'Location', value: [product.hostelName, product.roomNumber].filter(Boolean).join(', ') || 'Not specified' },
+                  { label: 'Landmark', value: product.landmark || 'Not specified' },
+                  { label: 'Listed', value: new Date(product.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                    <dt className="text-gray-500 font-medium">{label}</dt>
+                    <dd className="text-gray-800 font-semibold text-right max-w-[60%] truncate">{value}</dd>
                   </div>
                 ))}
-              </div>
+              </dl>
+            )}
 
-              {sellerReviews.length > 0 && (
-                <div className="border-t border-gray-50 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Seller Reviews</p>
-                    <span className="text-xs text-gray-400">{sellerReviews.length} total</span>
+            {/* Reviews tab */}
+            {activeTab === 'reviews' && (
+              <div>
+                {reviewsLoading ? (
+                  <div className="space-y-3">
+                    {[1,2,3].map(i => (
+                      <div key={i} className="flex gap-3">
+                        <div className="shimmer w-9 h-9 rounded-full flex-shrink-0" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="shimmer h-3 w-24 rounded" />
+                          <div className="shimmer h-3 w-full rounded" />
+                          <div className="shimmer h-3 w-3/4 rounded" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <ReviewList reviews={sellerReviews.slice(0, 2)} />
-                  <button
-                    onClick={() => router.push(`/seller/${product.sellerId}`)}
-                    className="w-full mt-3 flex items-center justify-center gap-1.5 text-sm font-bold text-BATAMART-primary hover:text-BATAMART-dark transition-colors py-2 hover:bg-BATAMART-primary/5 rounded-xl"
-                  >
-                    View All Reviews <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Product details grid */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 bg-BATAMART-primary/10 rounded-lg flex items-center justify-center">
-                  <Package className="w-4 h-4 text-BATAMART-primary" />
-                </div>
-                <h3 className="font-black text-gray-900">Product Details</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded-xl p-3.5">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Category</p>
-                  <p className="font-black text-gray-900 text-sm">{product.category}</p>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-3.5">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Delivery</p>
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <p className="font-bold text-gray-900 text-xs">On Campus</p>
+                ) : reviews.length === 0 ? (
+                  <div className="text-center py-8">
+                    <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">No reviews yet</p>
+                    <p className="text-xs text-gray-300 mt-1">Be the first to buy and review this product</p>
                   </div>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-3.5">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Condition</p>
-                  <p className="font-black text-gray-900 text-sm">
-                    {descriptionTags.find(t => ['New', 'Used', 'Refurbished'].includes(t)) || 'Available'}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-3.5">
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Stock</p>
-                  <p className="font-black text-gray-900 text-sm">{product.quantity} units</p>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    {reviews.map((r: any) => (
+                      <div key={r.id} className="flex gap-3">
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                          {r.reviewer?.name?.charAt(0) || '?'}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-gray-800">{r.reviewer?.name || 'Buyer'}</p>
+                            <StarRow rating={r.rating} />
+                          </div>
+                          {r.comment && (
+                            <p className="text-sm text-gray-600 mt-1 leading-relaxed">{r.comment}</p>
+                          )}
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {new Date(r.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* ══ PRODUCT REVIEWS ══ */}
-        {!reviewsLoading && (
-          <div className="mt-10 sm:mt-14 fade-up" style={{ animationDelay: '120ms' }}>
-            <div className="flex items-center justify-between mb-5 gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center ring-1 ring-purple-100">
-                  <MessageSquare className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-gray-900 section-accent">Customer Reviews</h2>
-                  {product.avgRating > 0 && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map(s => (
-                          <Star key={s} className={`w-3.5 h-3.5 ${s <= Math.floor(product.avgRating) ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}`} />
-                        ))}
-                      </div>
-                      <span className="text-sm font-black text-gray-700">{product.avgRating?.toFixed(1)} out of 5</span>
-                    </div>
-                  )}
-                </div>
+        {/* ── Related Products ──────────────────────────────────────────── */}
+        {(relatedNameRelated.length > 0 || relatedOthers.length > 0) && (
+          <div className="fade-up" style={{ animationDelay: '0.15s' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-500" />
+                  Deals on related products
+                </h2>
+                {relatedSourceName && (
+                  <p className="text-xs text-gray-400 mt-0.5">Similar to "{relatedSourceName}"</p>
+                )}
               </div>
-              {product.totalReviews > 0 && (
-                <Link
-                  href={`/product/${params.id}/reviews`}
-                  className="hidden sm:flex items-center gap-1.5 text-sm font-bold text-BATAMART-primary hover:underline transition-colors"
-                >
-                  See all {product.totalReviews} reviews <ArrowRight className="w-4 h-4" />
-                </Link>
-              )}
+              <Link
+                href={`/search?q=${encodeURIComponent(relatedSourceName.split(' ').slice(0,2).join(' '))}`}
+                className="text-xs font-semibold text-indigo-600 hover:underline flex items-center gap-0.5"
+              >
+                See all <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              {productReviews.length > 0 ? (
-                <div className="divide-y divide-gray-50">
-                  {productReviews.slice(0, 5).map((review) => (
-                    <div key={review.id} className="p-5 sm:p-6 hover:bg-gray-50/50 transition-colors">
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        {review.reviewer?.profilePhoto ? (
-                          <img src={review.reviewer.profilePhoto} alt={review.reviewer.name} className="w-10 h-10 rounded-full flex-shrink-0 object-cover" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-BATAMART-primary font-black text-sm">{(review.reviewer?.name || 'A')[0]}</span>
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-3 mb-1.5">
-                            <div>
-                              <p className="font-bold text-sm text-gray-900">{review.reviewer?.name || 'Anonymous'}</p>
-                              <div className="flex items-center gap-2">
-                                <div className="flex">
-                                  {[1, 2, 3, 4, 5].map(s => (
-                                    <Star key={s} className={`w-3 h-3 ${s <= review.rating ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}`} />
-                                  ))}
-                                </div>
-                                <span className="text-xs text-gray-400">
-                                  {new Date(review.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </span>
-                              </div>
-                            </div>
-                            <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full ring-1 ring-emerald-200">
-                              <BadgeCheck className="w-3 h-3" /> Verified
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 leading-relaxed">{review.comment}</p>
-                        </div>
-                      </div>
+            {relatedLoading ? (
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="flex-shrink-0 w-36 sm:w-44 rounded-2xl overflow-hidden">
+                    <div className="shimmer aspect-square w-full" />
+                    <div className="bg-white p-2 space-y-1.5">
+                      <div className="shimmer h-3 w-full rounded" />
+                      <div className="shimmer h-3 w-2/3 rounded" />
+                      <div className="shimmer h-4 w-1/2 rounded" />
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                  <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 ring-1 ring-gray-100">
-                    <MessageSquare className="w-8 h-8 text-gray-300" />
                   </div>
-                  <h3 className="text-lg font-black text-gray-800 mb-1">No Reviews Yet</h3>
-                  <p className="text-sm text-gray-400 max-w-sm">Be the first to review this product after purchasing.</p>
-                </div>
-              )}
+                ))}
+              </div>
+            ) : (
+              <div>
+                {/* Name-related first (if any) */}
+                {relatedNameRelated.length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
+                    {relatedNameRelated.map(p => (
+                      <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                    ))}
+                    {/* Divider card before "others" in the same row if there are also others */}
+                    {relatedOthers.length > 0 && (
+                      <>
+                        <div className="flex-shrink-0 flex items-center px-1">
+                          <div className="w-px h-24 bg-gray-200" />
+                        </div>
+                        {relatedOthers.slice(0, 6).map(p => (
+                          <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
 
-              {productReviews.length > 5 && (
-                <div className="border-t border-gray-50 p-5 text-center">
-                  <Link
-                    href={`/product/${params.id}/reviews`}
-                    className="inline-flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-6 py-3 rounded-xl font-bold text-sm transition-all shadow-md"
-                  >
-                    See all reviews ({productReviews.length - 5} more) <ArrowRight className="w-4 h-4" />
-                  </Link>
+                {/* If there were no name-related, just show others */}
+                {relatedNameRelated.length === 0 && relatedOthers.length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
+                    {relatedOthers.map(p => (
+                      <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── You might also like (grid) ────────────────────────────────── */}
+        {allRelated.length >= 4 && (
+          <div className="fade-up" style={{ animationDelay: '0.2s' }}>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-orange-500" />
+              You might also like
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {allRelated.slice(0, 8).map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => navigateRelated(p.id)}
+                  className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer"
+                  style={{ border: '1px solid #f0f0f0' }}
+                >
+                  <div className="aspect-square overflow-hidden bg-gray-50">
+                    {p.images?.[0] ? (
+                      <img
+                        src={p.images[0]}
+                        alt={p.name}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-8 h-8 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-xs sm:text-sm font-semibold text-gray-800 line-clamp-2 leading-tight mb-1">
+                      {p.name}
+                    </p>
+                    <p className="text-sm font-bold text-indigo-600">{fmt(p.price)}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <StarRow rating={p.seller?.avgRating || 0} />
+                    </div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
 
-        {/* ══ DEALS ON RELATED PRODUCTS — infinite vertical scroll ══ */}
-        <div className="mt-10 sm:mt-14">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-gray-900 section-accent">
-                Deals on related products
-              </h2>
-              <p className="text-sm text-gray-400 mt-1">
-                Similar to &ldquo;{product.name.split(' ').slice(0, 4).join(' ')}&rdquo;
-              </p>
-            </div>
-            <Link
-              href={`/marketplace?category=${encodeURIComponent(product.category)}`}
-              className="flex items-center gap-1.5 text-sm font-bold text-BATAMART-primary hover:underline flex-shrink-0"
-            >
-              See all <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          {/* Grid — vertical, infinite */}
-          {relatedLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {Array.from({ length: 8 }).map((_, i) => <RelatedSkeleton key={i} />)}
-            </div>
-          ) : relatedProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-              <Package className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-              <p className="text-gray-400 font-semibold text-sm">No related products found yet</p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {relatedProducts.slice(0, relatedVisible).map((item) => (
-                  <RelatedCard
-                    key={item.id}
-                    product={item}
-                    currentProductName={product.name}
-                  />
-                ))}
-                {/* Skeleton placeholders while loading more */}
-                {relatedLoadingMore && Array.from({ length: 4 }).map((_, i) => <RelatedSkeleton key={`skel-${i}`} />)}
-              </div>
-
-              {/* Infinite scroll sentinel */}
-              <div ref={relatedSentinelRef} className="flex justify-center items-center py-10 mt-2">
-                {relatedLoadingMore ? (
-                  <div className="flex items-center gap-2 text-gray-400 text-sm font-medium">
-                    <Loader2 className="w-4 h-4 spin" />
-                    Loading more deals…
-                  </div>
-                ) : relatedVisible < relatedProducts.length ? (
-                  <div className="w-full h-4" />
-                ) : (
-                  <div className="flex flex-col items-center gap-1 text-gray-300">
-                    <CheckCircle className="w-5 h-5" />
-                    <p className="text-xs font-semibold">You&apos;ve seen all related products</p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
       </div>
     </div>
-  );
+  )
 }
