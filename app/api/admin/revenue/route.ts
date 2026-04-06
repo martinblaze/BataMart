@@ -31,13 +31,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const { searchParams } = new URL(req.url)
+    const universityId = searchParams.get('universityId')
+    const uniFilter = universityId ? { universityId } : {}
+
     const now = new Date()
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
 
-    // ── Fetch all completed orders (we need per-order amounts for accurate Paystack fees)
     const [
       allCompletedOrders,
       thisMonthCompletedOrders,
@@ -50,33 +53,33 @@ export async function GET(req: NextRequest) {
       referralStats,
     ] = await Promise.all([
       prisma.order.findMany({
-        where: { status: 'COMPLETED' },
+        where: { status: 'COMPLETED', ...uniFilter },
         select: { totalAmount: true, platformCommission: true, deliveryFee: true },
       }),
 
       prisma.order.findMany({
-        where: { status: 'COMPLETED', createdAt: { gte: thisMonthStart } },
+        where: { status: 'COMPLETED', createdAt: { gte: thisMonthStart }, ...uniFilter },
         select: { totalAmount: true, platformCommission: true },
       }),
 
       prisma.order.findMany({
-        where: { status: 'COMPLETED', createdAt: { gte: lastMonthStart, lte: lastMonthEnd } },
+        where: { status: 'COMPLETED', createdAt: { gte: lastMonthStart, lte: lastMonthEnd }, ...uniFilter },
         select: { totalAmount: true, platformCommission: true },
       }),
 
       prisma.order.findMany({
-        where: { status: 'COMPLETED', createdAt: { gte: todayStart } },
+        where: { status: 'COMPLETED', createdAt: { gte: todayStart }, ...uniFilter },
         select: { totalAmount: true, platformCommission: true },
       }),
 
       prisma.order.findMany({
-        where: { status: { notIn: ['COMPLETED', 'CANCELLED'] }, isPaid: true },
+        where: { status: { notIn: ['COMPLETED', 'CANCELLED'] }, isPaid: true, ...uniFilter },
         select: { totalAmount: true, platformCommission: true },
       }),
 
       prisma.order.groupBy({
         by: ['sellerId'],
-        where: { status: 'COMPLETED' },
+        where: { status: 'COMPLETED', ...uniFilter },
         _sum: { totalAmount: true, platformCommission: true },
         _count: true,
         orderBy: { _sum: { totalAmount: 'desc' } },
@@ -84,16 +87,15 @@ export async function GET(req: NextRequest) {
       }),
 
       prisma.user.aggregate({
-        where: { role: 'SELLER' },
+        where: { role: 'SELLER', ...(universityId ? { universityId } : {}) },
         _sum: { pendingBalance: true, availableBalance: true },
       }),
 
       prisma.user.aggregate({
-        where: { role: 'RIDER' },
+        where: { role: 'RIDER', ...(universityId ? { universityId } : {}) },
         _sum: { pendingBalance: true, availableBalance: true },
       }),
 
-      // Referral rewards paid out
       prisma.referralReward.aggregate({
         _sum: { amount: true },
         _count: true,
@@ -105,79 +107,41 @@ export async function GET(req: NextRequest) {
       totalAmount: orders.reduce((s, o) => s + (o.totalAmount || 0), 0),
       platformCommission: orders.reduce((s, o) => s + (o.platformCommission || 0), 0),
       count: orders.length,
-      // Correct Paystack fees: calculate per order then sum
       paystackFees: orders.reduce((s, o) => s + paystackFeePerOrder(o.totalAmount || 0), 0),
     })
 
-    const allTime = sumOrders(allCompletedOrders)
+    const allTime   = sumOrders(allCompletedOrders)
     const thisMonth = sumOrders(thisMonthCompletedOrders)
     const lastMonth = sumOrders(lastMonthCompletedOrders)
-    const today = sumOrders(todayCompletedOrders)
-    const pending = sumOrders(pendingOrders)
+    const today     = sumOrders(todayCompletedOrders)
+    const pending   = sumOrders(pendingOrders)
 
-    // ── Net platform profit = commission - Paystack fees - referral payouts ──
-    const referralPaidOut = referralStats._sum.amount || 0
+    const referralPaidOut = Number(referralStats._sum.amount ?? 0)
 
-    const netAllTime = allTime.platformCommission - allTime.paystackFees - referralPaidOut
+    const netAllTime   = allTime.platformCommission   - allTime.paystackFees   - referralPaidOut
     const netThisMonth = thisMonth.platformCommission - thisMonth.paystackFees
     const netLastMonth = lastMonth.platformCommission - lastMonth.paystackFees
-    const netToday = today.platformCommission - today.paystackFees
-    const netPending = pending.platformCommission - pending.paystackFees
+    const netToday     = today.platformCommission     - today.paystackFees
+    const netPending   = pending.platformCommission   - pending.paystackFees
 
-    // ── Obligations ────────────────────────────────────────────────────
-    const sellersAvailableNow = Number(totalSellersBalance._sum.availableBalance) || 0
-    const sellersPending      = Number(totalSellersBalance._sum.pendingBalance)   || 0
-    const ridersAvailableNow  = Number(totalRidersBalance._sum.availableBalance)  || 0
-    const ridersPending       = Number(totalRidersBalance._sum.pendingBalance)    || 0
+    // ── FIX: Use .toNumber() to safely convert Prisma Decimal fields ──
+    const sellersAvailableNow = totalSellersBalance._sum.availableBalance?.toNumber() ?? 0
+    const sellersPending      = totalSellersBalance._sum.pendingBalance?.toNumber()   ?? 0
+    const ridersAvailableNow  = totalRidersBalance._sum.availableBalance?.toNumber()  ?? 0
+    const ridersPending       = totalRidersBalance._sum.pendingBalance?.toNumber()    ?? 0
 
     const totalOwedToSellers = sellersAvailableNow + sellersPending
     const totalOwedToRiders  = ridersAvailableNow  + ridersPending
 
-    // ── FIXED: Safe withdrawal calculation ────────────────────────────────────
-    //
-    // What Paystack physically holds = all money that came in from buyers.
-    // What you MUST keep = everything still owed to sellers + riders:
-    //   • sellersAvailableNow  — seller earnings already released from escrow;
-    //                            the seller can withdraw this at any moment.
-    //   • ridersAvailableNow   — rider earnings already released; same.
-    //   • sellersPending       — still in escrow (delivery not yet confirmed);
-    //                            will become sellers' once buyer confirms.
-    //   • ridersPending        — still in escrow for rider.
-    //
-    // Net platform earnings (netAllTime) = your cut after Paystack fees and
-    // referral payouts. But part of that money is already earmarked for
-    // users who have a positive availableBalance — they just haven't withdrawn
-    // yet. We must subtract those settled-but-undrawn balances so we never
-    // inadvertently spend money that belongs to someone else.
-    //
-    // Formula:
-    //   safeToWithdraw = netAllTime
-    //                  − sellersAvailableNow   (settled, ready for their withdrawal)
-    //                  − ridersAvailableNow    (settled, ready for their withdrawal)
-    //
-    // Note: sellersPending / ridersPending are NOT subtracted here because
-    // those amounts are NOT part of netAllTime yet — they sit in escrow and
-    // will only become part of the platform commission once the buyer confirms.
-    // Subtracting them would double-count.
-    //
-    // BEFORE this fix (WRONG):
-    //   safeToWithdraw = netAllTime
-    //   → admin could withdraw money that belongs to sellers/riders,
-    //     leaving Paystack unable to honour their future withdrawals.
-    //
-    // AFTER this fix (CORRECT):
-    //   safeToWithdraw = netAllTime − sellersAvailableNow − ridersAvailableNow
-    //   → the admin can only ever withdraw their actual profit.
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Safe withdrawal calculation ───────────────────────────────────
     const safeToWithdraw = Math.max(
       0,
       netAllTime - sellersAvailableNow - ridersAvailableNow,
     )
 
-    // Total Paystack balance estimate (all paid orders - what's been withdrawn by sellers/riders)
     const paystackHoldsApprox = allTime.totalAmount
 
-    // ── Enrich top sellers ─────────────────────────────────────────────
+    // ── Enrich top sellers ────────────────────────────────────────────
     const topSellers = await Promise.all(
       topSellersRaw.map(async (s) => {
         const seller = await prisma.user.findUnique({
@@ -201,47 +165,47 @@ export async function GET(req: NextRequest) {
 
         platform: {
           gross: {
-            allTime: allTime.platformCommission,
+            allTime:   allTime.platformCommission,
             thisMonth: thisMonth.platformCommission,
             lastMonth: lastMonth.platformCommission,
-            today: today.platformCommission,
-            pending: pending.platformCommission,
+            today:     today.platformCommission,
+            pending:   pending.platformCommission,
           },
           net: {
-            allTime: netAllTime,
+            allTime:   netAllTime,
             thisMonth: netThisMonth,
             lastMonth: netLastMonth,
-            today: netToday,
-            pending: netPending,
+            today:     netToday,
+            pending:   netPending,
           },
           paystackFees: {
-            allTime: allTime.paystackFees,
+            allTime:   allTime.paystackFees,
             thisMonth: thisMonth.paystackFees,
             lastMonth: lastMonth.paystackFees,
-            today: today.paystackFees,
-            pending: pending.paystackFees,
+            today:     today.paystackFees,
+            pending:   pending.paystackFees,
           },
         },
 
         thisMonth: {
-          revenue: thisMonth.totalAmount,
-          orders: thisMonth.count,
+          revenue:        thisMonth.totalAmount,
+          orders:         thisMonth.count,
           platformEarned: thisMonth.platformCommission,
         },
         lastMonth: {
-          revenue: lastMonth.totalAmount,
-          orders: lastMonth.count,
+          revenue:        lastMonth.totalAmount,
+          orders:         lastMonth.count,
           platformEarned: lastMonth.platformCommission,
         },
         today: {
-          revenue: today.totalAmount,
-          orders: today.count,
+          revenue:        today.totalAmount,
+          orders:         today.count,
           platformEarned: today.platformCommission,
         },
 
         escrow: {
-          pendingOrders: pending.count,
-          totalInEscrow: pending.totalAmount,
+          pendingOrders:  pending.count,
+          totalInEscrow:  pending.totalAmount,
           yourCutInEscrow: pending.platformCommission,
         },
 
@@ -255,21 +219,20 @@ export async function GET(req: NextRequest) {
         },
 
         referrals: {
-          totalPaidOut: referralPaidOut,
-          totalRewards: referralStats._count,
+          totalPaidOut:  referralPaidOut,
+          totalRewards:  referralStats._count,
         },
 
         withdrawal: {
           safeToWithdraw,
           paystackHoldsApprox,
           breakdown: {
-            grossCommission:     allTime.platformCommission,
-            minusPaystackFees:   allTime.paystackFees,
-            minusReferralPayouts: referralPaidOut,
-            // ── NEW fields shown in the admin UI breakdown ──
+            grossCommission:       allTime.platformCommission,
+            minusPaystackFees:     allTime.paystackFees,
+            minusReferralPayouts:  referralPaidOut,
             minusSellersAvailable: sellersAvailableNow,
             minusRidersAvailable:  ridersAvailableNow,
-            result:              safeToWithdraw,
+            result:                safeToWithdraw,
           },
         },
 
