@@ -9,7 +9,7 @@ import {
   MapPin, Clock, CheckCircle, AlertCircle, Store, Award,
   MessageCircle, ThumbsUp, Camera, Tag, ArrowRight, Flame,
   BadgeCheck, Info, RefreshCw, ChevronDown, ChevronUp,
-  StarHalf, Users, TrendingUp, Sparkles,
+  StarHalf, Users, TrendingUp, Sparkles, Loader2,
 } from 'lucide-react'
 import { useCartStore } from '@/lib/cart-store'
 
@@ -155,15 +155,33 @@ const PAGE_CSS = `
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
 
-  /* Sticky add-to-cart bar on mobile */
   .sticky-bar {
     transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
+  }
+
+  .see-more-btn {
+    transition: all 0.2s cubic-bezier(0.34,1.4,0.64,1);
+    background: linear-gradient(135deg,#6366f1 0%,#4c1d95 100%);
+    box-shadow: 0 2px 10px rgba(99,102,241,0.3);
+  }
+  .see-more-btn:hover:not(:disabled) {
+    transform: scale(1.04);
+    box-shadow: 0 4px 16px rgba(99,102,241,0.45);
+  }
+  .see-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   @media (max-width: 640px) {
     .product-grid { grid-template-columns: 1fr !important; }
   }
 `
+
+// ─────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────
+const ALSO_LIKE_PAGE_SIZE = 15
 
 // ─────────────────────────────────────────────────────────
 // Helpers
@@ -229,7 +247,7 @@ function Skeleton() {
 }
 
 // ─────────────────────────────────────────────────────────
-// Related Product Card
+// Related Product Card (horizontal scroll)
 // ─────────────────────────────────────────────────────────
 function RelatedCard({ product, onClick }: { product: RelatedProduct; onClick: () => void }) {
   return (
@@ -273,107 +291,24 @@ function RelatedCard({ product, onClick }: { product: RelatedProduct; onClick: (
 }
 
 // ─────────────────────────────────────────────────────────
-// You Might Also Like — lazy grid, loads 8 rows at a time
-// via IntersectionObserver sentinel at the bottom
+// "See More" inline card for horizontal scroll
 // ─────────────────────────────────────────────────────────
-const PAGE_SIZE_GRID = 8
-
-function YouMightAlsoLike({
-  products,
-  onNavigate,
-  fmt,
-}: {
-  products: RelatedProduct[]
-  onNavigate: (id: string) => void
-  fmt: (n: number) => string
-}) {
-  const [visible, setVisible] = useState(PAGE_SIZE_GRID)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const hasMore = visible < products.length
-
-  useEffect(() => {
-    if (!hasMore) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !loadingMore) {
-          setLoadingMore(true)
-          // Simulate a brief load delay so it feels natural, not instant dump
-          setTimeout(() => {
-            setVisible(v => Math.min(v + PAGE_SIZE_GRID, products.length))
-            setLoadingMore(false)
-          }, 400)
-        }
-      },
-      { rootMargin: '200px' } // start loading 200px before the sentinel
-    )
-    const el = sentinelRef.current
-    if (el) observer.observe(el)
-    return () => { if (el) observer.unobserve(el) }
-  }, [hasMore, loadingMore, products.length])
-
+function SeeMoreCard({ onClick, loading }: { onClick: () => void; loading: boolean }) {
   return (
-    <div className="fade-up" style={{ animationDelay: '0.2s' }}>
-      <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-        <TrendingUp className="w-4 h-4 text-orange-500" />
-        You might also like
-      </h2>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {products.slice(0, visible).map(p => (
-          <div
-            key={p.id}
-            onClick={() => onNavigate(p.id)}
-            className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer"
-            style={{ border: '1px solid #f0f0f0' }}
-          >
-            <div className="aspect-square overflow-hidden bg-gray-50">
-              {p.images?.[0] ? (
-                <img
-                  src={p.images[0]}
-                  alt={p.name}
-                  className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-8 h-8 text-gray-300" />
-                </div>
-              )}
-            </div>
-            <div className="p-2.5">
-              <p className="text-xs sm:text-sm font-semibold text-gray-800 line-clamp-2 leading-tight mb-1">
-                {p.name}
-              </p>
-              <p className="text-sm font-bold text-indigo-600">{fmt(p.price)}</p>
-              <div className="flex items-center gap-1 mt-1">
-                <StarRow rating={p.seller?.avgRating || 0} />
-              </div>
-            </div>
+    <div
+      onClick={!loading ? onClick : undefined}
+      className="flex-shrink-0 w-36 sm:w-44 rounded-2xl overflow-hidden cursor-pointer flex flex-col items-center justify-center gap-2 bg-indigo-50 border border-indigo-100"
+      style={{ minHeight: '180px' }}
+    >
+      {loading ? (
+        <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+      ) : (
+        <>
+          <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
+            <ChevronRight className="w-5 h-5 text-white" />
           </div>
-        ))}
-
-        {/* Shimmer placeholders while loading next batch */}
-        {loadingMore && Array.from({ length: Math.min(PAGE_SIZE_GRID, products.length - visible) }).map((_, i) => (
-          <div key={`skel-${i}`} className="rounded-2xl overflow-hidden" style={{ border: '1px solid #f0f0f0' }}>
-            <div className="shimmer aspect-square w-full" />
-            <div className="bg-white p-2.5 space-y-2">
-              <div className="shimmer h-3 w-full rounded" />
-              <div className="shimmer h-3 w-2/3 rounded" />
-              <div className="shimmer h-4 w-1/2 rounded" />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Invisible sentinel that triggers the next load */}
-      {hasMore && <div ref={sentinelRef} className="h-4 w-full" />}
-
-      {/* End of list message */}
-      {!hasMore && products.length > PAGE_SIZE_GRID && (
-        <p className="text-center text-xs text-gray-400 mt-4 py-2">
-          — You've seen all {products.length} related products —
-        </p>
+          <p className="text-xs font-bold text-indigo-700 text-center px-2">See more</p>
+        </>
       )}
     </div>
   )
@@ -397,13 +332,24 @@ export default function ProductDetailPage() {
   const [cartMsg, setCartMsg] = useState('')
   const [activeTab, setActiveTab] = useState<'desc' | 'details' | 'reviews'>('desc')
   const [descExpanded, setDescExpanded] = useState(false)
+
+  // Related products (horizontal strip) — paginated with "See more"
   const [relatedNameRelated, setRelatedNameRelated] = useState<RelatedProduct[]>([])
   const [relatedOthers, setRelatedOthers] = useState<RelatedProduct[]>([])
   const [relatedSourceName, setRelatedSourceName] = useState('')
   const [relatedLoading, setRelatedLoading] = useState(false)
-  const [relatedVisible, setRelatedVisible] = useState(8)
+  const [relatedPage, setRelatedPage] = useState(1)          // current page of "others"
+  const [relatedHasMore, setRelatedHasMore] = useState(false)
   const [relatedLoadingMore, setRelatedLoadingMore] = useState(false)
-  const relatedScrollRef = useRef<HTMLDivElement>(null)
+  const RELATED_PAGE_SIZE = 8
+
+  // "You might also like" grid — infinite scroll
+  const [alsoLikeItems, setAlsoLikeItems] = useState<RelatedProduct[]>([])
+  const [alsoLikePage, setAlsoLikePage] = useState(0)        // 0 = not loaded yet
+  const [alsoLikeHasMore, setAlsoLikeHasMore] = useState(true)
+  const [alsoLikeLoading, setAlsoLikeLoading] = useState(false)
+  const alsoLikeSentinelRef = useRef<HTMLDivElement>(null)
+
   const [reviews, setReviews] = useState<any[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [showStickyBar, setShowStickyBar] = useState(false)
@@ -411,8 +357,9 @@ export default function ProductDetailPage() {
   const { addItem } = useCartStore()
   const mainRef = useRef<HTMLDivElement>(null)
   const buyBoxRef = useRef<HTMLDivElement>(null)
+  const relatedScrollRef = useRef<HTMLDivElement>(null)
 
-  // Sticky CTA bar logic
+  // ── Sticky CTA bar ──────────────────────────────────────
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([e]) => setShowStickyBar(!e.isIntersecting),
@@ -422,7 +369,7 @@ export default function ProductDetailPage() {
     return () => observer.disconnect()
   }, [product])
 
-  // Fetch product
+  // ── Fetch product ───────────────────────────────────────
   useEffect(() => {
     if (!productId) return
     fetchProduct()
@@ -445,20 +392,17 @@ export default function ProductDetailPage() {
       const p = data.product || data
       setProduct(p)
 
-      // Track view
       try {
         fetch(`/api/products/${productId}/view`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {})
-
-        // Store in recently viewed
         const viewed = JSON.parse(localStorage.getItem('BATAMART-recently-viewed') || '[]')
         const updated = [p, ...viewed.filter((v: any) => v.id !== p.id)].slice(0, 20)
         localStorage.setItem('BATAMART-recently-viewed', JSON.stringify(updated))
       } catch {}
 
-      fetchRelated(token)
+      fetchRelatedFirst(token)
     } catch {
       setError('Failed to load product')
     } finally {
@@ -466,22 +410,107 @@ export default function ProductDetailPage() {
     }
   }
 
-  const fetchRelated = async (token: string) => {
+  // ── Related: initial load (nameRelated + first page of others) ──
+  const fetchRelatedFirst = async (token: string) => {
     setRelatedLoading(true)
     try {
-      const res = await fetch(`/api/products/${productId}/related?limit=16`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `/api/products/${productId}/related?limit=${RELATED_PAGE_SIZE}&page=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
       const data = await res.json()
       if (data.success) {
         setRelatedNameRelated(data.related?.nameRelated || [])
-        setRelatedOthers(data.related?.others || [])
+        const others: RelatedProduct[] = data.related?.others || []
+        setRelatedOthers(others)
         setRelatedSourceName(data.sourceProduct?.name || '')
+        // If the API returns pagination info use it; otherwise guess from count
+        const totalOthers = data.related?.totalOthers ?? others.length
+        setRelatedHasMore(others.length === RELATED_PAGE_SIZE && totalOthers > RELATED_PAGE_SIZE)
+        setRelatedPage(1)
       }
     } catch {}
     finally { setRelatedLoading(false) }
   }
 
+  // ── Related: load more (others) ─────────────────────────
+  const loadMoreRelated = async () => {
+    if (relatedLoadingMore) return
+    setRelatedLoadingMore(true)
+    try {
+      const token = localStorage.getItem('token') || ''
+      const nextPage = relatedPage + 1
+      const res = await fetch(
+        `/api/products/${productId}/related?limit=${RELATED_PAGE_SIZE}&page=${nextPage}&othersOnly=true`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json()
+      if (data.success) {
+        const newOthers: RelatedProduct[] = data.related?.others || []
+        setRelatedOthers(prev => [...prev, ...newOthers])
+        setRelatedPage(nextPage)
+        setRelatedHasMore(newOthers.length === RELATED_PAGE_SIZE)
+        // Scroll the strip to show new items
+        setTimeout(() => {
+          if (relatedScrollRef.current) {
+            relatedScrollRef.current.scrollBy({ left: 300, behavior: 'smooth' })
+          }
+        }, 100)
+      }
+    } catch {}
+    finally { setRelatedLoadingMore(false) }
+  }
+
+  // ── "You might also like": infinite scroll loader ────────
+  const loadAlsoLike = useCallback(async () => {
+    if (alsoLikeLoading || !alsoLikeHasMore || !product) return
+    setAlsoLikeLoading(true)
+    try {
+      const token = localStorage.getItem('token') || ''
+      const nextPage = alsoLikePage + 1
+      const res = await fetch(
+        `/api/products/${productId}/related?limit=${ALSO_LIKE_PAGE_SIZE}&page=${nextPage}&category=${encodeURIComponent(product.category)}&gridMode=true`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json()
+      if (data.success) {
+        const items: RelatedProduct[] = data.related?.grid || data.related?.others || []
+        setAlsoLikeItems(prev => {
+          // Deduplicate
+          const existingIds = new Set(prev.map(p => p.id))
+          const fresh = items.filter(p => p.id !== productId && !existingIds.has(p.id))
+          return [...prev, ...fresh]
+        })
+        setAlsoLikePage(nextPage)
+        setAlsoLikeHasMore(items.length === ALSO_LIKE_PAGE_SIZE)
+      } else {
+        setAlsoLikeHasMore(false)
+      }
+    } catch {
+      setAlsoLikeHasMore(false)
+    } finally {
+      setAlsoLikeLoading(false)
+    }
+  }, [alsoLikeLoading, alsoLikeHasMore, alsoLikePage, product, productId])
+
+  // ── IntersectionObserver for "You might also like" infinite scroll ──
+  useEffect(() => {
+    if (!product) return
+    const sentinel = alsoLikeSentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadAlsoLike()
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadAlsoLike, product])
+
+  // ── Reviews ─────────────────────────────────────────────
   const fetchReviews = async () => {
     if (reviews.length || reviewsLoading || !product) return
     setReviewsLoading(true)
@@ -538,7 +567,6 @@ export default function ProductDetailPage() {
     router.push(`/product/${id}`)
   }
 
-  // ── Description text (clean the pipe-separated tags out) ──────────────────
   const descriptionClean = product?.description
     ? product.description.split(' | ')[0].trim()
     : ''
@@ -564,6 +592,8 @@ export default function ProductDetailPage() {
       </div>
     )
   }
+
+  const hasRelated = relatedNameRelated.length > 0 || relatedOthers.length > 0
 
   return (
     <div className="min-h-screen bg-[#f7f8fa]" ref={mainRef}>
@@ -648,7 +678,6 @@ export default function ProductDetailPage() {
 
           {/* LEFT — Images */}
           <div className="space-y-2">
-            {/* Main image */}
             <div className="relative bg-white rounded-2xl overflow-hidden shadow-sm" style={{ border: '1px solid #f0f0f0' }}>
               <div className="relative aspect-square sm:aspect-[4/3] overflow-hidden">
                 {product.images?.[activeImg] ? (
@@ -664,7 +693,6 @@ export default function ProductDetailPage() {
                   </div>
                 )}
 
-                {/* Badges */}
                 <div className="absolute top-2 left-2 flex flex-col gap-1">
                   {isNew && (
                     <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">NEW</span>
@@ -681,7 +709,6 @@ export default function ProductDetailPage() {
                   )}
                 </div>
 
-                {/* View count */}
                 {(product.viewCount || 0) > 5 && (
                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
                     <Eye className="w-3 h-3" />
@@ -689,7 +716,6 @@ export default function ProductDetailPage() {
                   </div>
                 )}
 
-                {/* Image nav arrows */}
                 {product.images.length > 1 && (
                   <>
                     <button
@@ -708,7 +734,6 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              {/* Dot indicators */}
               {product.images.length > 1 && (
                 <div className="flex items-center justify-center gap-1.5 py-2">
                   {product.images.map((_, i) => (
@@ -724,7 +749,6 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Thumbnails (≥2 images) */}
             {product.images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                 {product.images.map((img, i) => (
@@ -743,7 +767,6 @@ export default function ProductDetailPage() {
           {/* RIGHT — Buy box */}
           <div ref={buyBoxRef} className="space-y-3">
 
-            {/* Category pill + trust */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-indigo-50 text-indigo-700 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
                 {product.category}
@@ -756,10 +779,8 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Product name */}
             <h1 className="text-lg sm:text-2xl font-bold text-gray-900 leading-tight">{product.name}</h1>
 
-            {/* Rating row */}
             <div className="flex items-center gap-2 flex-wrap">
               <StarRow rating={product.seller.avgRating || 0} size="md" />
               <span className="text-sm font-semibold text-amber-600">{(product.seller.avgRating || 0).toFixed(1)}</span>
@@ -775,7 +796,6 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Price */}
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-3 sm:p-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl sm:text-3xl font-extrabold text-indigo-700">{fmt(product.price)}</span>
@@ -786,7 +806,6 @@ export default function ProductDetailPage() {
               </p>
             </div>
 
-            {/* Stock indicator */}
             {product.quantity > 0 && (
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${product.quantity <= 5 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
@@ -796,7 +815,6 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Quantity selector */}
             {product.quantity > 0 && (
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-gray-700">Qty:</span>
@@ -821,7 +839,6 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* CTA buttons */}
             <div className="flex gap-2.5">
               <button
                 onClick={handleAddToCart}
@@ -845,7 +862,6 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            {/* Cart feedback */}
             {cartMsg && (
               <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium px-3 py-2 rounded-xl">
                 <CheckCircle className="w-4 h-4" />
@@ -853,23 +869,23 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Delivery info */}
+            {/* ── Delivery info — NO location/landmark/hostel shown ──── */}
             <div className="bg-white rounded-2xl p-3 space-y-2 ring-1 ring-gray-100">
               <div className="flex items-center gap-2.5">
                 <Truck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                 <p className="text-xs text-gray-600">Campus delivery available via BataMart riders</p>
               </div>
               <div className="flex items-center gap-2.5">
+                <MessageCircle className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                <p className="text-xs text-gray-600">Contact the seller to arrange pickup or delivery details</p>
+              </div>
+              <div className="flex items-center gap-2.5">
                 <Shield className="w-4 h-4 text-blue-500 flex-shrink-0" />
                 <p className="text-xs text-gray-600">Protected by BataMart buyer guarantee</p>
               </div>
-              <div className="flex items-center gap-2.5">
-                <MessageCircle className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <p className="text-xs text-gray-600">Contact the seller below to arrange pickup or delivery</p>
-              </div>
             </div>
 
-            {/* Seller card */}
+            {/* ── Seller card ─────────────────────────────────────────── */}
             <Link
               href={`/seller/${product.seller.id}`}
               className="flex items-center gap-3 bg-white rounded-2xl p-3 ring-1 ring-gray-100 hover:ring-indigo-200 hover:shadow-sm transition-all group"
@@ -899,7 +915,6 @@ export default function ProductDetailPage() {
 
         {/* ── Tabs: Description · Details · Reviews ─────────────────────── */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm fade-up" style={{ border: '1px solid #f0f0f0', animationDelay: '0.1s' }}>
-          {/* Tab bar */}
           <div className="flex border-b border-gray-100">
             {(['desc', 'details', 'reviews'] as const).map(tab => (
               <button
@@ -910,7 +925,7 @@ export default function ProductDetailPage() {
                 }}
                 className={`tab-btn flex-1 py-3 text-sm font-semibold text-gray-500 transition-all ${activeTab === tab ? 'active' : ''}`}
               >
-                {tab === 'desc' ? 'Description' : tab === 'details' ? 'Details' : `Reviews`}
+                {tab === 'desc' ? 'Description' : tab === 'details' ? 'Details' : 'Reviews'}
               </button>
             ))}
           </div>
@@ -937,7 +952,6 @@ export default function ProductDetailPage() {
                   <p className="text-sm text-gray-400 italic">No description provided.</p>
                 )}
 
-                {/* Tags */}
                 {tags.length > 0 && (
                   <div className="mt-4">
                     <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1">
@@ -958,7 +972,7 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Details tab */}
+            {/* Details tab — location & landmark REMOVED */}
             {activeTab === 'details' && (
               <dl className="space-y-3 text-sm">
                 {[
@@ -1026,8 +1040,8 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* ── Related Products ──────────────────────────────────────────── */}
-        {(relatedNameRelated.length > 0 || relatedOthers.length > 0) && (
+        {/* ── Deals on related products (horizontal scroll + inline "See more" card) ── */}
+        {hasRelated && (
           <div className="fade-up" style={{ animationDelay: '0.15s' }}>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -1054,90 +1068,107 @@ export default function ProductDetailPage() {
                   </div>
                 ))}
               </div>
-            ) : (() => {
-              // Merge name-related first, then others — single flat list
-              const allDeals = [...relatedNameRelated, ...relatedOthers]
-              const visible = allDeals.slice(0, relatedVisible)
-              const hasMore = relatedVisible < allDeals.length
+            ) : (
+              <div
+                ref={relatedScrollRef}
+                className="flex gap-3 overflow-x-auto no-scrollbar pb-3"
+              >
+                {/* Name-related first */}
+                {relatedNameRelated.map(p => (
+                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                ))}
 
-              return (
-                <div>
-                  <div ref={relatedScrollRef} className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
-                    {visible.map((p, idx) => (
-                      <div key={p.id}>
-                        {/* Soft divider between name-related and others */}
-                        {idx === relatedNameRelated.length && relatedNameRelated.length > 0 && relatedOthers.length > 0 && (
-                          <div className="flex items-center self-stretch mr-3">
-                            <div className="w-px h-24 bg-gray-200 my-auto" />
-                          </div>
-                        )}
-                        <RelatedCard product={p} onClick={() => navigateRelated(p.id)} />
-                      </div>
-                    ))}
-
-                    {/* See more card — inline at the end of the scroll row */}
-                    {hasMore && (
-                      <div
-                        onClick={() => {
-                          setRelatedLoadingMore(true)
-                          // Small delay so user sees the shimmer cards appear
-                          setTimeout(() => {
-                            setRelatedVisible(v => v + 8)
-                            setRelatedLoadingMore(false)
-                            // Scroll the row right to reveal new cards
-                            if (relatedScrollRef.current) {
-                              relatedScrollRef.current.scrollBy({ left: 400, behavior: 'smooth' })
-                            }
-                          }, 350)
-                        }}
-                        className="rv-card flex-shrink-0 w-36 sm:w-44 bg-indigo-50 rounded-2xl overflow-hidden cursor-pointer flex flex-col items-center justify-center gap-2 p-4 border border-indigo-100"
-                      >
-                        {relatedLoadingMore ? (
-                          <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
-                        ) : (
-                          <>
-                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                              <ArrowRight className="w-5 h-5 text-indigo-600" />
-                            </div>
-                            <p className="text-xs font-bold text-indigo-600 text-center leading-tight">
-                              See more<br />
-                              <span className="font-normal text-indigo-400">{allDeals.length - relatedVisible} more</span>
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Loading shimmer cards that appear after clicking See more */}
-                    {relatedLoadingMore && [1,2,3].map(i => (
-                      <div key={`shimmer-${i}`} className="flex-shrink-0 w-36 sm:w-44 rounded-2xl overflow-hidden">
-                        <div className="shimmer aspect-square w-full" />
-                        <div className="bg-white p-2 space-y-1.5">
-                          <div className="shimmer h-3 w-full rounded" />
-                          <div className="shimmer h-3 w-2/3 rounded" />
-                          <div className="shimmer h-4 w-1/2 rounded" />
-                        </div>
-                      </div>
-                    ))}
+                {/* Divider if we have both */}
+                {relatedNameRelated.length > 0 && relatedOthers.length > 0 && (
+                  <div className="flex-shrink-0 flex items-center px-1">
+                    <div className="w-px h-24 bg-gray-200" />
                   </div>
-                </div>
-              )
-            })()}
+                )}
+
+                {/* Others */}
+                {relatedOthers.map(p => (
+                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                ))}
+
+                {/* "See more" card — only shown if there are more to load */}
+                {relatedHasMore && (
+                  <SeeMoreCard onClick={loadMoreRelated} loading={relatedLoadingMore} />
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── You might also like (grid, lazy-loaded in batches of 8) ───── */}
-        {(() => {
-          const allRelated = [...relatedNameRelated, ...relatedOthers]
-          if (allRelated.length < 4) return null
-          return (
-            <YouMightAlsoLike
-              products={allRelated}
-              onNavigate={navigateRelated}
-              fmt={fmt}
-            />
-          )
-        })()}
+        {/* ── You might also like — infinite scroll grid ───────────────── */}
+        <div className="fade-up" style={{ animationDelay: '0.2s' }}>
+          <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-orange-500" />
+            You might also like
+          </h2>
+
+          {alsoLikeItems.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {alsoLikeItems.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => navigateRelated(p.id)}
+                  className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer"
+                  style={{ border: '1px solid #f0f0f0' }}
+                >
+                  <div className="aspect-square overflow-hidden bg-gray-50">
+                    {p.images?.[0] ? (
+                      <img
+                        src={p.images[0]}
+                        alt={p.name}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-8 h-8 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-xs sm:text-sm font-semibold text-gray-800 line-clamp-2 leading-tight mb-1">
+                      {p.name}
+                    </p>
+                    <p className="text-sm font-bold text-indigo-600">{fmt(p.price)}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <StarRow rating={p.seller?.avgRating || 0} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Loading state — show skeleton cards while fetching */}
+          {alsoLikeLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
+              {Array.from({ length: ALSO_LIKE_PAGE_SIZE }).map((_, i) => (
+                <div key={i} className="rounded-2xl overflow-hidden bg-white" style={{ border: '1px solid #f0f0f0' }}>
+                  <div className="shimmer aspect-square w-full" />
+                  <div className="p-2.5 space-y-1.5">
+                    <div className="shimmer h-3 w-full rounded" />
+                    <div className="shimmer h-3 w-2/3 rounded" />
+                    <div className="shimmer h-4 w-1/2 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* End-of-list message */}
+          {!alsoLikeHasMore && alsoLikeItems.length > 0 && (
+            <p className="text-center text-xs text-gray-400 mt-4 py-2">
+              You've seen it all! 🎉
+            </p>
+          )}
+
+          {/* Invisible sentinel — IntersectionObserver watches this */}
+          <div ref={alsoLikeSentinelRef} className="h-1 w-full" />
+        </div>
 
       </div>
     </div>
