@@ -9,8 +9,8 @@ import {
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
-  BadgeCheck, Timer, Percent, MapPin, Bell, Menu, Gift,
-  ChevronDown, Grid3X3, List, Sliders, Loader2,
+  BadgeCheck, Timer, Percent, MapPin, Bell, Menu,
+  ChevronDown, Grid3X3, List, Sliders, Loader2, Copy,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
@@ -295,8 +295,6 @@ const CATEGORIES = [
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
-const SESSION_LAUNCH_PATH_KEY = 'batamart_launch_path'
-const REFERRAL_POPUP_DISMISSED_KEY = 'batamart_referral_prompt_dismissed'
 
 const ACTIVITY_SIGNALS = [
   { icon: '🔥', text: (n: number) => `${n} viewing now` },
@@ -921,10 +919,15 @@ export default function MarketplacePage() {
   const [searchInput,       setSearchInput]       = useState('')
   const [recentSearches,    setRecentSearches]    = useState<string[]>([])
   const [showSuggestions,   setShowSuggestions]   = useState(false)
-  const [showReferralPopup, setShowReferralPopup] = useState(false)
   const [mounted,           setMounted]           = useState(false)
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
+
+  // ── Referral popup — shows once per app session, only on first marketplace visit ──
+  const [showReferralPopup, setShowReferralPopup] = useState(false)
+  const [referralCode, setReferralCode]           = useState('')
+  const [referralLink, setReferralLink]           = useState('')
+  const [referralCopied, setReferralCopied]       = useState(false)
 
   // Pull-to-refresh state
   const [pullDistance,  setPullDistance]  = useState(0)
@@ -973,28 +976,30 @@ export default function MarketplacePage() {
     }
   }, [])
 
-  // ── Close dropdown on outside click ──
+  // ── Referral Popup — once per session, only on first marketplace render ──
+  // sessionStorage resets on tab/app close, so popup shows again next open.
+  // If user navigates away and comes back within same session, it won't re-show.
   useEffect(() => {
-    if (!mounted || !splashDone) return
+    if (!mounted) return
+    const KEY = 'batamart_referral_popup_shown'
+    if (sessionStorage.getItem(KEY)) return
+    sessionStorage.setItem(KEY, '1')
 
-    try {
-      const launchPath = sessionStorage.getItem(SESSION_LAUNCH_PATH_KEY)
-      const dismissed = sessionStorage.getItem(REFERRAL_POPUP_DISMISSED_KEY) === '1'
-      const onMarketplace = window.location.pathname === '/marketplace'
-      const launchedToMarketplaceFlow =
-        launchPath === '/marketplace' || launchPath === '/'
+    const token = localStorage.getItem('token')
+    if (!token) return
 
-      if (isApp && launchedToMarketplaceFlow && onMarketplace && !dismissed) {
-        setShowReferralPopup(true)
-      }
-    } catch {}
-  }, [mounted, splashDone, isApp])
+    fetch('/api/referrals', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return
+        setReferralCode(data.referralCode || '')
+        setReferralLink(data.referralLink || '')
+        setTimeout(() => setShowReferralPopup(true), 1200)
+      })
+      .catch(() => {})
+  }, [mounted])
 
-  const dismissReferralPopup = () => {
-    setShowReferralPopup(false)
-    try { sessionStorage.setItem(REFERRAL_POPUP_DISMISSED_KEY, '1') } catch {}
-  }
-
+  // ── Close dropdown on outside click ──
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (isClickingSuggestionRef.current) return
@@ -1147,6 +1152,32 @@ export default function MarketplacePage() {
   }
 
   // ── Interaction handlers ──
+  const copyReferralCode = async () => {
+    const textToCopy = referralLink || referralCode
+    if (!textToCopy) return
+    try {
+      await navigator.clipboard.writeText(textToCopy)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = textToCopy
+      ta.style.cssText = 'position:fixed;opacity:0;'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setReferralCopied(true)
+    setTimeout(() => setReferralCopied(false), 2500)
+  }
+
+  const shareReferralWhatsApp = () => {
+    if (!referralLink) return
+    const text = encodeURIComponent(
+      `🔥 I'm on BATAMART — the hottest campus marketplace at ${universityShortName || 'UNIZIK'}!\nSign up with my link and start buying & selling today:\n${referralLink}`
+    )
+    window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
   const handleProductClick = (id: string) => {
     const token = localStorage.getItem('token')
     try {
@@ -1267,7 +1298,7 @@ export default function MarketplacePage() {
               <div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0">
                 <Search className="w-4 h-4 text-BATAMART-primary" />
               </div>
-              <span className="text-sm font-bold text-BATAMART-primary">Search for &quot;{searchInput}&quot;</span>
+              <span className="text-sm font-bold text-BATAMART-primary">Search for "{searchInput}"</span>
               <ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" />
             </button>
           )}
@@ -1281,6 +1312,110 @@ export default function MarketplacePage() {
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
       {SuggestionsDropdown}
+
+      {/* ── Referral Popup Modal ── */}
+      {showReferralPopup && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[9990] flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+          onClick={() => setShowReferralPopup(false)}
+        >
+          <div
+            className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+            style={{
+              background: 'linear-gradient(145deg, #0f172a 0%, #1e3a5f 50%, #0ea5e9 100%)',
+              animation: 'referralPopIn 0.45s cubic-bezier(0.34,1.4,0.64,1) both',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Glow orbs */}
+            <div style={{ position:'absolute', top:'-40px', right:'-40px', width:'150px', height:'150px', borderRadius:'50%', background:'rgba(14,165,233,0.25)', filter:'blur(40px)', pointerEvents:'none' }} />
+            <div style={{ position:'absolute', bottom:'-30px', left:'-30px', width:'120px', height:'120px', borderRadius:'50%', background:'rgba(99,102,241,0.2)', filter:'blur(35px)', pointerEvents:'none' }} />
+
+            {/* Close btn */}
+            <button
+              onClick={() => setShowReferralPopup(false)}
+              className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+
+            {/* Content */}
+            <div className="p-6 pb-7 text-white relative z-[1]">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 border border-yellow-400/40 rounded-full px-3 py-1 mb-4">
+                <span className="text-yellow-300 text-xs font-bold tracking-wide">🎁 EARN REAL MONEY</span>
+              </div>
+
+              {/* Headline */}
+              <h2 className="text-2xl font-black leading-tight mb-1">
+                Refer Friends &<br />
+                <span className="text-[#0ea5e9]">Earn ₦120 Per Order!</span>
+              </h2>
+              <p className="text-blue-200 text-sm leading-relaxed mb-5">
+                Every time someone you refer completes a delivery order on BataMart, <span className="text-white font-semibold">₦120 drops straight into your wallet</span> — no limit, no stress. Stack up referrals, stack up cash. 💰
+              </p>
+
+              {/* Stats row */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10">
+                  <p className="text-2xl font-black text-yellow-300">₦120</p>
+                  <p className="text-xs text-blue-200 mt-0.5">per completed order</p>
+                </div>
+                <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10">
+                  <p className="text-2xl font-black text-green-300">Unlimited</p>
+                  <p className="text-xs text-blue-200 mt-0.5">referrals you can make</p>
+                </div>
+              </div>
+
+              {/* Referral code display */}
+              {referralCode && (
+                <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3 mb-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-blue-300 mb-0.5">Your referral code</p>
+                    <p className="font-black text-white tracking-widest text-sm truncate">{referralCode}</p>
+                  </div>
+                  <button
+                    onClick={copyReferralCode}
+                    className="flex-shrink-0 flex items-center gap-1.5 bg-white text-[#1e3a5f] font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-50 transition-colors"
+                  >
+                    {referralCopied
+                      ? <><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Copied!</>
+                      : <><Copy className="w-3.5 h-3.5" /> Copy Link</>
+                    }
+                  </button>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={shareReferralWhatsApp}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm"
+                  style={{ background: '#25D366', color: '#fff' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  Share on WhatsApp
+                </button>
+                <button
+                  onClick={() => { setShowReferralPopup(false); router.push('/referrals') }}
+                  className="px-4 py-3 rounded-2xl font-bold text-sm bg-white/15 border border-white/20 text-white hover:bg-white/25 transition-colors flex items-center gap-1.5"
+                >
+                  <Users className="w-4 h-4" /> View
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <style>{`
+            @keyframes referralPopIn {
+              from { opacity: 0; transform: scale(0.85) translateY(20px); }
+              to   { opacity: 1; transform: scale(1) translateY(0); }
+            }
+          `}</style>
+        </div>,
+        document.body
+      )}
 
       {/* Pull-to-refresh indicator */}
       {(pullDistance > 0 || isRefreshing) && (
@@ -1631,46 +1766,6 @@ export default function MarketplacePage() {
           <Link href="/sell" className="btn-press glow-pulse flex items-center gap-2 px-5 py-3 bg-BATAMART-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-BATAMART-primary/40">
             <Sparkles className="w-4 h-4" /> Sell
           </Link>
-        </div>
-      )}
-
-      {showReferralPopup && (
-        <div className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[2px] flex items-center justify-center px-4">
-          <div className="w-full max-w-md rounded-3xl overflow-hidden bg-white shadow-2xl border border-white/30">
-            <div className="bg-gradient-to-r from-BATAMART-primary via-indigo-600 to-BATAMART-dark text-white px-5 py-4">
-              <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wide bg-white/20 px-3 py-1 rounded-full">
-                <Gift className="w-3.5 h-3.5" />
-                Referral Boost
-              </div>
-              <h3 className="mt-3 text-xl font-black leading-tight">Refer Friends, Stack Extra Cash</h3>
-              <p className="mt-1 text-sm text-white/90">
-                You can earn up to {fmt(1200)} in referral rewards within 24 hours.
-              </p>
-            </div>
-
-            <div className="px-5 py-4">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                Share your link. Every time your referred friend completes a delivery order, you earn <span className="font-black text-BATAMART-primary">{fmt(120)}</span>.
-              </p>
-
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  onClick={dismissReferralPopup}
-                  className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
-                >
-                  Maybe Later
-                </button>
-                <Link
-                  href={isApp ? '/referrals?app=true' : '/referrals'}
-                  onClick={dismissReferralPopup}
-                  className="flex-1 h-11 rounded-xl bg-BATAMART-primary hover:bg-BATAMART-dark text-white font-black inline-flex items-center justify-center gap-2 transition-colors"
-                >
-                  Start Referring
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>
