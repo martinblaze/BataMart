@@ -118,6 +118,21 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      await tx.auditLog.createMany({
+        data: batch.orders.map(order => ({
+          userId: user.id,
+          action: 'RIDER_TRACKING_STARTED',
+          entityType: 'ORDER_TRACKING',
+          entityId: order.id,
+          newValue: {
+            status: 'RIDER_ASSIGNED',
+            batchId,
+            orderNumber: order.orderNumber,
+            note: 'Rider accepted delivery batch',
+          },
+        })),
+      })
+
       // Escrow the full rider share for all orders at once
       const rider = await tx.user.findUnique({
         where:  { id: user.id },

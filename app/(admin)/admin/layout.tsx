@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, Package, AlertTriangle,
-  FileText, DollarSign, BarChart3, LogOut, Menu, X, MessageSquare,
+  FileText, DollarSign, BarChart3, LogOut, Menu, X, MessageSquare, Navigation,
 } from 'lucide-react'
 
 const adminRoutes = [
@@ -17,6 +17,7 @@ const adminRoutes = [
   { label: 'Revenue',   icon: DollarSign,      href: '/admin/revenue',   color: 'text-emerald-400' },
   { label: 'Analytics', icon: BarChart3,       href: '/admin/analytics', color: 'text-cyan-400' },
   { label: 'Support',   icon: MessageSquare,   href: '/admin/support',   color: 'text-pink-400' },
+  { label: 'Rider GPS', icon: Navigation,      href: '/admin/rider-tracking', color: 'text-sky-400' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -342,6 +342,8 @@ export default function ProductDetailPage() {
   const [relatedHasMore, setRelatedHasMore] = useState(false)
   const [relatedLoadingMore, setRelatedLoadingMore] = useState(false)
   const RELATED_PAGE_SIZE = 8
+  const [peopleLikeYouBought, setPeopleLikeYouBought] = useState<RelatedProduct[]>([])
+  const [peopleLikeLoading, setPeopleLikeLoading] = useState(false)
 
   // "You might also like" grid — infinite scroll
   const [alsoLikeItems, setAlsoLikeItems] = useState<RelatedProduct[]>([])
@@ -403,11 +405,31 @@ export default function ProductDetailPage() {
       } catch {}
 
       fetchRelatedFirst(token)
+      fetchPeopleLikeYou(token)
     } catch {
       setError('Failed to load product')
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchPeopleLikeYou = async (token: string) => {
+    setPeopleLikeLoading(true)
+    try {
+      const res = await fetch('/api/products/people-like-you?mode=top&pageSize=10', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) return
+      const items = (data.items || [])
+        .map((it: any) => ({
+          ...it.product,
+          _isNameRelated: false,
+        }))
+        .filter((p: any) => p?.id && p.id !== productId)
+      setPeopleLikeYouBought(items)
+    } catch {}
+    finally { setPeopleLikeLoading(false) }
   }
 
   // ── Related: initial load (nameRelated + first page of others) ──
@@ -1100,6 +1122,39 @@ export default function ProductDetailPage() {
         )}
 
         {/* ── You might also like — infinite scroll grid ───────────────── */}
+        {(peopleLikeLoading || peopleLikeYouBought.length > 0) && (
+          <div className="fade-up" style={{ animationDelay: '0.18s' }}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-violet-500" />
+                People Like You Bought
+              </h2>
+            </div>
+
+            {peopleLikeLoading ? (
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="flex-shrink-0 w-36 sm:w-44 rounded-2xl overflow-hidden">
+                    <div className="shimmer aspect-square w-full" />
+                    <div className="bg-white p-2 space-y-1.5">
+                      <div className="shimmer h-3 w-full rounded" />
+                      <div className="shimmer h-3 w-2/3 rounded" />
+                      <div className="shimmer h-4 w-1/2 rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
+                {peopleLikeYouBought.map(p => (
+                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                ))}
+                <SeeMoreCard onClick={() => router.push('/most-bought')} loading={false} />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="fade-up" style={{ animationDelay: '0.2s' }}>
           <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-orange-500" />

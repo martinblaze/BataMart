@@ -12,7 +12,7 @@
 // ── No alert() / confirm() — all feedback via inline Toast.
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, AlertTriangle, MapPin, Phone, Package,
@@ -74,9 +74,27 @@ export default function RiderDashboardPage() {
   const [actionLoading,    setActionLoading]    = useState<Record<string, boolean>>({})
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [trackingActive, setTrackingActive] = useState(false)
+  const [trackingError, setTrackingError] = useState<string | null>(null)
+  const [lastTrackingPing, setLastTrackingPing] = useState<Date | null>(null)
+
+  const watchIdRef = useRef<number | null>(null)
+  const lastSentAtRef = useRef(0)
+  const lastCoordsRef = useRef<{ lat: number; lng: number } | null>(null)
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 4000)
+  }
+
+  const getDistanceMeters = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+    const R = 6371000
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180
+    const la1 = (a.lat * Math.PI) / 180
+    const la2 = (b.lat * Math.PI) / 180
+    const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(la1) * Math.cos(la2)
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
   }
 
   useEffect(() => {
@@ -224,6 +242,103 @@ export default function RiderDashboardPage() {
 
   // ── Active orders count across all batches ────────────────────────────────
   const totalActiveOrders = myBatches.reduce((sum, b) => sum + b.orders.length, 0)
+  const liveOrderIds = useMemo(() => {
+    const set = new Set<string>()
+    myBatches.forEach((batch: any) => {
+      batch.orders.forEach((order: any) => {
+        if (['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'].includes(order.status)) {
+          set.add(order.id)
+        }
+      })
+    })
+    disputePickups.forEach((order: any) => {
+      if (['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'].includes(order.status)) {
+        set.add(order.id)
+      }
+    })
+    return Array.from(set)
+  }, [myBatches, disputePickups])
+
+  useEffect(() => {
+    if (liveOrderIds.length === 0) {
+      setTrackingActive(false)
+      setTrackingError(null)
+      if (watchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+      watchIdRef.current = null
+      lastCoordsRef.current = null
+      return
+    }
+
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setTrackingError('Live tracking is not supported on this device.')
+      setTrackingActive(false)
+      return
+    }
+
+    setTrackingError(null)
+
+    const sendLocation = async (position: GeolocationPosition) => {
+      const lat = position.coords.latitude
+      const lng = position.coords.longitude
+      const now = Date.now()
+      const lastPoint = lastCoordsRef.current
+
+      const movedEnough = !lastPoint || getDistanceMeters(lastPoint, { lat, lng }) >= 12
+      const intervalReached = now - lastSentAtRef.current >= 10000
+      if (!movedEnough && !intervalReached) return
+
+      lastCoordsRef.current = { lat, lng }
+      lastSentAtRef.current = now
+
+      try {
+        const firstBatchId = myBatches[0]?.id
+        await authFetch('/api/riders/live-location', {
+          method: 'POST',
+          body: JSON.stringify({
+            orderIds: liveOrderIds,
+            batchId: firstBatchId,
+            lat,
+            lng,
+            accuracy: position.coords.accuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+          }),
+        })
+        setLastTrackingPing(new Date())
+        setTrackingActive(true)
+      } catch {
+        setTrackingError('Could not send live location. Check your internet.')
+      }
+    }
+
+    const handleError = (error: GeolocationPositionError) => {
+      if (error.code === error.PERMISSION_DENIED) {
+        setTrackingError('Location permission denied. Buyer live map is off.')
+      } else {
+        setTrackingError('Live location temporarily unavailable.')
+      }
+      setTrackingActive(false)
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      sendLocation,
+      handleError,
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 5000,
+      }
+    )
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+      watchIdRef.current = null
+    }
+  }, [liveOrderIds, myBatches])
 
   if (loading) {
     return (
@@ -281,6 +396,26 @@ export default function RiderDashboardPage() {
               <p className="text-xs font-semibold text-violet-600 mt-0.5">Earned</p>
             </div>
           </div>
+
+          {liveOrderIds.length > 0 && (
+            <div className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${
+              trackingError
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}>
+              <p className="font-bold">
+                {trackingError
+                  ? 'Live Tracking Issue'
+                  : trackingActive
+                    ? 'Live Tracking On'
+                    : 'Starting Live Tracking...'}
+              </p>
+              <p className="mt-0.5">
+                {trackingError || `Buyer can view your live route for ${liveOrderIds.length} active order${liveOrderIds.length > 1 ? 's' : ''}.`}
+                {!trackingError && lastTrackingPing ? ` Last sync ${lastTrackingPing.toLocaleTimeString()}.` : ''}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ── Dispute Pickup Jobs ───────────────────────────────────────── */}

@@ -30,6 +30,8 @@ import {
   RefreshCw,
   WifiOff,
   Loader2,
+  Navigation,
+  Route,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -43,6 +45,8 @@ const ACTIVE_STATUSES = [
   'ON_THE_WAY',
 ]
 
+const LIVE_TRACKING_STATUSES = ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY']
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -53,6 +57,9 @@ export default function OrderDetailPage() {
   const [confirmingReturn, setConfirmingReturn] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [liveTracking, setLiveTracking] = useState<any>(null);
+  const [liveTrackingError, setLiveTrackingError] = useState<string | null>(null);
+  const [liveTrackingLoading, setLiveTrackingLoading] = useState(false);
   const [reviewModal, setReviewModal] = useState<{
     isOpen: boolean;
     type: 'SELLER' | 'RIDER' | 'PRODUCT' | null;
@@ -79,6 +86,22 @@ export default function OrderDetailPage() {
 
     return () => clearInterval(interval);
   }, [order?.status]);
+
+  useEffect(() => {
+    if (!order?.id || !order?.riderId) {
+      setLiveTracking(null)
+      return
+    }
+
+    if (!LIVE_TRACKING_STATUSES.includes(order.status)) {
+      setLiveTracking(null)
+      return
+    }
+
+    fetchLiveTracking()
+    const interval = setInterval(() => fetchLiveTracking(true), 8000)
+    return () => clearInterval(interval)
+  }, [order?.id, order?.riderId, order?.status])
 
   const fetchOrder = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -112,6 +135,32 @@ export default function OrderDetailPage() {
       if (!silent) setLoading(false);
     }
   };
+
+  const fetchLiveTracking = async (silent = false) => {
+    if (!silent) setLiveTrackingLoading(true)
+    setLiveTrackingError(null)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token || !order?.id) return
+
+      const response = await fetch(`/api/orders/${order.id}/live-location`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        setLiveTrackingError(data.error || 'Failed to load live tracking')
+        return
+      }
+
+      const data = await response.json()
+      setLiveTracking(data)
+    } catch {
+      setLiveTrackingError('Could not refresh rider live location.')
+    } finally {
+      if (!silent) setLiveTrackingLoading(false)
+    }
+  }
 
   const updateOrderStatus = async (newStatus: string) => {
     setUpdating(true);
@@ -332,6 +381,23 @@ export default function OrderDetailPage() {
     if (s === 'DISMISSED') return 'bg-gray-100 text-gray-600'
     return 'bg-gray-100 text-gray-600'
   }
+
+  const getCheckpointLabel = (checkpoint: any) => {
+    if (checkpoint?.status === 'RIDER_ASSIGNED') return 'Rider accepted order'
+    if (checkpoint?.status === 'PICKED_UP') return 'Item picked up'
+    if (checkpoint?.status === 'ON_THE_WAY') return 'Rider on the way'
+    if (checkpoint?.status === 'DELIVERED') return 'Marked delivered'
+    if (checkpoint?.action === 'RIDER_TRACKING_STARTED') return 'Live tracking started'
+    return checkpoint?.status?.replace(/_/g, ' ') || 'Tracking update'
+  }
+
+  const liveMapUrl = liveTracking?.latestPoint
+    ? `https://www.google.com/maps?q=${liveTracking.latestPoint.lat},${liveTracking.latestPoint.lng}&z=16&output=embed`
+    : null
+
+  const openMapUrl = liveTracking?.latestPoint
+    ? `https://www.google.com/maps/search/?api=1&query=${liveTracking.latestPoint.lat},${liveTracking.latestPoint.lng}`
+    : null
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -755,6 +821,88 @@ export default function OrderDetailPage() {
           )}
 
           {/* ── Dispute card ──────────────────────────────────────────────── */}
+          {userRole === 'BUYER' && order.rider && LIVE_TRACKING_STATUSES.includes(order.status) && (
+            <div className="bg-white rounded-lg border p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Navigation className="w-5 h-5 text-blue-600" />
+                  Rider Live Map
+                </h3>
+                {liveTrackingLoading && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Loading
+                  </span>
+                )}
+              </div>
+
+              {liveTrackingError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+                  {liveTrackingError}
+                </p>
+              )}
+
+              {liveTracking?.latestPoint ? (
+                <>
+                  <div className="rounded-xl overflow-hidden border border-gray-200 mb-3">
+                    <iframe
+                      title="Rider live location map"
+                      src={liveMapUrl || undefined}
+                      className="w-full h-56"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-blue-50 rounded-lg px-3 py-2">
+                      <p className="text-[11px] text-blue-600 font-semibold">Last update</p>
+                      <p className="text-xs font-bold text-blue-800">
+                        {format(new Date(liveTracking.latestPoint.at), 'h:mm:ss a')}
+                      </p>
+                    </div>
+                    <div className="bg-violet-50 rounded-lg px-3 py-2">
+                      <p className="text-[11px] text-violet-600 font-semibold">Route points</p>
+                      <p className="text-xs font-bold text-violet-800">{liveTracking.points?.length || 0} captured</p>
+                    </div>
+                  </div>
+                  {openMapUrl && (
+                    <a
+                      href={openMapUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-lg border border-blue-200 text-blue-700 font-semibold text-sm hover:bg-blue-50 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open in Google Maps
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  Waiting for rider location ping...
+                </p>
+              )}
+
+              {liveTracking?.checkpoints?.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2 flex items-center gap-1.5">
+                    <Route className="w-3.5 h-3.5" />
+                    Delivery checkpoints
+                  </p>
+                  <div className="space-y-2 max-h-40 overflow-auto">
+                    {[...liveTracking.checkpoints].reverse().slice(0, 5).map((checkpoint: any) => (
+                      <div key={checkpoint.id} className="flex items-start justify-between gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-gray-700 font-medium">{getCheckpointLabel(checkpoint)}</p>
+                        <span className="text-[11px] text-gray-500 whitespace-nowrap">
+                          {format(new Date(checkpoint.at), 'h:mm a')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {order.dispute ? (
             <div className="bg-white rounded-lg border border-orange-200 p-6">
               <h3 className="font-semibold mb-1 flex items-center gap-2 text-orange-700">

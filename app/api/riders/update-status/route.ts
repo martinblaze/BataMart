@@ -49,6 +49,21 @@ export async function POST(request: NextRequest) {
         data:  updateData,
       })
 
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'RIDER_STATUS_CHECKPOINT',
+          entityType: 'ORDER_TRACKING',
+          entityId: orderId,
+          newValue: {
+            status,
+            batchId: order.batchId,
+            orderNumber: order.orderNumber,
+            isDisputeReturn: order.isDisputed,
+          },
+        },
+      })
+
       // Dispute return tracking states
       if (order.isDisputed && order.dispute) {
         if (status === 'ON_THE_WAY') {

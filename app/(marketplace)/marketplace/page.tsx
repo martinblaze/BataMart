@@ -922,6 +922,7 @@ export default function MarketplacePage() {
   const [mounted,           setMounted]           = useState(false)
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
+  const [peopleLikeYouBought, setPeopleLikeYouBought] = useState<any[]>([])
 
   // ── Referral popup — shows once per app session, only on first marketplace visit ──
   const [showReferralPopup, setShowReferralPopup] = useState(false)
@@ -967,6 +968,7 @@ export default function MarketplacePage() {
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
     fetchFeed()
+    fetchPeopleLikeYouBought()
     const token = localStorage.getItem('token')
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
@@ -1137,6 +1139,26 @@ export default function MarketplacePage() {
       }
     } catch {}
     finally { setLoading(false) }
+  }
+
+  const fetchPeopleLikeYouBought = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const res = await fetch('/api/products/people-like-you?mode=top&pageSize=14', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) return
+      const items = (data.items || [])
+        .map((it: any) => ({
+          ...it.product,
+          soldCount: it.soldCount,
+          isTrending: true,
+        }))
+        .filter((p: any) => p?.id)
+      setPeopleLikeYouBought(items)
+    } catch {}
   }
 
   const fetchByCategory = async (category: string) => {
@@ -1604,6 +1626,17 @@ export default function MarketplacePage() {
             <div className="flex items-center justify-between mb-3 bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm">
               <LiveStatsBar count={allProducts.length} />
             </div>
+            {peopleLikeYouBought.length > 0 && (
+              <div className="mb-4">
+                <BestSellersRow
+                  products={peopleLikeYouBought}
+                  onProductClick={handleProductClick}
+                  onSeeAll={() => router.push('/most-bought')}
+                  title="People Like You Bought"
+                  subtitle="Popular with students who shop like you"
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {allProducts.map((p, i) => (
                 <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />
@@ -1650,6 +1683,16 @@ export default function MarketplacePage() {
                 onSeeAll={() => setSelectedCategory('All')}
                 title="Picked for You"
                 subtitle="Based on what you browse, search, and order"
+              />
+            )}
+
+            {peopleLikeYouBought.length > 0 && (
+              <BestSellersRow
+                products={peopleLikeYouBought}
+                onProductClick={handleProductClick}
+                onSeeAll={() => router.push('/most-bought')}
+                title="People Like You Bought"
+                subtitle="Popular with students who shop like you"
               />
             )}
 
