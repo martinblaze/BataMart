@@ -13,6 +13,8 @@ import {
   ChevronDown, Grid3X3, List, Sliders, Loader2, Copy,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { getClientCache, setClientCache } from '@/lib/client-cache'
 
 // ─────────────────────────────────────────────
 // Pull-to-refresh constants
@@ -295,6 +297,12 @@ const CATEGORIES = [
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
+const MARKETPLACE_FEED_CACHE_KEY = 'batamart_marketplace_feed_cache_v1'
+const MARKETPLACE_PEOPLE_CACHE_KEY = 'batamart_marketplace_people_cache_v1'
+const MARKETPLACE_CATEGORY_CACHE_PREFIX = 'batamart_marketplace_cat_'
+const MARKETPLACE_FEED_CACHE_TTL = 1000 * 60 * 3
+const MARKETPLACE_PEOPLE_CACHE_TTL = 1000 * 60 * 20
+const MARKETPLACE_VIEW_QUEUE_KEY = 'batamart_product_view_queue_v1'
 
 const ACTIVITY_SIGNALS = [
   { icon: '🔥', text: (n: number) => `${n} viewing now` },
@@ -901,6 +909,7 @@ function JustDroppedSection({ allProducts, onProductClick }: {
 export default function MarketplacePage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
+  const isOnline = useOnlineStatus()
 
   const isApp = searchParams.get('app') === 'true' ||
     (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches)
@@ -923,6 +932,7 @@ export default function MarketplacePage() {
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
   const [peopleLikeYouBought, setPeopleLikeYouBought] = useState<any[]>([])
+  const [usingCachedFeed, setUsingCachedFeed] = useState(false)
 
   // ── Referral popup — shows once per app session, only on first marketplace visit ──
   const [showReferralPopup, setShowReferralPopup] = useState(false)
@@ -967,6 +977,18 @@ export default function MarketplacePage() {
     setMounted(true)
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
+
+    try {
+      const cachedFeed = getClientCache<any[]>(MARKETPLACE_FEED_CACHE_KEY)
+      if (cachedFeed?.value?.length) {
+        setAllProducts(cachedFeed.value)
+        setUsingCachedFeed(true)
+        setLoading(false)
+      }
+      const cachedPeople = getClientCache<any[]>(MARKETPLACE_PEOPLE_CACHE_KEY)
+      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
+    } catch {}
+
     fetchFeed()
     fetchPeopleLikeYouBought()
     const token = localStorage.getItem('token')
@@ -1109,6 +1131,38 @@ export default function MarketplacePage() {
   }, [updateDropdownPos])
 
   // ── API calls ──
+  const enqueueProductView = (id: string) => {
+    try {
+      const queue = JSON.parse(localStorage.getItem(MARKETPLACE_VIEW_QUEUE_KEY) || '[]') as string[]
+      const next = [...queue, id].slice(-100)
+      localStorage.setItem(MARKETPLACE_VIEW_QUEUE_KEY, JSON.stringify(next))
+    } catch {}
+  }
+
+  const flushQueuedProductViews = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const queue = JSON.parse(localStorage.getItem(MARKETPLACE_VIEW_QUEUE_KEY) || '[]') as string[]
+      if (!queue.length) return
+      const uniqueIds = Array.from(new Set(queue))
+      await Promise.allSettled(
+        uniqueIds.map(id =>
+          fetch(`/api/products/${id}/view`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        )
+      )
+      localStorage.removeItem(MARKETPLACE_VIEW_QUEUE_KEY)
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (isOnline) flushQueuedProductViews()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline])
+
   const buildFeedSignals = () => {
     let viewed = ''; let searched = ''
     try {
@@ -1131,13 +1185,22 @@ export default function MarketplacePage() {
       const res  = await fetch(`/api/products/feed?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) {
-        setAllProducts(data.products || [])
+        const products = data.products || []
+        setAllProducts(products)
+        setUsingCachedFeed(false)
+        setClientCache(MARKETPLACE_FEED_CACHE_KEY, products, MARKETPLACE_FEED_CACHE_TTL)
         const cats = Array.from(new Set(
-          (data.products || []).filter((p: any) => p.isPersonalised).map((p: any) => p.category)
+          products.filter((p: any) => p.isPersonalised).map((p: any) => p.category)
         )) as string[]
         setInterestCategories(cats.slice(0, 4))
       }
-    } catch {}
+    } catch {
+      const cachedFeed = getClientCache<any[]>(MARKETPLACE_FEED_CACHE_KEY)
+      if (cachedFeed?.value?.length) {
+        setAllProducts(cachedFeed.value)
+        setUsingCachedFeed(true)
+      }
+    }
     finally { setLoading(false) }
   }
 
@@ -1158,7 +1221,11 @@ export default function MarketplacePage() {
         }))
         .filter((p: any) => p?.id)
       setPeopleLikeYouBought(items)
-    } catch {}
+      setClientCache(MARKETPLACE_PEOPLE_CACHE_KEY, items, MARKETPLACE_PEOPLE_CACHE_TTL)
+    } catch {
+      const cachedPeople = getClientCache<any[]>(MARKETPLACE_PEOPLE_CACHE_KEY)
+      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
+    }
   }
 
   const fetchByCategory = async (category: string) => {
@@ -1168,8 +1235,19 @@ export default function MarketplacePage() {
       if (!token) return
       const res  = await fetch(`/api/products?category=${encodeURIComponent(category)}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
-      if (res.ok) setAllProducts(data.products || [])
-    } catch {}
+      if (res.ok) {
+        const products = data.products || []
+        setAllProducts(products)
+        setUsingCachedFeed(false)
+        setClientCache(`${MARKETPLACE_CATEGORY_CACHE_PREFIX}${category}`, products, MARKETPLACE_FEED_CACHE_TTL)
+      }
+    } catch {
+      const cachedCategory = getClientCache<any[]>(`${MARKETPLACE_CATEGORY_CACHE_PREFIX}${category}`)
+      if (cachedCategory?.value?.length) {
+        setAllProducts(cachedCategory.value)
+        setUsingCachedFeed(true)
+      }
+    }
     finally { setLoading(false) }
   }
 
@@ -1212,7 +1290,11 @@ export default function MarketplacePage() {
       }
     } catch {}
     if (token) {
-      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
+      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {
+        enqueueProductView(id)
+      })
+    } else {
+      enqueueProductView(id)
     }
     window.location.href = token ? `/product/${id}` : '/login'
   }
@@ -1583,6 +1665,13 @@ export default function MarketplacePage() {
 
       {/* ── MAIN CONTENT ── */}
       <div className={`marketplace-feed ${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6 ${isApp ? 'py-3 sm:py-4' : 'py-4 sm:py-5'} pb-28 safe-bottom space-y-4`}>
+        {(!isOnline || usingCachedFeed) && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700">
+            {!isOnline
+              ? 'Offline mode: showing last synced marketplace data.'
+              : 'Showing cached marketplace data while syncing latest updates...'}
+          </div>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
