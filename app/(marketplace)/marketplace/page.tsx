@@ -981,8 +981,10 @@ export default function MarketplacePage() {
       const launchPath = sessionStorage.getItem(SESSION_LAUNCH_PATH_KEY)
       const dismissed = sessionStorage.getItem(REFERRAL_POPUP_DISMISSED_KEY) === '1'
       const onMarketplace = window.location.pathname === '/marketplace'
+      const launchedToMarketplaceFlow =
+        launchPath === '/marketplace' || launchPath === '/'
 
-      if (isApp && launchPath === '/marketplace' && onMarketplace && !dismissed) {
+      if (isApp && launchedToMarketplaceFlow && onMarketplace && !dismissed) {
         setShowReferralPopup(true)
       }
     } catch {}
