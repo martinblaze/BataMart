@@ -194,3 +194,31 @@ nav[class*="fixed"][class*="bottom-0"] {
     will-change: transform;
   }
 }
+
+/* App-mode polish: keeps PWA feeling native without changing app logic */
+html.app-mode body {
+  background: #e7ebf2 !important;
+}
+
+html.app-mode #page-scroll-container,
+html.app-mode #ios-scroll-area {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(59, 130, 246, 0.14), transparent 55%),
+    linear-gradient(180deg, #ecf1f7 0%, #e7ebf2 100%);
+}
+
+html.app-mode .bg-white.rounded-2xl {
+  border-radius: 1.15rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+  border-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+html.app-mode .bg-white.rounded-xl {
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+html.app-mode nav[class*="fixed"][class*="bottom-0"] {
+  border-top-color: rgba(255, 255, 255, 0.86) !important;
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.1) !important;
+}

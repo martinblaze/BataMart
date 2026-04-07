@@ -34,7 +34,7 @@ function AppTopBar({
   cartCount: number
 }) {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/88 backdrop-blur-xl border-b border-white/70 shadow-[0_6px_22px_rgba(15,23,42,0.08)]">
       <div className="flex items-center justify-between h-14 px-4">
         <BATAMARTLogo appMode />
         <div className="flex items-center gap-2">
@@ -459,9 +459,9 @@ function AppBottomNav({
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white/92 backdrop-blur-xl border-t border-white/80"
         style={{
-          boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
+          boxShadow: '0 -8px 28px rgba(15,23,42,0.10)',
           transform: 'translate3d(0,0,0)',
           WebkitTransform: 'translate3d(0,0,0)',
           willChange: 'transform',

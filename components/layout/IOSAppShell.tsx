@@ -24,6 +24,16 @@ function IOSAppShellInner({ children }: { children: React.ReactNode }) {
   const isApp = isAppParam || isStandalone
   const isIOSApp = isIOS && isApp && !isAndroid
 
+  useEffect(() => {
+    const html = document.documentElement
+    if (isApp) {
+      html.classList.add('app-mode')
+    } else {
+      html.classList.remove('app-mode')
+    }
+    return () => html.classList.remove('app-mode')
+  }, [isApp])
+
   if (isIOSApp) {
     return (
       <div

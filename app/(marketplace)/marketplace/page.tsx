@@ -1310,7 +1310,7 @@ export default function MarketplacePage() {
   if (!splashDone) return <div className="min-h-screen bg-white" />
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5]">
+    <div className={isApp ? 'min-h-screen bg-[#e7ebf2]' : 'min-h-screen bg-[#f0f2f5]'}>
       {SuggestionsDropdown}
 
       {/* ── Referral Popup Modal ── */}
@@ -1427,14 +1427,14 @@ export default function MarketplacePage() {
 
       {/* ══ HEADER ══ */}
       <header
-        className="batamart-header sticky top-0 z-40 shadow-lg"
+        className={`batamart-header sticky top-0 z-40 ${isApp ? 'shadow-[0_8px_24px_rgba(15,23,42,0.16)]' : 'shadow-lg'}`}
         style={{
           // Subtle push-down effect during PTR — keeps header anchored-feeling
           transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.15, 16)}px)` : undefined,
           transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
         }}
       >
-        <div className="max-w-7xl mx-auto px-3 sm:px-6">
+        <div className={`${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6`}>
 
           {/* Top row */}
           <div className="flex items-center gap-2 sm:gap-4 py-3">
@@ -1560,7 +1560,7 @@ export default function MarketplacePage() {
       </header>
 
       {/* ── MAIN CONTENT ── */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5 pb-28 safe-bottom space-y-4">
+      <div className={`${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6 ${isApp ? 'py-3 sm:py-4' : 'py-4 sm:py-5'} pb-28 safe-bottom space-y-4`}>
 
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
