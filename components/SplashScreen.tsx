@@ -16,36 +16,35 @@ function unblockPage() {
   document.documentElement.classList.remove('splash-pending')
 }
 
-// ── Exported helper ────────────────────────────────────────────────────────
+function isAppModeNow(): boolean {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    window.location.search.indexOf('app=true') !== -1
+  )
+}
+
+// Exported helper
 // Called synchronously by MarketplacePage on first render to decide whether
 // to show a blank white screen while splash is active.
 export function isSplashPending(): boolean {
   if (typeof window === 'undefined') return false
   try {
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true
-    const isAppParam = window.location.search.indexOf('app=true') !== -1
     const isAndroid = window.location.search.indexOf('android=true') !== -1
 
     if (isAndroid) return false
 
-    // App mode splash
-    if ((isStandalone || isAppParam) && !sessionStorage.getItem('batamart_splash_app')) return true
-
-    // Browser mode splash (only on /marketplace)
-    if (!isStandalone && !isAppParam && !sessionStorage.getItem('batamart_splash_browser') &&
-      window.location.pathname === '/marketplace') return true
+    // Splash is app/PWA mode only.
+    if (isAppModeNow() && !sessionStorage.getItem('batamart_splash_app')) return true
 
     return false
   } catch {
     return false
   }
 }
-// ──────────────────────────────────────────────────────────────────────────
 
 export default function SplashScreen() {
-  const [visible, setVisible] = useState(false)
+  const [visible, setVisible] = useState<boolean>(() => isSplashPending())
   const [phase, setPhase] = useState<'idle' | 'in' | 'out'>('idle')
 
   const router = useRouter()
@@ -53,16 +52,16 @@ export default function SplashScreen() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true
+    let outTimer: ReturnType<typeof setTimeout> | null = null
+    let doneTimer: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false
 
-    const isAppParam = searchParams.get('app') === 'true'
-    const isAndroid  = searchParams.get('android') === 'true'
-    const isAppMode  = isStandalone || isAppParam
+    const isAndroid = searchParams.get('android') === 'true'
+    const isAppMode = isAppModeNow()
 
-    // Android has its own native splash — unblock page immediately
+    // Android has its own native splash - unblock page immediately
     if (isAndroid) {
+      setVisible(false)
       unblockPage()
       return
     }
@@ -70,33 +69,37 @@ export default function SplashScreen() {
     const shouldShowAppSplash =
       isAppMode && !sessionStorage.getItem('batamart_splash_app')
 
-    const shouldShowBrowserSplash =
-      !isAppMode &&
-      pathname === '/marketplace' &&
-      !sessionStorage.getItem('batamart_splash_browser')
-
-    // No splash needed — unblock immediately and signal done
-    if (!shouldShowAppSplash && !shouldShowBrowserSplash) {
+    // No splash needed - unblock immediately and signal done
+    if (!shouldShowAppSplash) {
+      setVisible(false)
       unblockPage()
       window.dispatchEvent(new CustomEvent('batamart:splash-done'))
       return
     }
 
     // Mark session so splash doesn't repeat
-    if (shouldShowAppSplash)     sessionStorage.setItem('batamart_splash_app', '1')
-    if (shouldShowBrowserSplash) sessionStorage.setItem('batamart_splash_browser', '1')
+    sessionStorage.setItem('batamart_splash_app', '1')
+    setPhase('idle')
 
     // Preload logo fully before showing anything
     preloadImage('/BATAMART - logo.png').then(() => {
+      if (cancelled) return
+
       setVisible(true)
 
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => setPhase('in'))
+        requestAnimationFrame(() => {
+          if (!cancelled) setPhase('in')
+        })
       })
 
-      const outTimer = setTimeout(() => setPhase('out'), 2500)
+      outTimer = setTimeout(() => {
+        if (!cancelled) setPhase('out')
+      }, 2500)
 
-      const doneTimer = setTimeout(() => {
+      doneTimer = setTimeout(() => {
+        if (cancelled) return
+
         setVisible(false)
         unblockPage()
         // Signal marketplace page that splash is finished
@@ -105,39 +108,40 @@ export default function SplashScreen() {
           router.replace('/marketplace?app=true')
         }
       }, 3000)
-
-      return () => {
-        clearTimeout(outTimer)
-        clearTimeout(doneTimer)
-      }
     })
+
+    return () => {
+      cancelled = true
+      if (outTimer) clearTimeout(outTimer)
+      if (doneTimer) clearTimeout(doneTimer)
+    }
   }, [pathname, searchParams, router])
 
   if (!visible) return null
 
   const logoStyle: React.CSSProperties = {
-    opacity:   phase === 'in' ? 1 : 0,
+    opacity: phase === 'in' ? 1 : 0,
     transform: phase === 'out' ? 'translateY(-8px)' : 'translateY(0)',
     transition:
       phase === 'in'
         ? 'opacity 700ms cubic-bezier(0.45,0,0.55,1) 200ms'
         : phase === 'out'
-        ? 'opacity 400ms ease, transform 400ms ease'
-        : 'none',
+          ? 'opacity 400ms ease, transform 400ms ease'
+          : 'none',
   }
 
   const textStyle: React.CSSProperties = {
-    opacity:   phase === 'in' ? 1 : 0,
+    opacity: phase === 'in' ? 1 : 0,
     transform:
-      phase === 'in'   ? 'translateY(0)'
-      : phase === 'out' ? 'translateY(-20px)'
-      :                   'translateY(30px)',
+      phase === 'in' ? 'translateY(0)'
+        : phase === 'out' ? 'translateY(-20px)'
+          : 'translateY(30px)',
     transition:
       phase === 'in'
         ? 'opacity 700ms cubic-bezier(0.45,0,0.55,1) 600ms, transform 700ms cubic-bezier(0.45,0,0.55,1) 600ms'
         : phase === 'out'
-        ? 'opacity 400ms ease, transform 400ms ease'
-        : 'none',
+          ? 'opacity 400ms ease, transform 400ms ease'
+          : 'none',
   }
 
   return (

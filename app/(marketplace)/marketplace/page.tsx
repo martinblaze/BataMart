@@ -9,7 +9,7 @@ import {
   AlertCircle, Clock, TrendingUp, X, ChevronRight,
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
-  BadgeCheck, Timer, Percent, MapPin, Bell, Menu,
+  BadgeCheck, Timer, Percent, MapPin, Bell, Menu, Gift,
   ChevronDown, Grid3X3, List, Sliders, Loader2,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
@@ -295,6 +295,8 @@ const CATEGORIES = [
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
+const SESSION_LAUNCH_PATH_KEY = 'batamart_launch_path'
+const REFERRAL_POPUP_DISMISSED_KEY = 'batamart_referral_prompt_dismissed'
 
 const ACTIVITY_SIGNALS = [
   { icon: '🔥', text: (n: number) => `${n} viewing now` },
@@ -919,6 +921,7 @@ export default function MarketplacePage() {
   const [searchInput,       setSearchInput]       = useState('')
   const [recentSearches,    setRecentSearches]    = useState<string[]>([])
   const [showSuggestions,   setShowSuggestions]   = useState(false)
+  const [showReferralPopup, setShowReferralPopup] = useState(false)
   const [mounted,           setMounted]           = useState(false)
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
@@ -971,6 +974,25 @@ export default function MarketplacePage() {
   }, [])
 
   // ── Close dropdown on outside click ──
+  useEffect(() => {
+    if (!mounted || !splashDone) return
+
+    try {
+      const launchPath = sessionStorage.getItem(SESSION_LAUNCH_PATH_KEY)
+      const dismissed = sessionStorage.getItem(REFERRAL_POPUP_DISMISSED_KEY) === '1'
+      const onMarketplace = window.location.pathname === '/marketplace'
+
+      if (isApp && launchPath === '/marketplace' && onMarketplace && !dismissed) {
+        setShowReferralPopup(true)
+      }
+    } catch {}
+  }, [mounted, splashDone, isApp])
+
+  const dismissReferralPopup = () => {
+    setShowReferralPopup(false)
+    try { sessionStorage.setItem(REFERRAL_POPUP_DISMISSED_KEY, '1') } catch {}
+  }
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (isClickingSuggestionRef.current) return
@@ -1607,6 +1629,46 @@ export default function MarketplacePage() {
           <Link href="/sell" className="btn-press glow-pulse flex items-center gap-2 px-5 py-3 bg-BATAMART-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-BATAMART-primary/40">
             <Sparkles className="w-4 h-4" /> Sell
           </Link>
+        </div>
+      )}
+
+      {showReferralPopup && (
+        <div className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[2px] flex items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-3xl overflow-hidden bg-white shadow-2xl border border-white/30">
+            <div className="bg-gradient-to-r from-BATAMART-primary via-indigo-600 to-BATAMART-dark text-white px-5 py-4">
+              <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wide bg-white/20 px-3 py-1 rounded-full">
+                <Gift className="w-3.5 h-3.5" />
+                Referral Boost
+              </div>
+              <h3 className="mt-3 text-xl font-black leading-tight">Refer Friends, Stack Extra Cash</h3>
+              <p className="mt-1 text-sm text-white/90">
+                You can earn up to {fmt(1200)} in referral rewards within 24 hours.
+              </p>
+            </div>
+
+            <div className="px-5 py-4">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Share your link. Every time your referred friend completes a delivery order, you earn <span className="font-black text-BATAMART-primary">{fmt(120)}</span>.
+              </p>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  onClick={dismissReferralPopup}
+                  className="flex-1 h-11 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Maybe Later
+                </button>
+                <Link
+                  href={isApp ? '/referrals?app=true' : '/referrals'}
+                  onClick={dismissReferralPopup}
+                  className="flex-1 h-11 rounded-xl bg-BATAMART-primary hover:bg-BATAMART-dark text-white font-black inline-flex items-center justify-center gap-2 transition-colors"
+                >
+                  Start Referring
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

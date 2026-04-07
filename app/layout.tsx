@@ -120,13 +120,20 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
+                  if (!sessionStorage.getItem('batamart_launch_path')) {
+                    sessionStorage.setItem('batamart_launch_path', window.location.pathname);
+                  }
+
                   var isStandalone = window.matchMedia('(display-mode: standalone)').matches
                     || window.navigator.standalone === true;
                   var isAppParam = window.location.search.indexOf('app=true') !== -1;
+                  var isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                  var isMarketplace = window.location.pathname === '/marketplace';
                   var isAndroid = window.location.search.indexOf('android=true') !== -1;
                   var splashShown = sessionStorage.getItem('batamart_splash_app');
+                  var shouldGuardIOSMarketplace = isiOS && isMarketplace && !splashShown;
 
-                  if (!isAndroid && (isStandalone || isAppParam) && !splashShown) {
+                  if (!isAndroid && ((isStandalone || isAppParam) || shouldGuardIOSMarketplace) && !splashShown) {
                     document.documentElement.classList.add('splash-pending');
                     document.addEventListener('DOMContentLoaded', function() {
                       var style = document.createElement('style');
