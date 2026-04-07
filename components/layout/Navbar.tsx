@@ -498,7 +498,6 @@ function AppBottomNav({
           })}
 
           <div className="flex-1 flex items-center justify-center relative">
-            <div className="absolute inset-0 bg-white" />
             <Link
               href={sellHref}
               className="relative z-10 flex flex-col items-center justify-center -mt-5"

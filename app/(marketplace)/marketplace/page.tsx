@@ -1310,7 +1310,7 @@ export default function MarketplacePage() {
   if (!splashDone) return <div className="min-h-screen bg-white" />
 
   return (
-    <div className={isApp ? 'min-h-screen bg-[#e7ebf2]' : 'min-h-screen bg-[#f0f2f5]'}>
+    <div className={`${isApp ? 'min-h-screen bg-[#e7ebf2]' : 'min-h-screen bg-[#f0f2f5]'} marketplace-shell`}>
       {SuggestionsDropdown}
 
       {/* ── Referral Popup Modal ── */}
@@ -1427,17 +1427,17 @@ export default function MarketplacePage() {
 
       {/* ══ HEADER ══ */}
       <header
-        className={`batamart-header sticky top-0 z-40 ${isApp ? 'shadow-[0_8px_24px_rgba(15,23,42,0.16)]' : 'shadow-lg'}`}
+        className={`batamart-header marketplace-header sticky top-0 z-40 ${isApp ? 'shadow-[0_8px_24px_rgba(15,23,42,0.16)]' : 'shadow-lg'}`}
         style={{
           // Subtle push-down effect during PTR — keeps header anchored-feeling
           transform: pullDistance > 0 ? `translateY(${Math.min(pullDistance * 0.15, 16)}px)` : undefined,
           transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
         }}
       >
-        <div className={`${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6`}>
+        <div className={`marketplace-header-inner ${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6`}>
 
           {/* Top row */}
-          <div className="flex items-center gap-2 sm:gap-4 py-3">
+          <div className={`marketplace-top-row flex items-center gap-2 sm:gap-4 ${isApp ? 'py-3.5' : 'py-3'}`}>
             <div className="flex-shrink-0 flex items-center gap-2">
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/15 flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -1454,7 +1454,7 @@ export default function MarketplacePage() {
 
             {/* Search bar */}
             <div ref={searchRef} className="flex-1 min-w-0">
-              <div className="search-input flex items-center gap-2 bg-white rounded-xl shadow-md px-3 sm:px-4 ring-2 ring-transparent">
+              <div className="marketplace-search-input search-input flex items-center gap-2 bg-white rounded-xl shadow-md px-3 sm:px-4 ring-2 ring-transparent">
                 <div
                   className="hidden sm:flex items-center gap-1 border-r border-gray-200 pr-3 mr-1 flex-shrink-0 cursor-pointer hover:text-BATAMART-primary transition-colors"
                   onClick={() => {}}
@@ -1507,7 +1507,7 @@ export default function MarketplacePage() {
           </div>
 
           {/* Category nav */}
-          <div className="flex items-center justify-between gap-2 pb-2 border-t border-white/10 pt-2">
+          <div className="marketplace-categories flex items-center justify-between gap-2 pb-2 border-t border-white/10 pt-2">
             <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1">
               {CATEGORIES.map(cat => (
                 <button
@@ -1560,7 +1560,7 @@ export default function MarketplacePage() {
       </header>
 
       {/* ── MAIN CONTENT ── */}
-      <div className={`${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6 ${isApp ? 'py-3 sm:py-4' : 'py-4 sm:py-5'} pb-28 safe-bottom space-y-4`}>
+      <div className={`marketplace-feed ${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6 ${isApp ? 'py-3 sm:py-4' : 'py-4 sm:py-5'} pb-28 safe-bottom space-y-4`}>
 
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">

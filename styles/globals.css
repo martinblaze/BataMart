@@ -252,3 +252,57 @@ html.app-mode button:active {
 html.app-mode .btn-press:active {
   transform: scale(0.96);
 }
+
+/* Phase 4: marketplace app-screen treatment (visual-only) */
+html.app-mode .marketplace-shell {
+  background:
+    radial-gradient(140% 80% at 50% -15%, rgba(99, 102, 241, 0.16), transparent 54%),
+    linear-gradient(180deg, #edf2f8 0%, #e7ebf2 42%, #e3e9f1 100%) !important;
+}
+
+html.app-mode .marketplace-header {
+  backdrop-filter: saturate(150%) blur(8px);
+  -webkit-backdrop-filter: saturate(150%) blur(8px);
+}
+
+html.app-mode .marketplace-header-inner {
+  padding-top: max(env(safe-area-inset-top), 4px);
+}
+
+html.app-mode .marketplace-top-row {
+  gap: 0.75rem;
+}
+
+html.app-mode .marketplace-search-input {
+  border-radius: 0.95rem;
+  box-shadow:
+    0 10px 22px rgba(15, 23, 42, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+html.app-mode .marketplace-categories {
+  margin-top: 0.1rem;
+}
+
+html.app-mode .marketplace-categories .cat-btn {
+  border-radius: 0.72rem;
+}
+
+html.app-mode .marketplace-categories .cat-btn.cat-active {
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.22);
+}
+
+html.app-mode .marketplace-feed {
+  padding-top: 0.8rem !important;
+}
+
+html.app-mode .marketplace-feed > div {
+  gap: 1.05rem;
+}
+
+html.app-mode .marketplace-feed .bg-white.rounded-xl,
+html.app-mode .marketplace-feed .bg-white.rounded-2xl {
+  box-shadow:
+    0 12px 26px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
