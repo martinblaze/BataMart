@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import bcrypt from 'bcryptjs'
+import { releaseMaturedSellerEscrowForUser } from '@/lib/escrow'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +48,11 @@ export async function POST(request: NextRequest) {
     const user = await getUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Ensure matured escrow is released before withdrawal checks.
+    if (user.role === 'SELLER') {
+      await releaseMaturedSellerEscrowForUser(user.id)
     }
 
     // ── Rate limit check (per user) ────────────────────────────────────────

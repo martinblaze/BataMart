@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
         sellerId:    true,
         orderNumber: true,
         batchId:     true,
+        isDisputed:  true,
+        dispute: {
+          select: { id: true, resolution: true },
+        },
       },
     })
 
@@ -44,6 +48,21 @@ export async function POST(request: NextRequest) {
         where: { id: orderId },
         data:  updateData,
       })
+
+      // Dispute return tracking states
+      if (order.isDisputed && order.dispute) {
+        if (status === 'ON_THE_WAY') {
+          await tx.dispute.update({
+            where: { id: order.dispute.id },
+            data: { resolution: '__RETURN_ON_THE_WAY__' },
+          })
+        } else if (status === 'DELIVERED') {
+          await tx.dispute.update({
+            where: { id: order.dispute.id },
+            data: { resolution: '__RETURN_DELIVERED_TO_SELLER__' },
+          })
+        }
+      }
 
       // Increment rider completed count when an order is delivered
       if (status === 'DELIVERED') {
@@ -120,6 +139,26 @@ export async function POST(request: NextRequest) {
             notifyOrderDelivered(orderId, order.buyerId, orderNumber),
             pushDelivered(order.buyerId, orderNumber),
           ])
+
+          // Notify seller to confirm dispute return receipt
+          if (order.isDisputed && order.dispute) {
+            const sellerName = (await prisma.user.findUnique({
+              where: { id: order.sellerId },
+              select: { name: true },
+            }))?.name || 'Seller'
+
+            await prisma.notification.create({
+              data: {
+                userId: order.sellerId,
+                type: 'ORDER_DISPUTED',
+                title: 'Dispute Return Delivered',
+                message: `Rider has delivered returned item for Order #${orderNumber}. Confirm receipt to release buyer refund.`,
+                orderId,
+                disputeId: order.dispute.id,
+                metadata: { action: 'SELLER_CONFIRM_RETURN', sellerName },
+              },
+            })
+          }
         }
       })(),
     ]).then(results => {

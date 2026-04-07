@@ -13,6 +13,10 @@ const PROCESSING_FEE = 0.10
 function getPickupStage(dispute: any): 'INITIAL' | 'RIDER_SENT' | 'ITEM_RECEIVED' | 'REFUND_RELEASED' | 'FULLY_DONE' {
   if (!dispute) return 'INITIAL'
   if (dispute.status === 'RESOLVED_BUYER_FAVOR' && dispute.resolvedAt) return 'FULLY_DONE'
+  if (dispute.resolution === '__SELLER_CONFIRMED_RETURN__') return 'REFUND_RELEASED'
+  if (dispute.resolution === '__RETURN_DELIVERED_TO_SELLER__') return 'ITEM_RECEIVED'
+  if (['__RETURN_PICKED_UP__', '__RETURN_ON_THE_WAY__'].includes(dispute.resolution || '')) return 'RIDER_SENT'
+  if (dispute.resolution === '__SELLER_FAULT_AWAITING_PICKUP__') return 'RIDER_SENT'
   if (dispute.resolution === '__REFUND_RELEASED__') return 'REFUND_RELEASED'
   if (dispute.resolution === '__RIDER_PAID__') return 'ITEM_RECEIVED'  // rider paid, refund still pending
   if (dispute.resolution === '__ITEM_RECEIVED__') return 'ITEM_RECEIVED'
@@ -342,23 +346,14 @@ export default function AdminDisputeDetailPage() {
                 <div className="flex items-center gap-3 mb-3">
                   <Truck className="w-5 h-5 text-yellow-400" />
                   <p className="text-yellow-300 font-semibold">
-                    Waiting for {rider?.name || 'rider'} to collect the item
+                    Waiting for {rider?.name || 'rider'} return progress
                   </p>
                 </div>
                 <p className="text-gray-400 text-sm">
-                  Once you physically have the item, click below to unlock the payout buttons.
+                  Rider updates return status (picked up → on the way → delivered).
+                  Buyer refund now releases when seller confirms return receipt.
                 </p>
               </div>
-              <button
-                onClick={() => doPickupAction('confirm_received')}
-                disabled={actionLoading === 'confirm_received'}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-colors disabled:opacity-50"
-              >
-                {actionLoading === 'confirm_received'
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Confirming...</>
-                  : <><CheckCircle className="w-4 h-4" /> I Have Received the Item</>
-                }
-              </button>
             </div>
           )}
 
@@ -379,29 +374,15 @@ export default function AdminDisputeDetailPage() {
                   <div>
                     <p className="text-white font-semibold flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-green-400" />
-                      Release Refund to Buyer
+                      Buyer Refund Release
                     </p>
                     <p className="text-gray-400 text-sm mt-1">
-                      ₦{netRefund.toLocaleString()} → {dispute.buyer?.name}'s wallet
-                      <span className="text-gray-600 text-xs ml-2">(₦{processingFee.toLocaleString()} fee kept)</span>
+                      Seller confirms return in order page, then buyer refund is released automatically.
                     </p>
                   </div>
-                  {stage === 'REFUND_RELEASED' ? (
-                    <span className="px-3 py-1.5 bg-green-500/20 text-green-400 rounded-full text-xs font-semibold flex-shrink-0">
-                      ✓ Released
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => doPickupAction('release_refund')}
-                      disabled={actionLoading === 'release_refund'}
-                      className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50"
-                    >
-                      {actionLoading === 'release_refund'
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : `Release ₦${netRefund.toLocaleString()}`
-                      }
-                    </button>
-                  )}
+                  <span className="px-3 py-1.5 bg-blue-500/20 text-blue-300 rounded-full text-xs font-semibold flex-shrink-0">
+                    Seller confirmation required
+                  </span>
                 </div>
               </div>
 

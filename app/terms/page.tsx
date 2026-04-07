@@ -54,7 +54,7 @@ export default function TermsPage() {
         "Pay for items promptly after purchase",
         "Provide accurate delivery information",
         "Inspect items upon delivery",
-        "Report issues within 7 days of delivery",
+        "Report issues within 72 hours of delivery",
         "Treat sellers and riders with respect"
       ]
     }

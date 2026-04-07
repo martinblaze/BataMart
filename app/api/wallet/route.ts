@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import { releaseMaturedSellerEscrowForUser } from '@/lib/escrow'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,11 @@ export async function GET(request: NextRequest) {
 
     if (!userData) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Auto-release matured seller escrow (72h after delivered, if no dispute).
+    if (userData.role === 'SELLER') {
+      await releaseMaturedSellerEscrowForUser(user.id)
     }
 
     // Count completed orders directly from orders table — accurate regardless
@@ -55,8 +61,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       wallet: {
-        availableBalance: Math.max(0, userData.availableBalance),
-        pendingBalance: Math.max(0, userData.pendingBalance),
+        availableBalance: Math.max(0, Number(userData.availableBalance)),
+        pendingBalance: Math.max(0, Number(userData.pendingBalance)),
         completedOrders,
         role: userData.role,
       },
@@ -69,3 +75,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

@@ -75,7 +75,7 @@ export async function GET(
         },
         // ✅ Expose dispute so the order detail page can link to it
         dispute: {
-          select: { id: true, status: true, createdAt: true },
+          select: { id: true, status: true, createdAt: true, resolution: true, refundAmount: true },
         },
       },
     });
@@ -174,7 +174,7 @@ export async function PATCH(
         buyer:  { select: { id: true, name: true, profilePhoto: true, email: true } },
         seller: { select: { id: true, name: true, profilePhoto: true, email: true, avgRating: true, totalReviews: true, trustLevel: true } },
         rider:  { select: { id: true, name: true, phone: true, profilePhoto: true, email: true, avgRating: true, totalReviews: true, trustLevel: true } },
-        dispute: { select: { id: true, status: true, createdAt: true } },
+        dispute: { select: { id: true, status: true, createdAt: true, resolution: true, refundAmount: true } },
       },
     });
 

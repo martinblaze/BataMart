@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     // batch instead of one reward for the whole batch.
     const order = await prisma.order.findUnique({
       where:   { id: orderId },
-      include: { seller: true, rider: true },
+      include: { rider: true },
     })
 
     if (!order) {
@@ -98,7 +98,6 @@ export async function POST(request: NextRequest) {
     // ═══════════════════════════════════════════════════════════════
 
     const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
-    const sellerShare = subtotal - order.platformCommission
     const riderShare  = 560
     const hasRider    = !!order.riderId
 
@@ -109,28 +108,8 @@ export async function POST(request: NextRequest) {
         data:  { status: 'COMPLETED', completedAt: new Date() },
       })
 
-      // 2. Release seller payment
-      const sellerAvailable = Number(order.seller.availableBalance ?? 0)
-
-      await tx.user.update({
-        where: { id: order.sellerId },
-        data:  {
-          pendingBalance:   { decrement: sellerShare },
-          availableBalance: { increment: sellerShare },
-        },
-      })
-
-      await tx.transaction.create({
-        data: {
-          userId:        order.sellerId,
-          type:          'CREDIT',
-          amount:        sellerShare,
-          description:   `Payment received for Order: ${order.orderNumber}`,
-          reference:     `${order.orderNumber}-SELLER-RELEASE`,
-          balanceBefore: sellerAvailable,
-          balanceAfter:  sellerAvailable + sellerShare,
-        },
-      })
+      // 2. Keep seller funds in pending escrow for 72 hours after delivery.
+      // Auto-release happens via wallet/withdraw checks when no dispute exists.
 
       // 3. Release rider payment (if assigned)
       if (order.riderId) {
@@ -187,7 +166,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '🎉 Payment released! Seller and rider have been paid.',
+      message: '🎉 Delivery confirmed. Seller funds stay in escrow for 72 hours; rider payment released.',
       order:   result,
     })
   } catch (error) {

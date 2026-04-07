@@ -33,7 +33,7 @@ const faqs = [
   },
   {
     question: 'What if I have an issue with my order?',
-    answer: 'You can open a dispute within 7 days of delivery. Our team will review and help resolve the issue fairly.'
+    answer: 'You can open a dispute within 72 hours of delivery. Our team will review and help resolve the issue fairly.'
   },
   {
     question: 'How do I become a seller?',

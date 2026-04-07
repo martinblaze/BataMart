@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { notifyDisputeOpened } from '@/lib/notification'
+import { DISPUTE_WINDOW_MS } from '@/lib/escrow'
 
 async function getUserFromToken(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -73,13 +74,16 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { orderId, reason, evidence = [] } = body
+    const { orderId, reason, description, evidence = [], resolutionPreference, pickupAddress } = body
 
     // Validation
-    if (!orderId || !reason) {
+    if (!orderId || !reason || !description) {
       return NextResponse.json({ 
-        error: 'Order ID and reason are required' 
+        error: 'Order ID, reason and description are required' 
       }, { status: 400 })
+    }
+    if (!Array.isArray(evidence) || evidence.length < 1) {
+      return NextResponse.json({ error: 'At least one evidence image is required' }, { status: 400 })
     }
 
     // Check if order exists and user is the buyer
@@ -106,10 +110,20 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Only allow disputes for completed/delivered orders
+    // Only allow disputes for delivered/completed orders
     if (!['DELIVERED', 'COMPLETED'].includes(order.status)) {
       return NextResponse.json({ 
         error: 'Can only dispute delivered or completed orders' 
+      }, { status: 400 })
+    }
+    const deliveredAt = order.deliveredAt || order.completedAt
+    if (!deliveredAt) {
+      return NextResponse.json({ error: 'Order has no delivery timestamp yet' }, { status: 400 })
+    }
+    const ageMs = Date.now() - new Date(deliveredAt).getTime()
+    if (ageMs > DISPUTE_WINDOW_MS) {
+      return NextResponse.json({
+        error: 'Dispute window expired. You can only open disputes within 72 hours of delivery.',
       }, { status: 400 })
     }
 
@@ -122,6 +136,8 @@ export async function POST(req: NextRequest) {
           buyerId: user.id,
           sellerId: order.sellerId,
           reason,
+          resolutionPreference: resolutionPreference || 'REFUND_WITH_PICKUP',
+          pickupAddress: pickupAddress || null,
           buyerEvidence: evidence,
           status: 'OPEN'
         },
@@ -143,7 +159,11 @@ export async function POST(req: NextRequest) {
       // Mark order as disputed
       await tx.order.update({
         where: { id: orderId },
-        data: { isDisputed: true }
+        data: {
+          isDisputed: true,
+          status: 'DISPUTED',
+          disputeReason: `${reason}: ${description}`.slice(0, 500),
+        }
       })
 
       // Create initial message from buyer
@@ -152,7 +172,7 @@ export async function POST(req: NextRequest) {
           disputeId: newDispute.id,
           senderId: user.id,
           senderType: 'BUYER',
-          message: reason,
+          message: `${reason}\n\n${description}`.trim(),
           attachments: evidence
         }
       })

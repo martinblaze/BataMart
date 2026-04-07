@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         riderId: user.id,
         isDisputed: true,
         status: 'RIDER_ASSIGNED',
-        dispute: { resolution: '__AWAITING_PICKUP__' },
+        dispute: { resolution: { in: ['__AWAITING_PICKUP__', '__SELLER_FAULT_AWAITING_PICKUP__'] } },
       },
       include: {
         dispute: { select: { id: true } },
@@ -40,19 +40,25 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Update order status so admin knows rider is on the way back
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: 'PICKED_UP' },
+    // Update dispute return state
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'PICKED_UP', pickedUpAt: new Date() },
+      })
+      await tx.dispute.update({
+        where: { id: order.dispute!.id },
+        data: { status: 'UNDER_REVIEW', resolution: '__RETURN_PICKED_UP__' },
+      })
     })
 
     // Notify admin via notification (admin can poll or see in dashboard)
     await prisma.notification.create({
       data: {
-        userId: order.buyer.id, // admin will see this via admin notifications
+        userId: order.buyer.id,
         type: 'ORDER_DISPUTED',
-        title: 'Dispute Item Collected by Rider',
-        message: `Rider ${user.name} has collected the disputed item from ${order.buyer.name} (Order #${order.orderNumber}) and is on the way back.`,
+        title: 'Dispute Return Picked Up',
+        message: `Rider ${user.name} has picked up the disputed item for Order #${order.orderNumber}.`,
         orderId,
         disputeId: order.dispute!.id,
         metadata: {

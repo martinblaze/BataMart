@@ -211,7 +211,16 @@ export default function RiderDashboardPage() {
     }
   }
 
-  const hasDisputePickupPending = disputePickups.length > 0
+  const getDisputeReturnStage = (status: string) => {
+    if (status === 'RIDER_ASSIGNED') return { label: 'Awaiting Pickup', tone: 'bg-yellow-100 text-yellow-700' }
+    if (status === 'PICKED_UP') return { label: 'Picked Up - Head to Seller', tone: 'bg-blue-100 text-blue-700' }
+    if (status === 'ON_THE_WAY') return { label: 'On The Way to Seller', tone: 'bg-indigo-100 text-indigo-700' }
+    if (status === 'DELIVERED') return { label: 'Delivered - Waiting Seller Confirmation', tone: 'bg-emerald-100 text-emerald-700' }
+    return { label: status.replace(/_/g, ' '), tone: 'bg-gray-100 text-gray-600' }
+  }
+
+  const hasDisputePickupPending = disputePickups.some((o: any) => o.status !== 'DELIVERED')
+  const blockingDisputeReturns = disputePickups.filter((o: any) => o.status !== 'DELIVERED')
 
   // ── Active orders count across all batches ────────────────────────────────
   const totalActiveOrders = myBatches.reduce((sum, b) => sum + b.orders.length, 0)
@@ -281,7 +290,7 @@ export default function RiderDashboardPage() {
               <AlertTriangle className="w-4 h-4 text-red-500" />
               <h2 className="text-base font-black text-red-600">Return Pickup Required</h2>
               <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">
-                {disputePickups.length} pending
+                {blockingDisputeReturns.length} pending
               </span>
             </div>
 
@@ -308,6 +317,12 @@ export default function RiderDashboardPage() {
                       </div>
                       <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">
                         ₦560 on done
+                      </span>
+                    </div>
+
+                    <div className="mb-3">
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${getDisputeReturnStage(order.status).tone}`}>
+                        {getDisputeReturnStage(order.status).label}
                       </span>
                     </div>
 
@@ -342,16 +357,50 @@ export default function RiderDashboardPage() {
                       )}
                     </div>
 
-                    <button
-                      onClick={() => markDisputePickedUp(order.id)}
-                      disabled={actionLoading[`dispute-pickup-${order.id}`]}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
-                    >
-                      {actionLoading[`dispute-pickup-${order.id}`]
-                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
-                        : 'I Have Collected the Item from Buyer'
-                      }
-                    </button>
+                    {order.status === 'RIDER_ASSIGNED' && (
+                      <button
+                        onClick={() => markDisputePickedUp(order.id)}
+                        disabled={actionLoading[`dispute-pickup-${order.id}`]}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading[`dispute-pickup-${order.id}`]
+                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
+                          : 'I Have Collected the Item from Buyer'
+                        }
+                      </button>
+                    )}
+
+                    {order.status === 'PICKED_UP' && (
+                      <button
+                        onClick={() => updateStatus(order.id, 'ON_THE_WAY')}
+                        disabled={actionLoading[`status-${order.id}`]}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading[`status-${order.id}`]
+                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
+                          : <><ArrowRight className="w-4 h-4" /> On The Way to Seller</>
+                        }
+                      </button>
+                    )}
+
+                    {order.status === 'ON_THE_WAY' && (
+                      <button
+                        onClick={() => updateStatus(order.id, 'DELIVERED')}
+                        disabled={actionLoading[`status-${order.id}`]}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading[`status-${order.id}`]
+                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
+                          : <><CheckCircle className="w-4 h-4" /> Delivered to Seller</>
+                        }
+                      </button>
+                    )}
+
+                    {order.status === 'DELIVERED' && (
+                      <div className="w-full py-3 px-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold text-center">
+                        Return delivered. Waiting for seller confirmation.
+                      </div>
+                    )}
                   </div>
                 )
               })}

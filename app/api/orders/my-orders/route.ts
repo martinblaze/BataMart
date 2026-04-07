@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 import { OrderStatus } from '@prisma/client'
+import { DISPUTE_WINDOW_MS } from '@/lib/escrow'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,16 +46,8 @@ function checkDisputeEligibility(order: any) {
     }
   }
 
-  // Check if order status allows disputes
-  const disputableStatuses = [
-    OrderStatus.DELIVERED,
-    OrderStatus.COMPLETED,
-    OrderStatus.ON_THE_WAY,
-    OrderStatus.PICKED_UP,
-    OrderStatus.RIDER_ASSIGNED,
-    OrderStatus.PROCESSING,
-    OrderStatus.SHIPPED
-  ]
+  // Disputes are only allowed after delivery/completion.
+  const disputableStatuses = [OrderStatus.DELIVERED, OrderStatus.COMPLETED]
 
   if (!disputableStatuses.includes(order.status)) {
     return {
@@ -64,7 +57,7 @@ function checkDisputeEligibility(order: any) {
     }
   }
 
-  // For delivered/completed orders, check delivery date and 7-day window
+  // For delivered/completed orders, check 72-hour window.
   if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED) {
     // Use completedAt if deliveredAt is not available
     const deliveryDate = order.deliveredAt || order.completedAt;
@@ -82,44 +75,26 @@ function checkDisputeEligibility(order: any) {
       }
     }
 
-    // Check if within 7 days of delivery/completion
+    // Check if within 72 hours of delivery/completion
     const deliveredDate = new Date(deliveryDate)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const deadline = new Date(deliveredDate.getTime() + DISPUTE_WINDOW_MS)
     
-    if (deliveredDate <= sevenDaysAgo) {
-      const daysAgo = Math.floor((Date.now() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (Date.now() > deadline.getTime()) {
+      const hoursAgo = Math.floor((Date.now() - deliveredDate.getTime()) / (1000 * 60 * 60))
       return {
         canDispute: false,
-        reason: `Dispute window expired (${order.status.toLowerCase()} ${daysAgo} days ago)`,
+        reason: `Dispute window expired (${order.status.toLowerCase()} ${hoursAgo} hours ago)`,
         debug: { 
           deliveryDate: deliveredDate, 
-          sevenDaysAgo, 
-          daysAgo,
+          deadline,
+          hoursAgo,
           dateFieldUsed: order.deliveredAt ? 'deliveredAt' : 'completedAt'
         }
       }
     }
   }
 
-  // For in-transit orders, allow disputes
-  if ([OrderStatus.ON_THE_WAY, OrderStatus.PICKED_UP, OrderStatus.RIDER_ASSIGNED].includes(order.status)) {
-    return {
-      canDispute: true,
-      reason: 'Order is in transit and can be disputed',
-      debug: { status: order.status, inTransit: true }
-    }
-  }
-
-  // For processing/shipped orders, allow disputes
-  if ([OrderStatus.PROCESSING, OrderStatus.SHIPPED].includes(order.status)) {
-    return {
-      canDispute: true,
-      reason: 'Order is processing/shipped and can be disputed',
-      debug: { status: order.status, processing: true }
-    }
-  }
-
-  // All checks passed for delivered/completed within 7 days
+  // All checks passed for delivered/completed within 72 hours
   return {
     canDispute: true,
     reason: 'Eligible for dispute',
@@ -127,7 +102,7 @@ function checkDisputeEligibility(order: any) {
       status: order.status, 
       deliveredAt: order.deliveredAt,
       completedAt: order.completedAt,
-      within7Days: true 
+      within72Hours: true 
     }
   }
 }

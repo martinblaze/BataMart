@@ -3,6 +3,13 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function generateReferralCode(name: string) {
+  const clean = (name || 'ADMIN').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const base = clean.slice(0, 4) || 'ADMN';
+  const suffix = Math.floor(100000 + Math.random() * 900000);
+  return `${base}${suffix}`;
+}
+
 async function createAdmin() {
   try {
     // CHANGE THESE DETAILS! ↓↓↓
@@ -43,6 +50,7 @@ async function createAdmin() {
         name: adminName,
         role: 'ADMIN', // Set role to ADMIN
         isSellerMode: false,
+        referralCode: generateReferralCode(adminName),
       }
     });
 

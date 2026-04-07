@@ -57,9 +57,17 @@ export async function GET(request: NextRequest) {
       where: {
         riderId:    user.id,
         isDisputed: true,
-        status:     'RIDER_ASSIGNED',
+        status:     { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] },
         dispute: {
-          resolution: '__AWAITING_PICKUP__',
+          resolution: {
+            in: [
+              '__AWAITING_PICKUP__',
+              '__SELLER_FAULT_AWAITING_PICKUP__',
+              '__RETURN_PICKED_UP__',
+              '__RETURN_ON_THE_WAY__',
+              '__RETURN_DELIVERED_TO_SELLER__',
+            ],
+          },
         },
       },
       include: {

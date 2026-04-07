@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   RefreshCw,
   WifiOff,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -49,6 +50,7 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [confirmingReturn, setConfirmingReturn] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [reviewModal, setReviewModal] = useState<{
@@ -210,6 +212,41 @@ export default function OrderDetailPage() {
     if (currentUserId === order.riderId) return 'RIDER';
     return null;
   };
+
+  const canSellerConfirmReturn = () => {
+    return (
+      userRole === 'SELLER' &&
+      !!order?.dispute &&
+      order.dispute.status === 'UNDER_REVIEW' &&
+      order.dispute.resolution === '__RETURN_DELIVERED_TO_SELLER__'
+    )
+  }
+
+  const handleSellerConfirmReturn = async () => {
+    if (!order?.dispute?.id) return
+    setConfirmingReturn(true)
+    setUpdateError(null)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/disputes/${order.dispute.id}/confirm-return`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setUpdateError(data.error || 'Failed to confirm return')
+        return
+      }
+      await fetchOrder(true)
+    } catch {
+      setUpdateError('Network error while confirming return')
+    } finally {
+      setConfirmingReturn(false)
+    }
+  }
 
   const canReviewProduct = (order?.status === 'DELIVERED' || order?.status === 'COMPLETED') &&
     order?.productReviews?.length === 0;
@@ -740,6 +777,19 @@ export default function OrderDetailPage() {
                 <Shield className="w-4 h-4" />
                 Track Dispute
               </Button>
+
+              {canSellerConfirmReturn() && (
+                <Button
+                  onClick={handleSellerConfirmReturn}
+                  disabled={confirmingReturn}
+                  className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2"
+                >
+                  {confirmingReturn
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Confirming...</>
+                    : <><CheckCircle className="w-4 h-4" /> I Received Returned Item</>
+                  }
+                </Button>
+              )}
             </div>
           ) : (
             userRole === 'BUYER' &&
@@ -751,7 +801,7 @@ export default function OrderDetailPage() {
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">
                   If there's an issue with this order, you can open a dispute
-                  within 7 days of delivery.
+                  within 72 hours of delivery.
                 </p>
                 <Button
                   variant="outline"
