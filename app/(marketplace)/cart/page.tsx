@@ -75,6 +75,10 @@ export default function CartPage() {
   const fmt = (price: number) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(price);
 
+  const handleRemoveSingleItem = (productId: string) => {
+    removeItem(productId);
+  };
+
   const handleCheckout = () => {
     if (items.length === 0) return;
     sessionStorage.setItem('checkout_cart', JSON.stringify(items));
@@ -173,9 +177,14 @@ export default function CartPage() {
                               <Link href={`/seller/${item.sellerId}`} className="text-indigo-600 font-bold hover:underline">{item.sellerName}</Link>
                             </p>
                           </div>
-                          <button onClick={() => removeItem(item.productId)}
-                            className="p-1.5 rounded-xl hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0">
-                            <X className="w-4 h-4" />
+                          <button
+                            onClick={() => handleRemoveSingleItem(item.productId)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition-colors flex-shrink-0"
+                            aria-label={`Delete ${item.name} from cart`}
+                            title="Delete this item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="text-[11px] font-bold leading-none hidden sm:inline">Delete</span>
                           </button>
                         </div>
                         <div className="flex items-center justify-between mt-3">
@@ -200,6 +209,13 @@ export default function CartPage() {
                             <Package className="w-3 h-3" /> Max quantity reached
                           </p>
                         )}
+                        <button
+                          onClick={() => handleRemoveSingleItem(item.productId)}
+                          className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-red-600 hover:text-red-700 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Remove this product
+                        </button>
                       </div>
                     </div>
                   </div>
