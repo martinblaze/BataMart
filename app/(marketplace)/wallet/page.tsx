@@ -4,189 +4,227 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import {
+  ArrowLeft, RefreshCw, Shield, TrendingUp, TrendingDown,
+  Wallet, ArrowDownLeft, ArrowUpRight, Lock, AlertCircle,
+  CheckCircle2, X, ChevronDown, Search, Loader2, Eye,
+  EyeOff, Key, RotateCcw, Zap, ChevronRight, Clock,
+} from 'lucide-react'
+
+const WALLET_CSS = `
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .scale-in { animation: scaleIn 0.28s cubic-bezier(0.34,1.4,0.64,1) forwards; }
+
+  @keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+  }
+  .shimmer {
+    background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
+    background-size: 1200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .header-gradient {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+  }
+
+  .balance-card {
+    background: linear-gradient(135deg, #6366f1 0%, #4c1d95 60%, #2d1b69 100%);
+    box-shadow: 0 20px 60px rgba(99,102,241,0.4);
+  }
+
+  .stat-card {
+    transition: transform 0.25s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.25s ease;
+  }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(0,0,0,0.08); }
+
+  .tx-row {
+    transition: background 0.15s ease;
+  }
+  .tx-row:hover { background: #f9fafb; }
+
+  .withdraw-btn {
+    background: linear-gradient(135deg, #6366f1, #4c1d95);
+    transition: transform 0.2s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.2s ease;
+    box-shadow: 0 8px 24px rgba(99,102,241,0.35);
+  }
+  .withdraw-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 40px rgba(99,102,241,0.45);
+  }
+  .withdraw-btn:active { transform: scale(0.97); }
+
+  .pin-dot {
+    transition: transform 0.15s cubic-bezier(0.34,1.4,0.64,1), background 0.15s ease;
+  }
+  .pin-dot-filled {
+    background: #6366f1;
+    transform: scale(1.15);
+  }
+
+  .action-chip {
+    transition: all 0.15s cubic-bezier(0.34,1.4,0.64,1);
+  }
+  .action-chip:hover { transform: scale(1.04) translateY(-1px); }
+  .action-chip:active { transform: scale(0.96); }
+
+  .bank-option {
+    transition: background 0.12s ease;
+  }
+  .bank-option:hover { background: #f5f3ff; }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  @keyframes pulse-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.3); }
+    70%  { box-shadow: 0 0 0 8px rgba(99,102,241,0); }
+    100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  }
+  .success-pulse { animation: pulse-ring 1s ease-out; }
+`
 
 interface Transaction {
-  id: string
-  type: string
-  amount: number
-  description: string
-  reference: string
-  createdAt: string
-  balanceBefore: number
-  balanceAfter: number
+  id: string; type: string; amount: number; description: string
+  reference: string; createdAt: string; balanceBefore: number; balanceAfter: number
 }
-
-interface WalletData {
-  availableBalance: number
-  pendingBalance: number
-  completedOrders: number
-  role: string
-}
-
-interface User {
-  id: string
-  name: string
-  phone: string
-  email?: string
-  hasWithdrawalPin: boolean
-}
-
-interface Bank {
-  code: string
-  name: string
-}
+interface WalletData { availableBalance: number; pendingBalance: number; completedOrders: number; role: string }
+interface User { id: string; name: string; phone: string; email?: string; hasWithdrawalPin: boolean }
+interface Bank { code: string; name: string }
 
 const NIGERIAN_BANKS: Bank[] = [
-  { code: '999992', name: 'OPay' },
-  { code: '999991', name: 'PalmPay' },
-  { code: '50211', name: 'Kuda Bank' },
-  { code: '50515', name: 'Moniepoint MFB' },
-  { code: '565', name: 'Carbon (One Finance)' },
-  { code: '566', name: 'VFD Microfinance Bank (VBank)' },
-  { code: '035A', name: 'ALAT by WEMA' },
-  { code: '125', name: 'Rubies MFB' },
-  { code: '51269', name: 'Tangerine Money' },
-  { code: '51310', name: 'Sparkle Microfinance Bank' },
-  { code: '50126', name: 'Eyowo' },
-  { code: '100002', name: 'Paga' },
-  { code: '100022', name: 'GoMoney' },
-  { code: '311', name: 'Parkway ReadyCash' },
-  { code: '100039', name: 'Titan Paystack' },
-  { code: '057', name: 'Zenith Bank' },
-  { code: '058', name: 'Guaranty Trust Bank (GTBank)' },
-  { code: '033', name: 'United Bank for Africa (UBA)' },
-  { code: '011', name: 'First Bank of Nigeria' },
-  { code: '044', name: 'Access Bank' },
-  { code: '063', name: 'Access Bank (Diamond)' },
-  { code: '050', name: 'Ecobank Nigeria' },
-  { code: '070', name: 'Fidelity Bank' },
-  { code: '214', name: 'First City Monument Bank (FCMB)' },
-
-  { code: '082', name: 'Keystone Bank' },
-  { code: '076', name: 'Polaris Bank' },
-  { code: '101', name: 'Providus Bank' },
-  { code: '221', name: 'Stanbic IBTC Bank' },
-  { code: '068', name: 'Standard Chartered Bank' },
-  { code: '232', name: 'Sterling Bank' },
-  { code: '032', name: 'Union Bank of Nigeria' },
-  { code: '215', name: 'Unity Bank' },
-  { code: '035', name: 'Wema Bank' },
-  { code: '023', name: 'Citibank Nigeria' },
-  { code: '100', name: 'Suntrust Bank' },
-  { code: '302', name: 'TAJ Bank' },
-  { code: '303', name: 'Lotus Bank' },
-  { code: '104', name: 'Parallex Bank' },
-  { code: '105', name: 'PremiumTrust Bank' },
-  { code: '102', name: 'Titan Trust Bank' },
-  { code: '502', name: 'Rand Merchant Bank' },
-  { code: '301', name: 'Jaiz Bank' },
-  { code: '00103', name: 'Globus Bank' },
-  { code: '559', name: 'Coronation Merchant Bank' },
-  { code: '501', name: 'FSDH Merchant Bank' },
-  { code: '120001', name: '9mobile 9Payment Service Bank' },
-  { code: '120002', name: 'HopePSB' },
-  { code: '120003', name: 'MTN MoMo PSB' },
-  { code: '120004', name: 'Airtel Smartcash PSB' },
-  { code: '801', name: 'Abbey Mortgage Bank' },
-  { code: '401', name: 'ASO Savings and Loans' },
-  { code: '031', name: 'Living Trust Mortgage Bank' },
-  { code: '812', name: 'Gateway Mortgage Bank' },
-  { code: '90067', name: 'Refuge Mortgage Bank' },
-  { code: '51204', name: 'Above Only MFB' },
-  { code: '51312', name: 'Abulesoro MFB' },
-  { code: '50926', name: 'Amju Unique MFB' },
-  { code: '50083', name: 'Aramoko MFB' },
-  { code: '50931', name: 'Bowen Microfinance Bank' },
-  { code: '50823', name: 'CEMCS Microfinance Bank' },
-  { code: '50171', name: 'Chanelle Microfinance Bank' },
-  { code: '50204', name: 'Corestep MFB' },
-  { code: '51297', name: 'Crescent MFB' },
-  { code: '50263', name: 'Ekimogun MFB' },
-  { code: '562', name: 'Ekondo Microfinance Bank' },
-  { code: '51314', name: 'Firmus MFB' },
-  { code: '51251', name: 'Hackman Microfinance Bank' },
-  { code: '50383', name: 'Hasal Microfinance Bank' },
-  { code: '51244', name: 'Ibile Microfinance Bank' },
-  { code: '50439', name: 'Ikoyi Osun MFB' },
-  { code: '50457', name: 'Infinity MFB' },
-  { code: '50502', name: 'Kadpoly MFB' },
-  { code: '50200', name: 'Kredi Money MFB' },
-  { code: '90052', name: 'Lagos Building Investment Company' },
-  { code: '50549', name: 'Links MFB' },
-  { code: '50563', name: 'Mayfair MFB' },
-  { code: '50304', name: 'Mint MFB' },
-  { code: '50746', name: 'Petra Microfinance Bank' },
-  { code: '50864', name: 'Polyunwana MFB' },
-  { code: '51293', name: 'QuickFund MFB' },
-  { code: '51113', name: 'Safe Haven MFB' },
-  { code: '50800', name: 'Solid Rock MFB' },
-  { code: '51253', name: 'Stellas MFB' },
-  { code: '51211', name: 'TCF MFB' },
-  { code: '50871', name: 'Unical MFB' },
+  { code: '999992', name: 'OPay' },{ code: '999991', name: 'PalmPay' },
+  { code: '50211', name: 'Kuda Bank' },{ code: '50515', name: 'Moniepoint MFB' },
+  { code: '565', name: 'Carbon (One Finance)' },{ code: '566', name: 'VFD Microfinance Bank' },
+  { code: '035A', name: 'ALAT by WEMA' },{ code: '125', name: 'Rubies MFB' },
+  { code: '51269', name: 'Tangerine Money' },{ code: '51310', name: 'Sparkle MFB' },
+  { code: '057', name: 'Zenith Bank' },{ code: '058', name: 'GTBank' },
+  { code: '033', name: 'UBA' },{ code: '011', name: 'First Bank' },
+  { code: '044', name: 'Access Bank' },{ code: '063', name: 'Access Bank (Diamond)' },
+  { code: '050', name: 'Ecobank Nigeria' },{ code: '070', name: 'Fidelity Bank' },
+  { code: '214', name: 'FCMB' },{ code: '082', name: 'Keystone Bank' },
+  { code: '076', name: 'Polaris Bank' },{ code: '101', name: 'Providus Bank' },
+  { code: '221', name: 'Stanbic IBTC Bank' },{ code: '068', name: 'Standard Chartered' },
+  { code: '232', name: 'Sterling Bank' },{ code: '032', name: 'Union Bank' },
+  { code: '215', name: 'Unity Bank' },{ code: '035', name: 'Wema Bank' },
+  { code: '023', name: 'Citibank Nigeria' },{ code: '100', name: 'Suntrust Bank' },
+  { code: '302', name: 'TAJ Bank' },{ code: '303', name: 'Lotus Bank' },
+  { code: '104', name: 'Parallex Bank' },{ code: '105', name: 'PremiumTrust Bank' },
+  { code: '102', name: 'Titan Trust Bank' },{ code: '120001', name: '9mobile 9PSB' },
+  { code: '120002', name: 'HopePSB' },{ code: '120003', name: 'MTN MoMo PSB' },
+  { code: '120004', name: 'Airtel Smartcash PSB' },{ code: '100002', name: 'Paga' },
+  { code: '50126', name: 'Eyowo' },{ code: '50200', name: 'Kredi Money MFB' },
+  { code: '51244', name: 'Ibile Microfinance Bank' },{ code: '51113', name: 'Safe Haven MFB' },
+  { code: '51293', name: 'QuickFund MFB' },{ code: '51253', name: 'Stellas MFB' },
 ]
 
-const TX_LABEL: Record<string, { label: string; color: string; bg: string; sign: string }> = {
-  CREDIT: { label: 'Credit', color: 'text-emerald-700', bg: 'bg-emerald-50', sign: '+' },
-  DEBIT: { label: 'Debit', color: 'text-red-600', bg: 'bg-red-50', sign: '−' },
-  WITHDRAWAL: { label: 'Withdrawal', color: 'text-red-600', bg: 'bg-red-50', sign: '−' },
-  ESCROW: { label: 'Escrow', color: 'text-amber-700', bg: 'bg-amber-50', sign: '' },
+const fmt = (n: number) =>
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(n)
+
+const fmtShort = (n: number) =>
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(n)
+
+const TX_META: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
+  CREDIT:     { label: 'Credit',     color: 'text-emerald-700', bg: 'bg-emerald-50',  icon: <ArrowDownLeft className="w-3.5 h-3.5" /> },
+  DEBIT:      { label: 'Debit',      color: 'text-red-600',     bg: 'bg-red-50',      icon: <ArrowUpRight className="w-3.5 h-3.5" /> },
+  WITHDRAWAL: { label: 'Withdrawal', color: 'text-red-600',     bg: 'bg-red-50',      icon: <ArrowUpRight className="w-3.5 h-3.5" /> },
+  ESCROW:     { label: 'Escrow',     color: 'text-amber-700',   bg: 'bg-amber-50',    icon: <Lock className="w-3.5 h-3.5" /> },
+}
+
+// ── PIN Dots ─────────────────────────────────────────────────────────────────
+function PinDots({ value }: { value: string }) {
+  return (
+    <div className="flex justify-center gap-3 py-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className={`pin-dot w-3.5 h-3.5 rounded-full border-2 ${i < value.length ? 'pin-dot-filled border-indigo-500' : 'border-gray-300'}`} />
+      ))}
+    </div>
+  )
+}
+
+// ── Modal Shell ───────────────────────────────────────────────────────────────
+function ModalShell({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+      <div className="absolute inset-0" onClick={onClose} />
+      <div className="scale-in relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+        {children}
+      </div>
+    </div>
+  )
 }
 
 export default function WalletPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
-  const [wallet, setWallet] = useState<WalletData | null>(null)
+  const [user, setUser]               = useState<User | null>(null)
+  const [wallet, setWallet]           = useState<WalletData | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]         = useState(true)
   const [withdrawing, setWithdrawing] = useState(false)
+  const [hideBalance, setHideBalance] = useState(false)
+  const [refreshing, setRefreshing]   = useState(false)
 
+  // Withdraw modal
   const [showWithdrawModal, setShowWithdrawModal] = useState(false)
-  const [withdrawAmount, setWithdrawAmount] = useState('')
-  const [accountNumber, setAccountNumber] = useState('')
-  const [accountName, setAccountName] = useState('')
-  const [selectedBank, setSelectedBank] = useState(NIGERIAN_BANKS[0])
-  const [bankSearch, setBankSearch] = useState('')
-  const [showBankDropdown, setShowBankDropdown] = useState(false)
+  const [withdrawAmount, setWithdrawAmount]       = useState('')
+  const [accountNumber, setAccountNumber]         = useState('')
+  const [accountName, setAccountName]             = useState('')
+  const [selectedBank, setSelectedBank]           = useState(NIGERIAN_BANKS[0])
+  const [bankSearch, setBankSearch]               = useState('')
+  const [showBankDropdown, setShowBankDropdown]   = useState(false)
   const bankRef = useRef<HTMLDivElement>(null)
-
   const [pendingWithdrawal, setPendingWithdrawal] = useState<any>(null)
 
-  // ── PIN states ─────────────────────────────────────────────────────────────
-  const [showPinEntry, setShowPinEntry] = useState(false)
-  const [pinValue, setPinValue] = useState('')
-  const [pinError, setPinError] = useState('')
-  const [pinLoading, setPinLoading] = useState(false)
+  // PIN
+  const [showPinEntry, setShowPinEntry]   = useState(false)
+  const [pinValue, setPinValue]           = useState('')
+  const [pinError, setPinError]           = useState('')
+  const [pinLoading, setPinLoading]       = useState(false)
 
-  const [showSetPin, setShowSetPin] = useState(false)
-  const [currentPin, setCurrentPin] = useState('')
-  const [newPin, setNewPin] = useState('')
-  const [confirmPin, setConfirmPin] = useState('')
+  // Set/Change PIN
+  const [showSetPin, setShowSetPin]         = useState(false)
+  const [currentPin, setCurrentPin]         = useState('')
+  const [newPin, setNewPin]                 = useState('')
+  const [confirmPin, setConfirmPin]         = useState('')
   const [savePinLoading, setSavePinLoading] = useState(false)
-  const [savePinError, setSavePinError] = useState('')
+  const [savePinError, setSavePinError]     = useState('')
   const [savePinSuccess, setSavePinSuccess] = useState(false)
 
-  // ── Forgot PIN flow ────────────────────────────────────────────────────────
-  const [showForgotPin, setShowForgotPin] = useState(false)
-  const [forgotPinStep, setForgotPinStep] = useState<'send' | 'verify'>('send')
-  const [forgotPinOtp, setForgotPinOtp] = useState('')
-  const [forgotPinNew, setForgotPinNew] = useState('')
-  const [forgotPinConfirm, setForgotPinConfirm] = useState('')
-  const [forgotPinLoading, setForgotPinLoading] = useState(false)
-  const [forgotPinError, setForgotPinError] = useState('')
-  const [forgotPinEmail, setForgotPinEmail] = useState('')
-  const [forgotPinSuccess, setForgotPinSuccess] = useState(false)
+  // Forgot PIN
+  const [showForgotPin, setShowForgotPin]       = useState(false)
+  const [forgotStep, setForgotStep]             = useState<'send' | 'verify'>('send')
+  const [forgotOtp, setForgotOtp]               = useState('')
+  const [forgotNew, setForgotNew]               = useState('')
+  const [forgotConfirm, setForgotConfirm]       = useState('')
+  const [forgotLoading, setForgotLoading]       = useState(false)
+  const [forgotError, setForgotError]           = useState('')
+  const [forgotEmail, setForgotEmail]           = useState('')
+  const [forgotSuccess, setForgotSuccess]       = useState(false)
 
-  // ── PIN required modal (no PIN set yet) ───────────────────────────────────
+  // PIN required
   const [showPinRequired, setShowPinRequired] = useState(false)
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (bankRef.current && !bankRef.current.contains(e.target as Node)) {
-        setShowBankDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    if (document.getElementById('wallet-anim')) return
+    const s = document.createElement('style'); s.id = 'wallet-anim'; s.textContent = WALLET_CSS
+    document.head.appendChild(s)
+  }, [])
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (bankRef.current && !bankRef.current.contains(e.target as Node)) setShowBankDropdown(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
 
   useEffect(() => { fetchWalletData() }, [])
@@ -204,8 +242,14 @@ export default function WalletPage() {
       if (uR.ok) setUser(u.user)
       if (wR.ok) setWallet(w.wallet)
       if (tR.ok) setTransactions(t.transactions || [])
-    } catch (e) { console.error(e) }
+    } catch {}
     finally { setLoading(false) }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchWalletData()
+    setRefreshing(false)
   }
 
   const filteredBanks = bankSearch.trim()
@@ -219,20 +263,11 @@ export default function WalletPage() {
       if (res.ok) {
         const data = await res.json()
         setUser(data.user)
-        // If no PIN set yet, prompt them to set one first
-        if (!data.user.hasWithdrawalPin) {
-          setShowPinRequired(true)
-          return
-        }
+        if (!data.user.hasWithdrawalPin) { setShowPinRequired(true); return }
       }
-    } catch { /* fall through */ }
-
-    setWithdrawAmount('')
-    setAccountNumber('')
-    setAccountName('')
-    setSelectedBank(NIGERIAN_BANKS[0])
-    setBankSearch('')
-    setPinError('')
+    } catch {}
+    setWithdrawAmount(''); setAccountNumber(''); setAccountName('')
+    setSelectedBank(NIGERIAN_BANKS[0]); setBankSearch(''); setPinError('')
     setShowWithdrawModal(true)
   }
 
@@ -243,15 +278,12 @@ export default function WalletPage() {
     if (wallet && amount > wallet.availableBalance) { alert('Insufficient balance'); return }
     if (!accountNumber || !accountName) { alert('Please fill all fields'); return }
     setPendingWithdrawal({ amount, accountNumber, accountName, bankCode: selectedBank.code })
-    setPinError('')
-    setPinValue('')
-    setShowPinEntry(true)
+    setPinError(''); setPinValue(''); setShowPinEntry(true)
   }
 
   const handlePinSubmit = async () => {
     if (pinValue.length !== 6) { setPinError('Enter your 6-digit PIN'); return }
-    setPinLoading(true)
-    setPinError('')
+    setPinLoading(true); setPinError('')
     try {
       const token = localStorage.getItem('token')
       const res = await fetch('/api/wallet/verify-pin', {
@@ -263,11 +295,8 @@ export default function WalletPage() {
       if (!res.ok) { setPinError(data.error || 'Incorrect PIN'); setPinValue(''); return }
       setShowPinEntry(false)
       await executeWithdrawal()
-    } catch {
-      setPinError('Network error. Please try again.')
-    } finally {
-      setPinLoading(false)
-    }
+    } catch { setPinError('Network error.') }
+    finally { setPinLoading(false) }
   }
 
   const executeWithdrawal = async () => {
@@ -281,38 +310,21 @@ export default function WalletPage() {
         body: JSON.stringify(pendingWithdrawal),
       })
       const d = await r.json()
-
       if (!r.ok) {
-        if (d.error === 'PIN_REQUIRED') {
-          setShowWithdrawModal(false)
-          setPendingWithdrawal(null)
-          setShowPinRequired(true)
-          return
-        }
-        alert(d.error || 'Withdrawal failed')
-        setPendingWithdrawal(null)
-        return
+        if (d.error === 'PIN_REQUIRED') { setShowWithdrawModal(false); setPendingWithdrawal(null); setShowPinRequired(true); return }
+        alert(d.error || 'Withdrawal failed'); setPendingWithdrawal(null); return
       }
-
-      // ✅ Success
-      setShowWithdrawModal(false)
-      setPendingWithdrawal(null)
-      fetchWalletData()
-      alert(`Withdrawal of ₦${pendingWithdrawal.amount.toLocaleString()} initiated.\nReference: ${d.reference}`)
-    } catch {
-      alert('Network error. Please try again.')
-      setPendingWithdrawal(null)
-    } finally {
-      setWithdrawing(false)
-    }
+      setShowWithdrawModal(false); setPendingWithdrawal(null); fetchWalletData()
+      alert(`Withdrawal of ₦${pendingWithdrawal.amount.toLocaleString()} initiated.\nRef: ${d.reference}`)
+    } catch { alert('Network error.'); setPendingWithdrawal(null) }
+    finally { setWithdrawing(false) }
   }
 
   const handleSetPinSubmit = async () => {
-    if (user?.hasWithdrawalPin && !currentPin) { setSavePinError('Please enter your current PIN'); return }
-    if (!/^\d{6}$/.test(newPin)) { setSavePinError('New PIN must be exactly 6 digits'); return }
+    if (user?.hasWithdrawalPin && !currentPin) { setSavePinError('Enter your current PIN'); return }
+    if (!/^\d{6}$/.test(newPin)) { setSavePinError('PIN must be exactly 6 digits'); return }
     if (newPin !== confirmPin) { setSavePinError('PINs do not match'); return }
-    setSavePinLoading(true)
-    setSavePinError('')
+    setSavePinLoading(true); setSavePinError('')
     try {
       const token = localStorage.getItem('token')
       const res = await fetch('/api/wallet/set-pin', {
@@ -322,28 +334,15 @@ export default function WalletPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setSavePinSuccess(true)
-        setUser(prev => prev ? { ...prev, hasWithdrawalPin: true } : prev)
-        setTimeout(() => {
-          setShowSetPin(false)
-          setSavePinSuccess(false)
-          setCurrentPin('')
-          setNewPin('')
-          setConfirmPin('')
-        }, 2000)
-      } else {
-        setSavePinError(data.error || 'Failed to set PIN')
-      }
-    } catch {
-      setSavePinError('Network error. Please try again.')
-    } finally {
-      setSavePinLoading(false)
-    }
+        setSavePinSuccess(true); setUser(prev => prev ? { ...prev, hasWithdrawalPin: true } : prev)
+        setTimeout(() => { setShowSetPin(false); setSavePinSuccess(false); setCurrentPin(''); setNewPin(''); setConfirmPin('') }, 2000)
+      } else { setSavePinError(data.error || 'Failed to set PIN') }
+    } catch { setSavePinError('Network error.') }
+    finally { setSavePinLoading(false) }
   }
 
-  const handleForgotPinSendOtp = async () => {
-    setForgotPinLoading(true)
-    setForgotPinError('')
+  const handleForgotSendOtp = async () => {
+    setForgotLoading(true); setForgotError('')
     try {
       const token = localStorage.getItem('token')
       const res = await fetch('/api/wallet/reset-pin', {
@@ -352,479 +351,553 @@ export default function WalletPage() {
         body: JSON.stringify({ action: 'send-otp' }),
       })
       const data = await res.json()
-      if (res.ok) {
-        setForgotPinEmail(data.email)
-        setForgotPinStep('verify')
-      } else {
-        setForgotPinError(data.error || 'Failed to send OTP')
-      }
-    } catch {
-      setForgotPinError('Network error. Please try again.')
-    } finally {
-      setForgotPinLoading(false)
-    }
+      if (res.ok) { setForgotEmail(data.email); setForgotStep('verify') }
+      else { setForgotError(data.error || 'Failed to send OTP') }
+    } catch { setForgotError('Network error.') }
+    finally { setForgotLoading(false) }
   }
 
-  const handleForgotPinVerify = async () => {
-    if (forgotPinOtp.length !== 6) { setForgotPinError('Enter the 6-digit OTP'); return }
-    if (!/^\d{6}$/.test(forgotPinNew)) { setForgotPinError('New PIN must be exactly 6 digits'); return }
-    if (forgotPinNew !== forgotPinConfirm) { setForgotPinError('PINs do not match'); return }
-    setForgotPinLoading(true)
-    setForgotPinError('')
+  const handleForgotVerify = async () => {
+    if (forgotOtp.length !== 6) { setForgotError('Enter the 6-digit OTP'); return }
+    if (!/^\d{6}$/.test(forgotNew)) { setForgotError('PIN must be 6 digits'); return }
+    if (forgotNew !== forgotConfirm) { setForgotError('PINs do not match'); return }
+    setForgotLoading(true); setForgotError('')
     try {
       const token = localStorage.getItem('token')
       const res = await fetch('/api/wallet/set-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ otpCode: forgotPinOtp, pin: forgotPinNew }),
+        body: JSON.stringify({ otpCode: forgotOtp, pin: forgotNew }),
       })
       const data = await res.json()
       if (res.ok) {
-        setForgotPinSuccess(true)
-        setUser(prev => prev ? { ...prev, hasWithdrawalPin: true } : prev)
-        setTimeout(() => {
-          setShowForgotPin(false)
-          setForgotPinSuccess(false)
-          setForgotPinStep('send')
-          setForgotPinOtp('')
-          setForgotPinNew('')
-          setForgotPinConfirm('')
-        }, 2000)
-      } else {
-        setForgotPinError(data.error || 'Failed to reset PIN')
-      }
-    } catch {
-      setForgotPinError('Network error. Please try again.')
-    } finally {
-      setForgotPinLoading(false)
-    }
+        setForgotSuccess(true); setUser(prev => prev ? { ...prev, hasWithdrawalPin: true } : prev)
+        setTimeout(() => { setShowForgotPin(false); setForgotSuccess(false); setForgotStep('send'); setForgotOtp(''); setForgotNew(''); setForgotConfirm('') }, 2000)
+      } else { setForgotError(data.error || 'Failed to reset PIN') }
+    } catch { setForgotError('Network error.') }
+    finally { setForgotLoading(false) }
   }
 
-  if (loading || !user || !wallet) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-BATAMART-primary border-t-transparent" />
-          <p className="text-gray-500 text-sm">Loading wallet...</p>
+  if (loading || !user || !wallet) return (
+    <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center mx-auto mb-4">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
         </div>
+        <p className="text-gray-500 font-semibold">Loading wallet…</p>
       </div>
-    )
-  }
+    </div>
+  )
 
-  const totalEarned = transactions.filter(t => t.type === 'CREDIT').reduce((s, t) => s + t.amount, 0)
+  const totalEarned    = transactions.filter(t => t.type === 'CREDIT').reduce((s, t) => s + t.amount, 0)
   const totalWithdrawn = transactions.filter(t => t.type === 'WITHDRAWAL' || t.type === 'DEBIT').reduce((s, t) => s + t.amount, 0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f0f2f5] pb-24">
 
-      {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1 text-xs text-gray-400 mb-0.5">
-              <Link href="/marketplace" className="hover:text-BATAMART-primary">Marketplace</Link>
-              <span>/</span>
-              <span>Wallet</span>
+      {/* ── Header ── */}
+      <header className="header-gradient sticky top-0 z-40 shadow-xl">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center gap-3">
+            <Link href="/marketplace" className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors flex-shrink-0">
+              <ArrowLeft className="w-4 h-4 text-white" />
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-lg font-black text-white">Wallet & Payouts</h1>
+              <p className="text-white/50 text-xs">Manage your earnings</p>
             </div>
-            <h1 className="text-xl font-black text-gray-900">Wallet & Payouts</h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefresh}
+                className="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 text-white ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => { setNewPin(''); setConfirmPin(''); setSavePinError(''); setSavePinSuccess(false); setShowSetPin(true) }}
+                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+              >
+                <Key className="w-3.5 h-3.5" />
+                {user.hasWithdrawalPin ? 'Change PIN' : 'Set PIN'}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+        </div>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 space-y-4">
+
+        {/* ── Hero Balance Card ── */}
+        <div className="fade-up balance-card rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden">
+          {/* Decorative circles */}
+          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/5" />
+          <div className="absolute -bottom-6 -left-6 w-32 h-32 rounded-full bg-violet-400/10" />
+
+          <div className="relative">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-white/60 text-xs font-bold uppercase tracking-wider">Available Balance</p>
+              <button onClick={() => setHideBalance(h => !h)} className="text-white/40 hover:text-white/70 transition-colors">
+                {hideBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-4xl sm:text-5xl font-black mb-1 tracking-tight">
+              {hideBalance ? '₦ ••••••' : fmt(wallet.availableBalance)}
+            </p>
+            <p className="text-white/50 text-xs mb-6">Ready to withdraw · No fees</p>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={openWithdrawModal}
+                className="flex items-center gap-2 bg-white text-indigo-700 px-5 py-2.5 rounded-xl font-black text-sm shadow-lg transition-all hover:scale-105 active:scale-95"
+              >
+                <ArrowUpRight className="w-4 h-4" /> Withdraw
+              </button>
+              <div className="flex items-center gap-2 bg-white/10 border border-white/20 px-4 py-2.5 rounded-xl">
+                <Lock className="w-3.5 h-3.5 text-amber-300" />
+                <span className="text-xs font-bold text-white/80">{fmt(wallet.pendingBalance)} in escrow</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Stats Row ── */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: <TrendingUp className="w-4 h-4 text-emerald-600" />, bg: 'bg-emerald-50', label: 'Total Earned', value: fmtShort(totalEarned), color: 'text-emerald-700' },
+            { icon: <TrendingDown className="w-4 h-4 text-red-500" />, bg: 'bg-red-50', label: 'Withdrawn', value: fmtShort(totalWithdrawn), color: 'text-red-600' },
+            { icon: <Zap className="w-4 h-4 text-indigo-600" />, bg: 'bg-indigo-50', label: wallet.role === 'RIDER' ? 'Deliveries' : 'Orders', value: String(wallet.completedOrders), color: 'text-indigo-700' },
+          ].map(({ icon, bg, label, value, color }) => (
+            <div key={label} className="stat-card fade-up bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 sm:p-4">
+              <div className={`w-7 h-7 ${bg} rounded-lg flex items-center justify-center mb-2`}>{icon}</div>
+              <p className={`font-black text-sm sm:text-base ${color} truncate`}>{value}</p>
+              <p className="text-[10px] text-gray-400 font-semibold mt-0.5 uppercase tracking-wider">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── PIN Status ── */}
+        {!user.hasWithdrawalPin && (
+          <div className="fade-up flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5">
+            <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-black text-amber-800">Set a withdrawal PIN</p>
+              <p className="text-xs text-amber-600">Required before you can withdraw funds</p>
+            </div>
             <button
               onClick={() => { setNewPin(''); setConfirmPin(''); setSavePinError(''); setSavePinSuccess(false); setShowSetPin(true) }}
-              className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-600 hover:border-BATAMART-primary hover:text-BATAMART-primary text-xs sm:text-sm font-semibold px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg transition-colors"
+              className="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black transition-all hover:scale-105"
             >
-              🔐 {user.hasWithdrawalPin ? 'Change PIN' : 'Set PIN'}
-            </button>
-            <button
-              onClick={openWithdrawModal}
-              className="inline-flex items-center gap-1.5 text-white text-xs sm:text-sm font-bold px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg transition"
-              style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-            >
-              Withdraw
+              Set Now
             </button>
           </div>
-        </div>
-      </div>
+        )}
 
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-
-        {/* Balance cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-gradient-to-br from-BATAMART-primary to-BATAMART-secondary rounded-2xl p-5 text-white">
-            <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-2">Available Balance</p>
-            <p className="text-3xl font-black mb-1">
-              ₦{wallet.availableBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-            </p>
-            <p className="text-white/60 text-xs mb-3">Ready to withdraw</p>
-            <button
-              onClick={openWithdrawModal}
-              className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition"
-            >
-              Withdraw →
-            </button>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">Pending (Escrow)</p>
-            <p className="text-2xl font-black text-gray-900 mb-1">
-              ₦{wallet.pendingBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-            </p>
-            <p className="text-gray-400 text-xs">Released after buyer confirms delivery</p>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-3">Account Summary</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Total earned</span>
-                <span className="font-bold text-emerald-600">₦{totalEarned.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Total withdrawn</span>
-                <span className="font-bold text-red-500">₦{totalWithdrawn.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">{wallet.role === 'SELLER' ? 'Orders sold' : wallet.role === 'RIDER' ? 'Deliveries' : 'Orders placed'}</span>
-                <span className="font-bold text-gray-800">{wallet.completedOrders}</span>
-              </div>
+        {/* ── Transaction History ── */}
+        <div className="fade-up bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+            <div>
+              <h2 className="font-black text-gray-900">Transaction History</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''}</p>
             </div>
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${user.hasWithdrawalPin ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                {user.hasWithdrawalPin ? '✓ PIN Set' : '! No PIN'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Transaction History */}
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-black text-gray-900">Transaction History</h2>
-            <span className="text-xs text-gray-400">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''}</span>
+            {transactions.length > 0 && (
+              <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-full">LIVE</span>
+            )}
           </div>
 
           {transactions.length === 0 ? (
             <div className="py-16 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
+              <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4 ring-1 ring-gray-100">
+                <Wallet className="w-8 h-8 text-gray-300" />
               </div>
-              <p className="font-semibold text-gray-500">No transactions yet</p>
-              <p className="text-xs text-gray-400 mt-1">Your transaction history will appear here</p>
+              <p className="font-black text-gray-600">No transactions yet</p>
+              <p className="text-xs text-gray-400 mt-1">Your history will appear here</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="text-right px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {transactions.map((tx) => {
-                    const meta = TX_LABEL[tx.type] || TX_LABEL.CREDIT
-                    return (
-                      <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <p className="font-semibold text-gray-800 text-sm">{tx.description}</p>
-                          <p className="text-xs text-gray-400 font-mono">{tx.reference}</p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={`text-xs font-bold px-2 py-1 rounded-full ${meta.bg} ${meta.color}`}>
-                            {meta.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="text-sm text-gray-600">{new Date(tx.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                          <p className="text-xs text-gray-400">{new Date(tx.createdAt).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}</p>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <p className={`font-black text-sm ${tx.type === 'CREDIT' ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {tx.type === 'ESCROW' ? '🔒 ' : meta.sign}₦{tx.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                          </p>
-                          <p className="text-xs text-gray-400">Bal: ₦{tx.balanceAfter.toLocaleString()}</p>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="divide-y divide-gray-50">
+              {transactions.map((tx) => {
+                const meta = TX_META[tx.type] || TX_META.CREDIT
+                const isCredit = tx.type === 'CREDIT'
+                return (
+                  <div key={tx.id} className="tx-row flex items-center gap-3 px-5 py-4">
+                    <div className={`w-9 h-9 ${meta.bg} rounded-xl flex items-center justify-center flex-shrink-0 ${meta.color}`}>
+                      {meta.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-800 text-sm truncate">{tx.description}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>{meta.label}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">{new Date(tx.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}</span>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={`font-black text-sm ${isCredit ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {tx.type === 'ESCROW' ? '🔒 ' : isCredit ? '+' : '−'}
+                        {fmtShort(tx.amount)}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Bal: {fmtShort(tx.balanceAfter)}</p>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════════════════
+          MODALS
+      ═══════════════════════════════════════════════════════════ */}
+
       {/* ── Withdraw Modal ── */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+        <ModalShell onClose={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setPinError('') }}>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                <ArrowUpRight className="w-5 h-5 text-white" />
+              </div>
               <div>
                 <h2 className="text-lg font-black text-gray-900">Withdraw Funds</h2>
-                <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                  🔐 PIN verification required
-                </p>
+                <p className="text-xs text-gray-400">PIN verification required 🔐</p>
               </div>
-              <button
-                onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setPinError('') }}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
-              >
-                ✕
+              <button onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null) }}
+                className="ml-auto w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 transition-colors">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleWithdrawSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+              {/* Amount */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Amount (NGN)</label>
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Amount (NGN)</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₦</span>
-                  <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="0.00" min="1000" max={wallet.availableBalance} className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-BATAMART-primary focus:border-transparent" required />
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-black text-sm">₦</span>
+                  <input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)}
+                    placeholder="0.00" min="1000" max={wallet.availableBalance}
+                    className="w-full pl-8 pr-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-xl text-sm font-bold focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                    required />
                 </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-xs text-gray-400">Minimum: ₦1,000</span>
-                  <button type="button" onClick={() => setWithdrawAmount(String(wallet.availableBalance))} className="text-xs text-BATAMART-primary font-semibold hover:underline">Max: ₦{wallet.availableBalance.toLocaleString()}</button>
+                <div className="flex justify-between mt-1.5">
+                  <span className="text-xs text-gray-400">Min: ₦1,000</span>
+                  <button type="button" onClick={() => setWithdrawAmount(String(wallet.availableBalance))}
+                    className="text-xs text-indigo-600 font-black hover:underline">
+                    Max: {fmtShort(wallet.availableBalance)}
+                  </button>
                 </div>
               </div>
 
+              {/* Bank */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Bank ({NIGERIAN_BANKS.length} supported)</label>
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Bank</label>
                 <div ref={bankRef}>
                   {!showBankDropdown ? (
-                    <button type="button" onClick={() => { setBankSearch(''); setShowBankDropdown(true) }} className="w-full flex items-center justify-between px-4 py-3 border border-gray-300 rounded-lg text-sm hover:border-BATAMART-primary transition text-left">
+                    <button type="button" onClick={() => { setBankSearch(''); setShowBankDropdown(true) }}
+                      className="w-full flex items-center justify-between px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-xl text-sm font-bold hover:border-indigo-300 transition-all text-left focus:outline-none">
                       {selectedBank.name}
-                      <span className="text-gray-400">▼</span>
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
                     </button>
                   ) : (
-                    <div className="border border-gray-300 rounded-lg overflow-hidden">
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-                        <input type="text" value={bankSearch} onChange={(e) => setBankSearch(e.target.value)} placeholder="Search bank..." className="w-full pl-10 pr-4 py-3 border-b border-gray-200 text-sm focus:outline-none" autoFocus />
+                    <div className="border-2 border-indigo-300 rounded-xl overflow-hidden bg-white shadow-lg">
+                      <div className="relative border-b border-gray-100">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input type="text" value={bankSearch} onChange={e => setBankSearch(e.target.value)}
+                          placeholder="Search bank…"
+                          className="w-full pl-9 pr-4 py-3 text-sm focus:outline-none bg-transparent font-medium"
+                          autoFocus />
                       </div>
-                      <div className="max-h-48 overflow-y-auto">
+                      <div className="max-h-48 overflow-y-auto no-scrollbar">
                         {filteredBanks.length === 0 ? (
                           <p className="px-4 py-3 text-sm text-gray-400">No bank found</p>
-                        ) : (
-                          filteredBanks.map((bank) => (
-                            <button key={bank.code} type="button" onClick={() => { setSelectedBank(bank); setBankSearch(''); setShowBankDropdown(false) }} className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-gray-50 transition ${selectedBank.code === bank.code ? 'text-BATAMART-primary font-semibold bg-blue-50' : 'text-gray-800'}`}>
-                              {bank.name}
-                              {selectedBank.code === bank.code && <span className="text-BATAMART-primary">✓</span>}
-                            </button>
-                          ))
-                        )}
+                        ) : filteredBanks.map(bank => (
+                          <button key={bank.code} type="button"
+                            onClick={() => { setSelectedBank(bank); setBankSearch(''); setShowBankDropdown(false) }}
+                            className={`bank-option w-full text-left px-4 py-2.5 text-sm flex items-center justify-between ${selectedBank.code === bank.code ? 'text-indigo-600 font-black bg-indigo-50' : 'text-gray-800 font-medium'}`}>
+                            {bank.name}
+                            {selectedBank.code === bank.code && <CheckCircle2 className="w-4 h-4 text-indigo-500" />}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* Account Number */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Number</label>
-                <input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))} placeholder="10-digit account number" maxLength={10} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-BATAMART-primary focus:border-transparent" required />
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Account Number</label>
+                <input type="text" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                  placeholder="10-digit account number" maxLength={10}
+                  className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-xl text-sm font-mono tracking-widest focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                  required />
               </div>
 
+              {/* Account Name */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Name</label>
-                <input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="As it appears on your bank account" className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-BATAMART-primary focus:border-transparent" required />
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Account Name</label>
+                <input type="text" value={accountName} onChange={e => setAccountName(e.target.value)}
+                  placeholder="As it appears on your bank account"
+                  className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-xl text-sm font-medium focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                  required />
               </div>
 
+              {/* Summary */}
               {withdrawAmount && parseFloat(withdrawAmount) >= 1000 && accountNumber.length >= 10 && accountName && (
-                <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-2">
-                  <p className="font-bold text-gray-700">Withdrawal Summary</p>
-                  <div className="flex justify-between"><span className="text-gray-500">Amount</span><span className="font-bold">₦{parseFloat(withdrawAmount).toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Bank</span><span className="font-semibold">{selectedBank.name}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Account No.</span><span className="font-mono font-semibold">{accountNumber}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Account Name</span><span className="font-semibold">{accountName}</span></div>
+                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-sm space-y-2">
+                  <p className="font-black text-indigo-700 text-xs uppercase tracking-wider">Summary</p>
+                  {[
+                    { label: 'Amount', value: fmtShort(parseFloat(withdrawAmount)) },
+                    { label: 'Bank', value: selectedBank.name },
+                    { label: 'Account No.', value: accountNumber },
+                    { label: 'Account Name', value: accountName },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex justify-between">
+                      <span className="text-gray-500">{label}</span>
+                      <span className="font-bold text-gray-900 text-right max-w-[55%] break-words">{value}</span>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              <p className="text-xs text-gray-400 flex items-center gap-1">🔢 Your 6-digit PIN will be required to authorise this withdrawal.</p>
-
-              <div className="flex gap-3">
-                <button type="button" onClick={() => { setShowWithdrawModal(false); setPendingWithdrawal(null); setPinError('') }} className="flex-1 py-3 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
-                <button type="submit" disabled={withdrawing} className="flex-1 py-3 text-white rounded-lg text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
-                  {withdrawing ? 'Processing...' : 'Enter PIN'}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowWithdrawModal(false)}
+                  className="flex-1 py-3.5 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all">
+                  Cancel
+                </button>
+                <button type="submit" disabled={withdrawing}
+                  className="flex-1 py-3.5 text-white rounded-2xl text-sm font-black transition-all disabled:opacity-50 shadow-lg"
+                  style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                  {withdrawing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Enter PIN →'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </ModalShell>
       )}
 
       {/* ── PIN Entry Modal ── */}
       {showPinEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-5">
-            <div className="text-center">
-              <div className="text-4xl mb-2">🔢</div>
-              <h3 className="text-lg font-black text-gray-900">Enter Withdrawal PIN</h3>
-              <p className="text-sm text-gray-400">Enter your 6-digit PIN to authorise</p>
+        <ModalShell onClose={() => { setShowPinEntry(false); setPinValue(''); setPinError(''); setPendingWithdrawal(null) }}>
+          <div className="p-6 space-y-5 text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+              <Lock className="w-7 h-7 text-white" />
             </div>
-            <div className="flex justify-center gap-2 mb-1">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className={`w-3 h-3 rounded-full transition-all ${i < pinValue.length ? 'bg-BATAMART-primary scale-110' : 'bg-gray-200'}`} />
-              ))}
+            <div>
+              <h3 className="text-lg font-black text-gray-900">Enter PIN</h3>
+              <p className="text-sm text-gray-400 mt-1">Authorise your withdrawal of {pendingWithdrawal ? fmtShort(pendingWithdrawal.amount) : ''}</p>
             </div>
+            <PinDots value={pinValue} />
             <input
-              type="password"
-              inputMode="numeric"
-              maxLength={6}
-              value={pinValue}
-              onChange={e => setPinValue(e.target.value.replace(/\D/g, ''))}
+              type="password" inputMode="numeric" maxLength={6}
+              value={pinValue} onChange={e => setPinValue(e.target.value.replace(/\D/g, ''))}
               onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none"
-              placeholder="••••••"
-              autoFocus
+              className="w-full px-4 py-4 border-2 border-gray-100 rounded-2xl text-center text-3xl font-black tracking-[0.6em] focus:border-indigo-400 focus:outline-none transition-all bg-gray-50 focus:bg-white"
+              placeholder="••••••" autoFocus
             />
-            {pinError && <p className="text-red-500 text-sm text-center font-medium">{pinError}</p>}
+            {pinError && (
+              <p className="text-red-500 text-sm font-bold flex items-center justify-center gap-1.5">
+                <AlertCircle className="w-4 h-4" /> {pinError}
+              </p>
+            )}
             <div className="flex gap-3">
-              <button onClick={() => { setShowPinEntry(false); setPinValue(''); setPinError(''); setPendingWithdrawal(null) }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
-              <button onClick={handlePinSubmit} disabled={pinLoading || pinValue.length !== 6} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
-                {pinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Confirm'}
+              <button onClick={() => { setShowPinEntry(false); setPinValue(''); setPinError(''); setPendingWithdrawal(null) }}
+                className="flex-1 py-3.5 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-700">Cancel</button>
+              <button onClick={handlePinSubmit} disabled={pinLoading || pinValue.length !== 6}
+                className="flex-1 py-3.5 text-white rounded-2xl text-sm font-black disabled:opacity-50 shadow-lg transition-all"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                {pinLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Confirm'}
               </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
 
-      {/* ── Set / Change PIN Modal ── */}
+      {/* ── Set/Change PIN Modal ── */}
       {showSetPin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-5">
+        <ModalShell onClose={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError('') }}>
+          <div className="p-6 space-y-5">
             <div className="text-center">
-              <div className="text-4xl mb-2">🔐</div>
-              <h3 className="text-lg font-black text-gray-900">{user.hasWithdrawalPin ? 'Change Withdrawal PIN' : 'Set Withdrawal PIN'}</h3>
-              <p className="text-sm text-gray-400">A 6-digit PIN to secure your withdrawals</p>
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                <Key className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-lg font-black text-gray-900">{user.hasWithdrawalPin ? 'Change PIN' : 'Set Withdrawal PIN'}</h3>
+              <p className="text-sm text-gray-400 mt-1">6-digit PIN to secure your withdrawals</p>
             </div>
 
             {savePinSuccess ? (
-              <div className="text-center py-4 space-y-2">
-                <div className="text-5xl">✅</div>
-                <p className="font-bold text-gray-900">PIN {user.hasWithdrawalPin ? 'Updated' : 'Set'}!</p>
-                <p className="text-sm text-gray-400">You can now use your PIN for withdrawals.</p>
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-3 success-pulse">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                </div>
+                <p className="font-black text-gray-900 text-lg">PIN {user.hasWithdrawalPin ? 'Updated' : 'Set'}!</p>
+                <p className="text-sm text-gray-400 mt-1">You can now withdraw funds securely.</p>
               </div>
             ) : (
               <>
-                {/* Current PIN — only shown when changing existing PIN */}
                 {user.hasWithdrawalPin && (
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-semibold text-gray-700">Current PIN</label>
-                      <button
-                        type="button"
-                        onClick={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError(''); setShowForgotPin(true); setForgotPinStep('send'); setForgotPinError(''); setForgotPinSuccess(false) }}
-                        className="text-xs text-BATAMART-primary hover:underline font-semibold"
-                      >
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-black text-gray-500 uppercase tracking-wider">Current PIN</label>
+                      <button type="button"
+                        onClick={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError(''); setShowForgotPin(true); setForgotStep('send'); setForgotError(''); setForgotSuccess(false) }}
+                        className="text-xs text-indigo-600 font-black hover:underline">
                         Forgot PIN?
                       </button>
                     </div>
-                    <input type="password" inputMode="numeric" maxLength={6} value={currentPin} onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" autoFocus />
+                    <input type="password" inputMode="numeric" maxLength={6} value={currentPin}
+                      onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-2xl text-center text-2xl font-black tracking-[0.5em] focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                      placeholder="••••••" autoFocus />
                   </div>
                 )}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">New PIN</label>
-                  <input type="password" inputMode="numeric" maxLength={6} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">New PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={newPin}
+                    onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-2xl text-center text-2xl font-black tracking-[0.5em] focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                    placeholder="••••••" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm New PIN</label>
-                  <input type="password" inputMode="numeric" maxLength={6} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Confirm New PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={confirmPin}
+                    onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-2xl text-center text-2xl font-black tracking-[0.5em] focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                    placeholder="••••••" />
                 </div>
-                {savePinError && <p className="text-red-500 text-sm font-medium">{savePinError}</p>}
+                {savePinError && (
+                  <p className="text-red-500 text-sm font-bold flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" /> {savePinError}
+                  </p>
+                )}
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
-                  <button onClick={handleSetPinSubmit} disabled={savePinLoading || newPin.length !== 6 || confirmPin.length !== 6} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
-                    {savePinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Save PIN'}
+                  <button onClick={() => { setShowSetPin(false); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setSavePinError('') }}
+                    className="flex-1 py-3.5 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-700">Cancel</button>
+                  <button onClick={handleSetPinSubmit} disabled={savePinLoading || newPin.length !== 6 || confirmPin.length !== 6}
+                    className="flex-1 py-3.5 text-white rounded-2xl text-sm font-black disabled:opacity-50 shadow-lg"
+                    style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                    {savePinLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save PIN'}
                   </button>
                 </div>
               </>
             )}
           </div>
-        </div>
+        </ModalShell>
       )}
 
       {/* ── Forgot PIN Modal ── */}
       {showForgotPin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-5">
+        <ModalShell onClose={() => { setShowForgotPin(false); setForgotError('') }}>
+          <div className="p-6 space-y-5">
             <div className="text-center">
-              <div className="text-4xl mb-2">🔑</div>
-              <h3 className="text-lg font-black text-gray-900">Reset Withdrawal PIN</h3>
-              <p className="text-sm text-gray-400">
-                {forgotPinStep === 'send' ? "We'll send a verification code to your email" : `Enter the code sent to ${forgotPinEmail}`}
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                style={{ background: 'linear-gradient(135deg, #f97316, #dc2626)' }}>
+                <RotateCcw className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-lg font-black text-gray-900">Reset PIN</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                {forgotStep === 'send' ? "We'll send a code to your email" : `Code sent to ${forgotEmail}`}
               </p>
             </div>
 
-            {forgotPinSuccess ? (
-              <div className="text-center py-4 space-y-2">
-                <div className="text-5xl">✅</div>
-                <p className="font-bold text-gray-900">PIN Reset!</p>
-                <p className="text-sm text-gray-400">Your new withdrawal PIN has been set.</p>
+            {forgotSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                </div>
+                <p className="font-black text-gray-900 text-lg">PIN Reset!</p>
+                <p className="text-sm text-gray-400 mt-1">Your new PIN has been set.</p>
               </div>
-            ) : forgotPinStep === 'send' ? (
+            ) : forgotStep === 'send' ? (
               <>
-                <p className="text-sm text-gray-500 text-center">A 6-digit OTP will be sent to your registered email address to verify it's you.</p>
-                {forgotPinError && <p className="text-red-500 text-sm font-medium text-center">{forgotPinError}</p>}
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-sm text-blue-700 font-medium">
+                  A 6-digit OTP will be sent to your registered email address.
+                </div>
+                {forgotError && <p className="text-red-500 text-sm font-bold flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> {forgotError}</p>}
                 <div className="flex gap-3">
-                  <button onClick={() => { setShowForgotPin(false); setForgotPinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
-                  <button onClick={handleForgotPinSendOtp} disabled={forgotPinLoading} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
-                    {forgotPinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Send OTP'}
+                  <button onClick={() => { setShowForgotPin(false); setForgotError('') }}
+                    className="flex-1 py-3.5 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-700">Cancel</button>
+                  <button onClick={handleForgotSendOtp} disabled={forgotLoading}
+                    className="flex-1 py-3.5 text-white rounded-2xl text-sm font-black disabled:opacity-50 shadow-lg"
+                    style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                    {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Send OTP'}
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">OTP Code</label>
-                  <input type="text" inputMode="numeric" maxLength={6} value={forgotPinOtp} onChange={e => setForgotPinOtp(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" autoFocus />
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">OTP Code</label>
+                  <input type="text" inputMode="numeric" maxLength={6} value={forgotOtp}
+                    onChange={e => setForgotOtp(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-2xl text-center text-2xl font-black tracking-[0.5em] focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                    placeholder="••••••" autoFocus />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">New PIN</label>
-                  <input type="password" inputMode="numeric" maxLength={6} value={forgotPinNew} onChange={e => setForgotPinNew(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">New PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={forgotNew}
+                    onChange={e => setForgotNew(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-2xl text-center text-2xl font-black tracking-[0.5em] focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                    placeholder="••••••" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Confirm New PIN</label>
-                  <input type="password" inputMode="numeric" maxLength={6} value={forgotPinConfirm} onChange={e => setForgotPinConfirm(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-center text-2xl font-bold tracking-[0.5em] focus:border-BATAMART-primary focus:outline-none" placeholder="••••••" />
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Confirm New PIN</label>
+                  <input type="password" inputMode="numeric" maxLength={6} value={forgotConfirm}
+                    onChange={e => setForgotConfirm(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-transparent rounded-2xl text-center text-2xl font-black tracking-[0.5em] focus:border-indigo-400 focus:bg-white focus:outline-none transition-all"
+                    placeholder="••••••" />
                 </div>
-                {forgotPinError && <p className="text-red-500 text-sm font-medium">{forgotPinError}</p>}
+                {forgotError && <p className="text-red-500 text-sm font-bold flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> {forgotError}</p>}
                 <div className="flex gap-3">
-                  <button onClick={() => { setForgotPinStep('send'); setForgotPinOtp(''); setForgotPinError('') }} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">← Back</button>
-                  <button onClick={handleForgotPinVerify} disabled={forgotPinLoading || forgotPinOtp.length !== 6 || forgotPinNew.length !== 6 || forgotPinConfirm.length !== 6} className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}>
-                    {forgotPinLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : 'Reset PIN'}
+                  <button onClick={() => { setForgotStep('send'); setForgotOtp(''); setForgotError('') }}
+                    className="flex-1 py-3.5 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-700">← Back</button>
+                  <button onClick={handleForgotVerify}
+                    disabled={forgotLoading || forgotOtp.length !== 6 || forgotNew.length !== 6 || forgotConfirm.length !== 6}
+                    className="flex-1 py-3.5 text-white rounded-2xl text-sm font-black disabled:opacity-50 shadow-lg"
+                    style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                    {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Reset PIN'}
                   </button>
                 </div>
-                <button onClick={handleForgotPinSendOtp} disabled={forgotPinLoading} className="w-full text-xs text-gray-400 hover:text-BATAMART-primary transition text-center">
+                <button onClick={handleForgotSendOtp} disabled={forgotLoading}
+                  className="w-full text-xs text-gray-400 hover:text-indigo-600 transition-colors text-center font-semibold">
                   Didn't receive code? Resend
                 </button>
               </>
             )}
           </div>
-        </div>
+        </ModalShell>
       )}
 
-      {/* ── PIN Required Modal (no PIN set yet) ── */}
+      {/* ── PIN Required Modal ── */}
       {showPinRequired && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 text-center">
-            <div className="text-5xl">🔐</div>
-            <h3 className="text-lg font-black text-gray-900">Set a Withdrawal PIN</h3>
-            <p className="text-sm text-gray-500">You need to set a 6-digit PIN before you can withdraw funds. This keeps your earnings safe.</p>
+        <ModalShell onClose={() => setShowPinRequired(false)}>
+          <div className="p-6 space-y-5 text-center">
+            <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto"
+              style={{ background: 'linear-gradient(135deg, #f97316, #dc2626)' }}>
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-gray-900">PIN Required</h3>
+              <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto leading-relaxed">
+                Set a 6-digit withdrawal PIN to keep your earnings safe before you can withdraw.
+              </p>
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => setShowPinRequired(false)} className="flex-1 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">Cancel</button>
+              <button onClick={() => setShowPinRequired(false)}
+                className="flex-1 py-3.5 border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-700">Later</button>
               <button
                 onClick={() => { setShowPinRequired(false); setNewPin(''); setConfirmPin(''); setSavePinError(''); setSavePinSuccess(false); setShowSetPin(true) }}
-                className="flex-1 py-3 text-white rounded-xl text-sm font-bold transition"
-                style={{ background: 'linear-gradient(135deg, #1a3f8f, #3b9ef5)' }}
-              >
+                className="flex-1 py-3.5 text-white rounded-2xl text-sm font-black shadow-lg transition-all hover:scale-[1.02]"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
                 Set PIN Now
               </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
-
     </div>
   )
-} 
+}
