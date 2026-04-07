@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, usePathname } from 'next/navigation'
 
 function IOSAppShellInner({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const isAppParam = searchParams.get('app') === 'true'
   const isAndroid = searchParams.get('android') === 'true'
 
@@ -56,6 +57,8 @@ function IOSAppShellInner({ children }: { children: React.ReactNode }) {
         {/* This div is the ONLY thing that scrolls */}
         <div
           id="ios-scroll-area"
+          key={pathname || 'root'}
+          className="app-route-enter"
           style={{
             flex: 1,
             overflowY: 'scroll',
@@ -74,7 +77,12 @@ function IOSAppShellInner({ children }: { children: React.ReactNode }) {
 
   // Non-iOS or browser — render normally, no shell
   return (
-    <div id="page-scroll-container" style={{ paddingBottom: 'calc(64px + max(env(safe-area-inset-bottom), 16px))' }}>
+    <div
+      id="page-scroll-container"
+      key={pathname || 'root'}
+      className={isApp ? 'app-route-enter' : ''}
+      style={{ paddingBottom: 'calc(64px + max(env(safe-area-inset-bottom), 16px))' }}
+    >
       {children}
     </div>
   )

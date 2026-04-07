@@ -210,7 +210,7 @@ function RiderBottomNav({ onLogout }: { onLogout: () => void }) {
               <Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-400' : 'text-gray-500'
                 }`}
               >
@@ -268,7 +268,7 @@ function RiderBottomNav({ onLogout }: { onLogout: () => void }) {
               <Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-400' : 'text-gray-500'
                 }`}
               >
@@ -287,7 +287,7 @@ function RiderBottomNav({ onLogout }: { onLogout: () => void }) {
 
           <button
             onClick={() => setProfileOpen(true)}
-            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
               profileOpen ? 'text-blue-400' : 'text-gray-500'
             }`}
           >
@@ -482,7 +482,7 @@ function AppBottomNav({
               <Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-600' : 'text-gray-400'
                 }`}
               >
@@ -522,7 +522,7 @@ function AppBottomNav({
               <Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-600' : 'text-gray-400'
                 }`}
               >
@@ -539,7 +539,7 @@ function AppBottomNav({
 
           <button
             onClick={() => setProfileOpen(true)}
-            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
               profileOpen ? 'text-blue-600' : 'text-gray-400'
             }`}
           >
