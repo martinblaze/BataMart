@@ -357,6 +357,28 @@ export default function RiderDashboardPage() {
                       )}
                     </div>
 
+                    <div className="mb-3 p-3 bg-emerald-50 rounded-xl">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                        <p className="text-xs font-bold text-emerald-700 uppercase">Return to seller</p>
+                      </div>
+                      <div className="text-sm space-y-0.5">
+                        <p className="font-semibold text-gray-800">
+                          {order.seller?.hostelName || order.product?.hostelName || 'Seller hostel not set'}
+                          {order.seller?.roomNumber ? `, Room ${order.seller.roomNumber}` : ''}
+                        </p>
+                        {order.seller?.landmark && <p className="text-gray-500 text-xs">{order.seller.landmark}</p>}
+                        {order.seller?.phone && (
+                          <p className="text-emerald-700 font-semibold flex items-center gap-1 mt-1">
+                            <Phone className="w-3 h-3" /> {order.seller.phone}
+                          </p>
+                        )}
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          Seller: <span className="font-semibold text-gray-700">{order.seller?.name || 'N/A'}</span>
+                        </p>
+                      </div>
+                    </div>
+
                     {order.status === 'RIDER_ASSIGNED' && (
                       <button
                         onClick={() => markDisputePickedUp(order.id)}

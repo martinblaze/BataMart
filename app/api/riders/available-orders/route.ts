@@ -72,7 +72,15 @@ export async function GET(request: NextRequest) {
       },
       include: {
         product: true,
-        seller:  { select: { name: true, phone: true } },
+        seller:  {
+          select: {
+            name: true,
+            phone: true,
+            hostelName: true,
+            roomNumber: true,
+            landmark: true,
+          },
+        },
         buyer:   { select: { name: true, phone: true } },
         dispute: {
           select: {
