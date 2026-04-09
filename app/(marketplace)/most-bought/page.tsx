@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Loader2, TrendingUp, Users } from 'lucide-react'
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { getClientCache, setClientCache } from '@/lib/client-cache'
 
 interface DailyBoughtItem {
   key: string
@@ -27,8 +25,6 @@ interface DailyBoughtItem {
 }
 
 const PAGE_SIZE = 20
-const MOST_BOUGHT_CACHE_KEY = 'batamart_most_bought_cache_v1'
-const MOST_BOUGHT_CACHE_TTL = 1000 * 60 * 30
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -39,14 +35,12 @@ const fmt = (n: number) =>
 
 export default function MostBoughtPage() {
   const router = useRouter()
-  const isOnline = useOnlineStatus()
   const [items, setItems] = useState<DailyBoughtItem[]>([])
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
-  const [usingCachedData, setUsingCachedData] = useState(false)
   const [navigatingProductId, setNavigatingProductId] = useState<string | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -68,48 +62,22 @@ export default function MostBoughtPage() {
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Failed to load most bought feed')
-        if (!append) {
-          const cached = getClientCache<DailyBoughtItem[]>(MOST_BOUGHT_CACHE_KEY)
-          if (cached?.value?.length) {
-            setItems(cached.value)
-            setUsingCachedData(true)
-          }
-        }
         return
       }
       const nextItems = (data.items || []) as DailyBoughtItem[]
-      const merged = append ? [...items, ...nextItems] : nextItems
       setItems(prev => append ? [...prev, ...nextItems] : nextItems)
       setHasMore(!!data.hasMore)
       setPage(targetPage)
-      if (!append) {
-        setUsingCachedData(false)
-        setClientCache(MOST_BOUGHT_CACHE_KEY, merged, MOST_BOUGHT_CACHE_TTL)
-      }
     } catch {
       setError('Network error. Please try again.')
-      if (!append) {
-        const cached = getClientCache<DailyBoughtItem[]>(MOST_BOUGHT_CACHE_KEY)
-        if (cached?.value?.length) {
-          setItems(cached.value)
-          setUsingCachedData(true)
-          setError('')
-        }
-      }
     } finally {
       append ? setLoadingMore(false) : setLoading(false)
     }
-  }, [router, items])
+  }, [router])
 
   useEffect(() => {
-    const cached = getClientCache<DailyBoughtItem[]>(MOST_BOUGHT_CACHE_KEY)
-    if (cached?.value?.length) {
-      setItems(cached.value)
-      setUsingCachedData(true)
-      setLoading(false)
-    }
     fetchPage(1, false)
-  }, [fetchPage])
+  }, [])
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore || loading || loadingMore) return
@@ -155,14 +123,6 @@ export default function MostBoughtPage() {
             Updated every day and stacked over time. Keep scrolling.
           </p>
         </div>
-
-        {(!isOnline || usingCachedData) && (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700">
-            {!isOnline
-              ? 'Offline mode: showing last synced most-bought feed.'
-              : 'Showing cached feed while syncing latest updates...'}
-          </div>
-        )}
 
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">

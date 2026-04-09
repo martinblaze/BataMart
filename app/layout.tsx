@@ -13,7 +13,6 @@ import SplashScreen from '@/components/SplashScreen'
 import InstallPrompt from '@/components/InstallPrompt'
 import IosInstallPrompt from '@/components/IosInstallPrompt'
 import { IOSAppShell } from '@/components/layout/IOSAppShell'
-import { OfflineStatusBanner } from '@/components/layout/OfflineStatusBanner'
 import { RoutePrefetcher } from '@/components/layout/RoutePrefetcher'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -166,7 +165,6 @@ export default function RootLayout({
 
       <body className={inter.className}>
         <ThemeProvider>
-          <OfflineStatusBanner />
           <RoutePrefetcher />
           <PWARegister />
           <SplashScreen />

@@ -11,8 +11,7 @@ import {
   X, BadgeCheck, AlertCircle, Tag,
 } from 'lucide-react'
 import { OrderNotificationBanner } from '@/components/layout/OrderNotificationBanner'
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { getClientCache, setClientCache } from '@/lib/client-cache'
+
 
 // ── Parse variant summary out of orderNote ────────────────────────────────────
 // Format stored by checkout: "[Order: 128GB · Black · UK Used] — extra note"
@@ -69,10 +68,7 @@ interface Order {
   seller: Seller; product: Product; rider?: Rider; reviews?: Review[]; productReviews?: ProductReview[]
 }
 
-const ORDERS_CACHE_KEY = 'batamart_orders_cache_v1'
-const PEOPLE_LIKE_CACHE_KEY = 'batamart_people_like_orders_cache_v1'
-const ORDERS_CACHE_TTL = 1000 * 60 * 3
-const PEOPLE_LIKE_CACHE_TTL = 1000 * 60 * 15
+
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; ring: string; dot: string }> = {
   PENDING: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', ring: 'ring-amber-200', dot: 'bg-amber-400' },
@@ -100,7 +96,6 @@ function StatusBadge({ status }: { status: string }) {
 export default function OrdersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const isOnline = useOnlineStatus()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -109,7 +104,6 @@ export default function OrdersPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [peopleLikeYouBought, setPeopleLikeYouBought] = useState<PeopleLikeYouItem[]>([])
-  const [usingCachedData, setUsingCachedData] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -135,16 +129,6 @@ export default function OrdersPage() {
       window.history.replaceState({}, '', '/orders')
     }
 
-    try {
-      const cachedOrders = getClientCache<Order[]>(ORDERS_CACHE_KEY)
-      if (cachedOrders?.value?.length) {
-        setOrders(cachedOrders.value)
-        setUsingCachedData(true)
-      }
-      const cachedPeople = getClientCache<PeopleLikeYouItem[]>(PEOPLE_LIKE_CACHE_KEY)
-      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
-    } catch {}
-
     fetchOrders()
     fetchPeopleLikeYouBought()
   }, [searchParams])
@@ -157,8 +141,6 @@ export default function OrdersPage() {
       if (response.ok) {
         const nextOrders = data.orders || []
         setOrders(nextOrders)
-        setUsingCachedData(false)
-        setClientCache(ORDERS_CACHE_KEY, nextOrders, ORDERS_CACHE_TTL)
       }
     } catch (error) { console.error('Error fetching orders:', error) }
     finally { setLoading(false) }
@@ -175,7 +157,6 @@ export default function OrdersPage() {
       if (response.ok) {
         const items = data.items || []
         setPeopleLikeYouBought(items)
-        setClientCache(PEOPLE_LIKE_CACHE_KEY, items, PEOPLE_LIKE_CACHE_TTL)
       }
     } catch {}
   }
@@ -267,13 +248,6 @@ export default function OrdersPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {(!isOnline || usingCachedData) && (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700">
-            {!isOnline
-              ? 'You are offline. Showing last synced orders.'
-              : 'Showing cached orders while refreshing latest data...'}
-          </div>
-        )}
 
         {peopleLikeYouBought.length > 0 && (
           <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
