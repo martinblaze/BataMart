@@ -627,6 +627,246 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
 }
 
 // ─────────────────────────────────────────────
+// Seeded shuffle — different order every render, consistent within a render
+// ─────────────────────────────────────────────
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const a = [...arr]
+  let s = seed
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff
+    const j = Math.abs(s) % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// ─────────────────────────────────────────────
+// Price-Range Deal Panels (Amazon "Shop X for less" style)
+// ─────────────────────────────────────────────
+const PRICE_PANELS = [
+  {
+    title: 'Shop Fashion for Less',
+    category: 'Fashion',
+    catFilter: 'Fashion',
+    tiers: [
+      { label: 'Under ₦10k',  max: 10000 },
+      { label: 'Under ₦20k',  max: 20000 },
+      { label: 'Under ₦30k',  max: 30000 },
+      { label: 'Under ₦50k',  max: 50000 },
+    ],
+    bg: 'from-pink-50 to-rose-50',
+    accent: '#ec4899',
+    icon: '👔',
+  },
+  {
+    title: 'Tech Deals on Campus',
+    category: 'Electronics',
+    catFilter: 'Electronics',
+    tiers: [
+      { label: 'Under ₦20k',  max: 20000 },
+      { label: 'Under ₦50k',  max: 50000 },
+      { label: 'Under ₦100k', max: 100000 },
+      { label: 'Under ₦200k', max: 200000 },
+    ],
+    bg: 'from-violet-50 to-indigo-50',
+    accent: '#6366f1',
+    icon: '📱',
+  },
+  {
+    title: 'Beauty Picks for Less',
+    category: 'Beauty & Personal Care',
+    catFilter: 'Beauty & Personal Care',
+    tiers: [
+      { label: 'Under ₦5k',   max: 5000 },
+      { label: 'Under ₦10k',  max: 10000 },
+      { label: 'Under ₦20k',  max: 20000 },
+      { label: 'Under ₦30k',  max: 30000 },
+    ],
+    bg: 'from-fuchsia-50 to-pink-50',
+    accent: '#db2777',
+    icon: '💄',
+  },
+  {
+    title: 'Food & Snacks Under Budget',
+    category: 'Groceries / Food / Fast Food',
+    catFilter: 'Groceries / Food / Fast Food',
+    tiers: [
+      { label: 'Under ₦2k',   max: 2000 },
+      { label: 'Under ₦5k',   max: 5000 },
+      { label: 'Under ₦10k',  max: 10000 },
+      { label: 'Under ₦20k',  max: 20000 },
+    ],
+    bg: 'from-orange-50 to-amber-50',
+    accent: '#f97316',
+    icon: '🍔',
+  },
+]
+
+function PricePanelsRow({ allProducts, onCategorySelect, renderSeed }: {
+  allProducts: any[]
+  onCategorySelect: (cat: string, maxPrice?: number) => void
+  renderSeed: number
+}) {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {PRICE_PANELS.map((panel, pi) => {
+        const catProds = allProducts.filter(p => p.category === panel.catFilter)
+        return (
+          <div key={panel.title} className={`bg-gradient-to-br ${panel.bg} rounded-2xl border border-white shadow-sm overflow-hidden`}>
+            <div className="p-3 pb-2">
+              <p className="text-sm font-black text-gray-900 leading-tight">{panel.title}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-1 px-2 pb-1">
+              {panel.tiers.map((tier, ti) => {
+                const tierProds = catProds.filter(p => p.price <= tier.max)
+                const shuffled = seededShuffle(tierProds, renderSeed + pi * 100 + ti)
+                const pick = shuffled[0]
+                return (
+                  <div
+                    key={tier.label}
+                    onClick={() => onCategorySelect(panel.catFilter, tier.max)}
+                    className="cursor-pointer group"
+                  >
+                    <div className="aspect-square rounded-xl overflow-hidden bg-white shadow-sm mb-1 relative">
+                      {pick ? (
+                        <img src={pick.images[0] || '/placeholder.png'} alt={pick.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl">{panel.icon}</div>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-bold text-gray-600 text-center leading-tight pb-1">{tier.label}</p>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="px-3 pb-3">
+              <button
+                onClick={() => onCategorySelect(panel.catFilter)}
+                style={{ color: panel.accent }}
+                className="text-[11px] font-black flex items-center gap-1 hover:underline"
+              >
+                See all deals <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
+// Amazon-style Category Showcase Panels
+// ─────────────────────────────────────────────
+const SHOWCASE_PANELS = [
+  {
+    title: 'Level up your Tech',
+    catFilter: 'Electronics',
+    subcats: ['Phones', 'Laptops', 'Earbuds', 'Power Banks'],
+    bg: 'from-violet-50 to-indigo-50',
+    accent: '#6366f1',
+    icon: '📱',
+    cta: 'Explore Tech',
+  },
+  {
+    title: 'Campus Fashion',
+    catFilter: 'Fashion',
+    subcats: ['Sneakers', 'Bags', 'Watches', 'Accessories'],
+    bg: 'from-pink-50 to-rose-50',
+    accent: '#ec4899',
+    icon: '👔',
+    cta: 'Shop Fashion',
+  },
+  {
+    title: 'Home & Kitchen',
+    catFilter: 'Home & Kitchen',
+    subcats: ['Furniture', 'Appliances', 'Bedding', 'Decor'],
+    bg: 'from-sky-50 to-blue-50',
+    accent: '#0891b2',
+    icon: '🏠',
+    cta: 'Shop Home',
+  },
+  {
+    title: 'Food & Snacks',
+    catFilter: 'Groceries / Food / Fast Food',
+    subcats: ['Jollof Rice', 'Snacks', 'Drinks', 'Fast Food'],
+    bg: 'from-orange-50 to-amber-50',
+    accent: '#f97316',
+    icon: '🍔',
+    cta: 'Order Food',
+  },
+  {
+    title: 'Gaming Zone',
+    catFilter: 'Gaming',
+    subcats: ['PS5', 'Xbox', 'Controllers', 'Games'],
+    bg: 'from-emerald-50 to-green-50',
+    accent: '#16a34a',
+    icon: '🎮',
+    cta: 'Game On',
+  },
+  {
+    title: 'Beauty & Care',
+    catFilter: 'Beauty & Personal Care',
+    subcats: ['Skincare', 'Makeup', 'Hair', 'Perfume'],
+    bg: 'from-fuchsia-50 to-pink-50',
+    accent: '#db2777',
+    icon: '💄',
+    cta: 'Shop Beauty',
+  },
+]
+
+function ShowcasePanels({ allProducts, onCategorySelect, renderSeed }: {
+  allProducts: any[]
+  onCategorySelect: (cat: string) => void
+  renderSeed: number
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {SHOWCASE_PANELS.map((panel, pi) => {
+        const catProds = allProducts.filter(p => p.category === panel.catFilter)
+        // Pick 4 random products, shuffled differently each render
+        const shuffled = seededShuffle(catProds, renderSeed + pi * 37)
+        const picks = shuffled.slice(0, 4)
+        return (
+          <div
+            key={panel.title}
+            className={`bg-gradient-to-br ${panel.bg} rounded-2xl border border-white shadow-sm overflow-hidden cursor-pointer group`}
+            onClick={() => onCategorySelect(panel.catFilter)}
+          >
+            <div className="p-3 pb-1">
+              <p className="text-sm font-black text-gray-900 leading-tight">{panel.title}</p>
+            </div>
+            {picks.length > 0 ? (
+              <div className="grid grid-cols-2 gap-1 px-2 pb-1">
+                {picks.map((p, i) => (
+                  <div key={p.id + i} className="aspect-square rounded-lg overflow-hidden bg-white shadow-sm">
+                    <img src={p.images[0] || '/placeholder.png'} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-1 px-2 pb-1">
+                {panel.subcats.map((sub, i) => (
+                  <div key={i} className="aspect-square rounded-lg bg-white/70 flex flex-col items-center justify-center p-1">
+                    <span className="text-lg">{panel.icon}</span>
+                    <span className="text-[8px] font-bold text-gray-600 text-center leading-tight mt-0.5">{sub}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="px-3 pb-3">
+              <span style={{ color: panel.accent }} className="text-[11px] font-black flex items-center gap-1">
+                {panel.cta} <ChevronRight className="w-3 h-3" />
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────
 // Best Sellers Row
 // ─────────────────────────────────────────────
 function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }: {
@@ -942,6 +1182,8 @@ export default function MarketplacePage() {
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState<string>('')
   const [peopleLikeYouBought, setPeopleLikeYouBought] = useState<any[]>([])
+  const [renderSeed,          setRenderSeed]          = useState(() => Date.now())
+  const [maxPriceFilter,      setMaxPriceFilter]      = useState<number | null>(null)
 
   // ── Referral popup — shows once per app session, only on first marketplace visit ──
   const [showReferralPopup, setShowReferralPopup] = useState(false)
@@ -1033,7 +1275,7 @@ export default function MarketplacePage() {
 
   // ── Category change ──
   useEffect(() => {
-    if (selectedCategory === 'All') { fetchFeed() } else { fetchByCategory(selectedCategory) }
+    if (selectedCategory === 'All') { setMaxPriceFilter(null); fetchFeed() } else { fetchByCategory(selectedCategory) }
   }, [selectedCategory])
 
   // ─────────────────────────────────────────────
@@ -1185,6 +1427,7 @@ export default function MarketplacePage() {
       if (res.ok) {
         const products = data.products || []
         setAllProducts(products)
+        setRenderSeed(Date.now())
         const cats = Array.from(new Set(
           products.filter((p: any) => p.isPersonalised).map((p: any) => p.category)
         )) as string[]
@@ -1256,6 +1499,15 @@ export default function MarketplacePage() {
     window.open(`https://wa.me/?text=${text}`, '_blank')
   }
 
+  const handleCategorySelect = (cat: string, maxPrice?: number) => {
+    setSelectedCategory(cat)
+    if (maxPrice !== undefined) {
+      setMaxPriceFilter(maxPrice)
+    } else {
+      setMaxPriceFilter(null)
+    }
+  }
+
   const handleProductClick = (id: string) => {
     const token = localStorage.getItem('token')
     try {
@@ -1302,10 +1554,11 @@ export default function MarketplacePage() {
     return allProducts.filter(p => !shown.has(p.id)).slice(0, 16)
   }, [allProducts, forYouProducts, trendingProducts, newListings])
 
-  const filteredByCategory = useMemo(() =>
-    selectedCategory === 'All' ? allProducts : allProducts.filter(p => p.category === selectedCategory),
-    [allProducts, selectedCategory]
-  )
+  const filteredByCategory = useMemo(() => {
+    let prods = selectedCategory === 'All' ? allProducts : allProducts.filter(p => p.category === selectedCategory)
+    if (maxPriceFilter !== null) prods = prods.filter(p => p.price <= maxPriceFilter)
+    return prods
+  }, [allProducts, selectedCategory, maxPriceFilter])
 
   const productsByCategory = useMemo(() => {
     const map: Record<string, any[]> = {}
@@ -1654,13 +1907,19 @@ export default function MarketplacePage() {
           <div>
             <div className="flex items-center gap-2 mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
               <button
-                onClick={() => setSelectedCategory('All')}
+                onClick={() => handleCategorySelect('All')}
                 className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors flex items-center gap-1"
               >
                 <ChevronLeft className="w-3.5 h-3.5" /> All
               </button>
               <span className="text-gray-300">/</span>
               <span className="text-sm font-bold text-gray-700">{selectedCategory}</span>
+              {maxPriceFilter !== null && (
+                <span className="flex items-center gap-1 ml-1 px-2 py-0.5 bg-BATAMART-primary/10 text-BATAMART-primary rounded-full text-[11px] font-black">
+                  <Tag className="w-3 h-3" /> Under {fmt(maxPriceFilter)}
+                  <button onClick={() => setMaxPriceFilter(null)} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
+                </span>
+              )}
               <span className="ml-auto text-[11px] text-gray-400 font-medium">{filteredByCategory.length} items</span>
             </div>
             {filteredByCategory.length === 0 ? (
@@ -1714,20 +1973,22 @@ export default function MarketplacePage() {
               </div>
             )}
 
+            {/* ── Shop by Category (showcase panels) ── */}
             {allProducts.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-base font-black text-gray-800 section-header-line">Shop by Category</h2>
                 </div>
-                <CategorySpotlightGrid allProducts={allProducts} onCategorySelect={setSelectedCategory} />
+                <ShowcasePanels allProducts={allProducts} onCategorySelect={handleCategorySelect} renderSeed={renderSeed} />
               </div>
             )}
 
+            {/* ── Flash Deals (trending) ── */}
             {trendingProducts.length > 0 && (
               <DealsSection
                 products={trendingProducts}
                 onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('All')}
+                onSeeAll={() => handleCategorySelect('All')}
                 sectionClass="section-stripe-orange"
                 icon={<Flame className="w-5 h-5 text-white" />}
                 title="Flash Deals"
@@ -1736,16 +1997,29 @@ export default function MarketplacePage() {
               />
             )}
 
+            {/* ── Picked for You ── */}
             {forYouProducts.length > 0 && (
               <BestSellersRow
                 products={forYouProducts}
                 onProductClick={handleProductClick}
-                onSeeAll={() => setSelectedCategory('All')}
+                onSeeAll={() => handleCategorySelect('All')}
                 title="Picked for You"
                 subtitle="Based on what you browse, search, and order"
               />
             )}
 
+            {/* ── Price-range deal panels ── */}
+            {allProducts.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-base font-black text-gray-800 section-header-line">Campus Deals by Budget</h2>
+                  <span className="text-[11px] text-gray-400 font-medium">Tap a price to filter</span>
+                </div>
+                <PricePanelsRow allProducts={allProducts} onCategorySelect={handleCategorySelect} renderSeed={renderSeed} />
+              </div>
+            )}
+
+            {/* ── People Like You Bought ── */}
             {peopleLikeYouBought.length > 0 && (
               <BestSellersRow
                 products={peopleLikeYouBought}
@@ -1756,6 +2030,7 @@ export default function MarketplacePage() {
               />
             )}
 
+            {/* ── Recently Viewed ── */}
             {recentlyViewed.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-end justify-between px-5 pt-5 pb-3 border-b border-gray-50">
@@ -1774,16 +2049,22 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {productsByCategory['Tech Gadgets']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Tech Gadgets']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Tech Gadgets')} title="Best Sellers in Tech Gadgets" subtitle="Top picks from campus techies" />
-            )}
-            {productsByCategory['Fashion & Clothing']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Fashion & Clothing']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Fashion & Clothing')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" />
-            )}
-            {productsByCategory['Food Services']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Food Services']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Food Services')} title="Best Sellers in Food & Dining" subtitle="Eat well, study harder" />
+            {/* ── Best Sellers: Electronics ── */}
+            {(productsByCategory['Electronics']?.length > 0) && (
+              <BestSellersRow products={productsByCategory['Electronics']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Electronics')} title="Best Sellers in Tech" subtitle="Top picks from campus techies" />
             )}
 
+            {/* ── Best Sellers: Fashion ── */}
+            {(productsByCategory['Fashion']?.length > 0) && (
+              <BestSellersRow products={productsByCategory['Fashion']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Fashion')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" />
+            )}
+
+            {/* ── Best Sellers: Food ── */}
+            {(productsByCategory['Groceries / Food / Fast Food']?.length > 0) && (
+              <BestSellersRow products={productsByCategory['Groceries / Food / Fast Food']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Groceries / Food / Fast Food')} title="Best Sellers in Food & Snacks" subtitle="Eat well, study harder" />
+            )}
+
+            {/* ── Your Interests ── */}
             {interestCategories.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center gap-2 mb-3">
@@ -1797,7 +2078,7 @@ export default function MarketplacePage() {
                     return (
                       <button
                         key={cat}
-                        onClick={() => setSelectedCategory(cat)}
+                        onClick={() => handleCategorySelect(cat)}
                         className="interest-pill card-enter flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm"
                         style={{ animationDelay: `${i * 50}ms` }}
                       >
@@ -1809,23 +2090,23 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {productsByCategory['School Supplies']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['School Supplies']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('School Supplies')} title="Best Sellers in School Supplies" subtitle="Gear up for the semester" />
-            )}
-            {productsByCategory['Cosmetics']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Cosmetics']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Cosmetics')} title="Best Sellers in Beauty & Cosmetics" subtitle="Top-rated by campus students" />
+            {/* ── Best Sellers: Beauty ── */}
+            {(productsByCategory['Beauty & Personal Care']?.length > 0) && (
+              <BestSellersRow products={productsByCategory['Beauty & Personal Care']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Beauty & Personal Care')} title="Best Sellers in Beauty & Care" subtitle="Top-rated by campus students" />
             )}
 
+            {/* ── Best Sellers: Gaming ── */}
+            {(productsByCategory['Gaming']?.length > 0) && (
+              <BestSellersRow products={productsByCategory['Gaming']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Gaming')} title="Best Sellers in Gaming" subtitle="Level up your setup" />
+            )}
+
+            {/* ── Discover More ── */}
             {discoverProducts.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-black text-gray-900 section-header-line">Discover More</h2>
                     <p className="text-xs text-gray-400 mt-1">Explore everything on campus</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-400">
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline font-medium">Filter</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -1836,17 +2117,12 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {productsByCategory['Room Essentials']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Room Essentials']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Room Essentials')} title="Finds for Your Room" subtitle="Make your hostel feel like home" />
-            )}
-            {productsByCategory['Books']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Books']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Books')} title="Books & Academic Resources" subtitle="Study smarter with the right materials" />
-            )}
-            {productsByCategory['Snacks']?.length > 0 && (
-              <BestSellersRow products={productsByCategory['Snacks']} onProductClick={handleProductClick} onSeeAll={() => setSelectedCategory('Snacks')} title="Snacks & Treats" subtitle="Fuel your study sessions" />
+            {/* ── Best Sellers: Home & Kitchen ── */}
+            {(productsByCategory['Home & Kitchen']?.length > 0) && (
+              <BestSellersRow products={productsByCategory['Home & Kitchen']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Home & Kitchen')} title="Finds for Your Room" subtitle="Make your hostel feel like home" />
             )}
 
-            {/* Just Dropped — always last, infinite scroll */}
+            {/* ── Just Dropped — always last ── */}
             <JustDroppedSection allProducts={allProducts} onProductClick={handleProductClick} />
 
             {allProducts.length === 0 && (
