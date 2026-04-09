@@ -119,10 +119,9 @@ function ConfirmListingModal({ price, onConfirm, onCancel }: { price: number; on
   const receive = price * 0.95
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="scale-in relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-md p-6 z-10 max-h-[90vh] overflow-y-auto">
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5 sm:hidden" />
+      <div className="scale-in relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 z-10 max-h-[85vh] overflow-y-auto mx-4">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
             <AlertCircle className="w-5 h-5 text-amber-500" />
@@ -178,7 +177,10 @@ function ConfirmListingModal({ price, onConfirm, onCancel }: { price: number; on
         </div>
 
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors"
+          >
             Go Back
           </button>
           <button
@@ -371,7 +373,6 @@ export default function SellPage() {
           const areas = parseJsonArray(u?.university?.deliveryAreas)
           if (areas.length > 0) {
             setDeliveryAreas(areas)
-            // Pre-fill location from profile
             if (u.hostelName) setFormData(f => ({ ...f, hostelName: u.hostelName || '' }))
             if (u.roomNumber) setFormData(f => ({ ...f, roomNumber: u.roomNumber || '' }))
             if (u.landmark)   setFormData(f => ({ ...f, landmark: u.landmark || '' }))
@@ -421,7 +422,7 @@ export default function SellPage() {
     return []
   }
 
-  // ── Image upload — uses base64 JSON body (matches /api/upload exactly) ──────
+  // ── Image upload ──────────────────────────────────────────────────────────
   const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
   const MAX_IMAGE_SIZE_MB = 8
 
@@ -461,7 +462,6 @@ export default function SellPage() {
       const reader = new FileReader()
       reader.onloadend = async () => {
         const base64 = reader.result as string
-        // Show preview immediately with uploading spinner
         setImages(prev => [...prev, { preview: base64, url: '', uploading: true }])
         const cloudUrl = await uploadToCloudinary(base64)
         if (cloudUrl) {
@@ -516,7 +516,6 @@ export default function SellPage() {
       const catLabel = CATEGORY_TREE[categoryKey]?.label ?? categoryKey
       const subLabel = CATEGORY_TREE[categoryKey]?.subcategories[subcategoryKey]?.label ?? subcategoryKey
 
-      // Encode variant + tag data into description (base64 JSON, backward compatible)
       const description = encodeProductData(variantValues, tags)
 
       const response = await fetch('/api/products', {
