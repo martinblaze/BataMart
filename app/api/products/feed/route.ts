@@ -93,8 +93,6 @@ export async function GET(request: NextRequest) {
         quantity:     { gt: 0 },
         isDeleted:    false,
         universityId: user.universityId,
-        // Exclude the user's own products from their feed
-        NOT: { sellerId: user.id },
       },
       include: {
         seller: {
