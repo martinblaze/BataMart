@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic'
-// app/api/products/[id]/route.ts - FULLY FIXED VERSION
+// app/api/products/[id]/route.ts - FULLY FIXED VERSION WITH INTERNAL API SECRET
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -11,6 +11,19 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Check for internal API secret (for WhatsApp crawler / OG meta fetches)
+    const authHeader = request.headers.get('Authorization')
+    const isInternal = authHeader === `Bearer ${process.env.INTERNAL_API_SECRET}`
+    
+    // Only enforce user authentication for non-internal requests
+    let user = null
+    if (!isInternal) {
+      user = await getUserFromRequest(request)
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    }
+
     const product = await prisma.product.findUnique({
       where: { id: params.id },
       include: {
@@ -18,12 +31,12 @@ export async function GET(
           select: {
             id: true,
             name: true,
-            avgRating: true, // Changed from 'rating' to 'avgRating'
+            avgRating: true,
             trustLevel: true,
             completedOrders: true,
-            profilePhoto: true, // Added for display
-            hostelName: true, // Added for display
-            roomNumber: true, // Added for display
+            profilePhoto: true,
+            hostelName: true,
+            roomNumber: true,
           },
         },
       },
@@ -33,11 +46,14 @@ export async function GET(
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
 
-    // Increment view count
-    await prisma.product.update({
-      where: { id: params.id },
-      data: { viewCount: { increment: 1 } },
-    })
+    // Increment view count (only for authenticated users or internal requests)
+    // This prevents spam from crawlers
+    if (!isInternal) {
+      await prisma.product.update({
+        where: { id: params.id },
+        data: { viewCount: { increment: 1 } },
+      }).catch(err => console.error('View count increment failed:', err))
+    }
 
     return NextResponse.json({ product })
   } catch (error) {
