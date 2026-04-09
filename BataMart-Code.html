@@ -7156,11 +7156,6 @@ function getSignal(productId: string, index: number) {
   return { icon: signal.icon, text: signal.text(count) }
 }
 
-function getDiscount(productId: string) {
-  const hash = productId.charCodeAt(0) * 3 + productId.charCodeAt(productId.length - 1)
-  return [10, 15, 20, 25, 30, 0, 0, 0][hash % 8]
-}
-
 function getStockLevel(productId: string) {
   const hash = productId.charCodeAt(0) + productId.charCodeAt(1)
   return [null, null, null, 3, 5, 7, null, null][hash % 8]
@@ -7225,11 +7220,15 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
   product: any; onClick: () =&gt; void; delay?: number; showSignal?: boolean
 }) {
   const tags         = parseTags(product.description)
-  const discount     = getDiscount(product.id)
+  // Use real discount from market price check (stored in DB), not a fake computed value
+  const discount     = (product.isDeal &amp;&amp; product.discountPercent) ? product.discountPercent : 0
   const stockLeft    = getStockLevel(product.id)
   const deliveryTag  = getDeliveryTag(product.id)
   const signal       = showSignal ? getSignal(product.id, delay) : null
-  const originalPrice = discount ? Math.round(product.price * (1 + discount / 100)) : null
+  // Show the actual market price as the "original" crossed-out price when it's a deal
+  const originalPrice = (product.isDeal &amp;&amp; product.marketPrice &amp;&amp; product.marketPrice &gt; product.price)
+    ? Math.round(product.marketPrice)
+    : null
 
   return (
     &lt;div
@@ -7257,8 +7256,8 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
           )}
         &lt;/div&gt;
         {discount &gt; 0 &amp;&amp; (
-          &lt;div className="float-badge absolute top-2 right-2 discount-badge text-white text-[11px] font-black px-2 py-1 rounded-lg"&gt;
-            -{discount}%
+          &lt;div className="float-badge absolute top-2 right-2 discount-badge text-white text-[11px] font-black px-2 py-1 rounded-lg flex items-center gap-1"&gt;
+            &lt;Percent className="w-2.5 h-2.5" /&gt;-{discount}%
           &lt;/div&gt;
         )}
         {product.images?.length &gt; 1 &amp;&amp; (
@@ -8671,7 +8670,7 @@ export default function MarketplacePage() {
               {CATEGORIES.map(cat =&gt; (
                 &lt;button
                   key={cat.name}
-                  onClick={() =&gt; setSelectedCategory(cat.name)}
+                  onClick={() =&gt; handleCategorySelect(cat.name)}
                   className={`cat-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold whitespace-nowrap text-[11px] sm:text-xs flex-shrink-0 transition-all ${
                     selectedCategory === cat.name
                       ? 'cat-active bg-white text-BATAMART-primary shadow-sm'
@@ -10676,6 +10675,7 @@ export default function OrdersPage() {
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/dispute/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/review-product/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/review-seller/page.tsx</div><pre>Could not read file.</pre></div>
+<div class='file-block'><div class='file-header'>app/(marketplace)/product/[id]/layout.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/product/[id]/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/product/[id]/reviews/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/products/[productId]/reviews/page.tsx</div><pre>Could not read file.</pre></div>
@@ -13227,8 +13227,19 @@ export default function SellPage() {
         }),
       })
       const data = await response.json()
-      if (response.ok) router.push('/my-shop')
-      else setError(data.error || 'Failed to create product')
+      if (response.ok) {
+        // Product is listed immediately — fire price check in background (non-blocking)
+        if (data.product?.id) {
+          fetch('/api/price-check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ productId: data.product.id }),
+          }).catch(() =&gt; {}) // silent fail — never blocks listing
+        }
+        router.push('/my-shop')
+      } else {
+        setError(data.error || 'Failed to create product')
+      }
     } catch { setError('Network error. Please try again.') }
     finally { setLoading(false) }
   }
@@ -26709,6 +26720,365 @@ async function notifySellerOfNewOrder(
 
   await Promise.allSettled(tasks)
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/api/price-check/route.ts</div><pre>// app/api/price-check/route.ts
+// Background job: checks market price for a product and updates it in DB.
+// Called AFTER product is already created — product is never blocked on this.
+
+export const dynamic = 'force-dynamic'
+
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth/auth'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface PriceResult {
+  marketPrice: number | null
+  discountPercent: number | null
+  isDeal: boolean
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Pause execution briefly between requests */
+const delay = (ms: number) =&gt; new Promise(res =&gt; setTimeout(res, ms))
+
+/** Build a clean search query from product data */
+function buildSearchQuery(
+  name: string,
+  variants: string[],
+  condition: string,
+): string {
+  const variantStr = variants.slice(0, 3).join(' ')
+  return `${name} ${variantStr} ${condition} price Nigeria`.trim()
+}
+
+/** Detect condition from variant/tag strings */
+function detectCondition(variantValues: string[]): 'USED' | 'NEW' | 'REFURBISHED' {
+  const all = variantValues.join(' ').toLowerCase()
+  if (all.includes('used') || all.includes('fairly used') || all.includes('uk used')) return 'USED'
+  if (all.includes('refurb')) return 'REFURBISHED'
+  return 'NEW'
+}
+
+/** Parse a price string into a number, returns null if unparseable */
+function parsePrice(raw: string): number | null {
+  if (!raw) return null
+  // Remove currency symbols, spaces, commas
+  const cleaned = raw.replace(/[₦,\s]/g, '').replace(/[^\d.]/g, '')
+  const num = parseFloat(cleaned)
+  return isFinite(num) &amp;&amp; num &gt; 0 ? num : null
+}
+
+/** Remove statistical outliers using IQR method */
+function removeOutliers(prices: number[]): number[] {
+  if (prices.length &lt; 4) return prices
+  const sorted = [...prices].sort((a, b) =&gt; a - b)
+  const q1 = sorted[Math.floor(sorted.length * 0.25)]
+  const q3 = sorted[Math.floor(sorted.length * 0.75)]
+  const iqr = q3 - q1
+  return sorted.filter(p =&gt; p &gt;= q1 - 1.5 * iqr &amp;&amp; p &lt;= q3 + 1.5 * iqr)
+}
+
+/** Calculate median of an array of numbers */
+function median(prices: number[]): number {
+  const sorted = [...prices].sort((a, b) =&gt; a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid]
+}
+
+/** Check if a result title is relevant to the product name */
+function isTitleRelevant(title: string, productName: string): boolean {
+  const titleLower = title.toLowerCase()
+  const words = productName.toLowerCase().split(/\s+/).filter(w =&gt; w.length &gt; 2)
+  // At least 40% of meaningful words should appear in the title
+  const matchCount = words.filter(w =&gt; titleLower.includes(w)).length
+  return matchCount &gt;= Math.max(1, Math.floor(words.length * 0.4))
+}
+
+// ── Scrapers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch prices from Jiji.ng (for USED items).
+ * Uses their internal search API endpoint.
+ */
+async function fetchJijiPrices(query: string, productName: string): Promise&lt;number[]&gt; {
+  try {
+    const encoded = encodeURIComponent(query)
+    const url = `https://jiji.ng/api_web/v1/listing?query=${encoded}&amp;init_page=true`
+
+    const controller = new AbortController()
+    const timer = setTimeout(() =&gt; controller.abort(), 8000)
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; BataMart/1.0)',
+        Accept: 'application/json',
+      },
+    })
+    clearTimeout(timer)
+
+    if (!res.ok) return []
+    const json = await res.json()
+
+    const adverts: any[] = json?.adverts_list?.adverts || []
+    const prices: number[] = []
+
+    for (const ad of adverts) {
+      const title = ad?.title || ''
+      const priceRaw = String(ad?.price_obj?.value || ad?.price || '')
+      if (!isTitleRelevant(title, productName)) continue
+      const price = parsePrice(priceRaw)
+      if (price &amp;&amp; price &gt; 500) prices.push(price)
+    }
+
+    return prices
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Fetch prices from Jumia Nigeria (for NEW / REFURBISHED items).
+ * Scrapes the public search results HTML page.
+ */
+async function fetchJumiaPrices(query: string, productName: string): Promise&lt;number[]&gt; {
+  try {
+    const encoded = encodeURIComponent(query)
+    const url = `https://www.jumia.com.ng/catalog/?q=${encoded}`
+
+    const controller = new AbortController()
+    const timer = setTimeout(() =&gt; controller.abort(), 10000)
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; BataMart/1.0)',
+        Accept: 'text/html',
+      },
+    })
+    clearTimeout(timer)
+
+    if (!res.ok) return []
+    const html = await res.text()
+
+    // Extract JSON-LD or inline product data
+    const prices: number[] = []
+
+    // Match price patterns in Jumia's HTML
+    // They use data-price attributes and structured formats
+    const dataPriceMatches = html.matchAll(/data-price="([\d.]+)"/g)
+    for (const m of dataPriceMatches) {
+      const price = parsePrice(m[1])
+      if (price &amp;&amp; price &gt; 500) prices.push(price)
+    }
+
+    // Also try matching from article tags with price class
+    const articleMatches = html.matchAll(/&lt;article[^&gt;]*&gt;([\s\S]*?)&lt;\/article&gt;/g)
+    for (const articleMatch of articleMatches) {
+      const block = articleMatch[1]
+      // Check if title matches
+      const nameMatch = block.match(/title="([^"]+)"/)
+      if (nameMatch &amp;&amp; !isTitleRelevant(nameMatch[1], productName)) continue
+      // Extract price
+      const priceMatch = block.match(/[\u20a6]([\d,]+)/)
+      if (priceMatch) {
+        const price = parsePrice(priceMatch[1])
+        if (price &amp;&amp; price &gt; 500) prices.push(price)
+      }
+    }
+
+    return prices
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Fallback: ValueSERP Google Shopping API.
+ * Only called when Jiji/Jumia return no results.
+ */
+async function fetchValueSerpPrices(query: string, productName: string): Promise&lt;number[]&gt; {
+  try {
+    const apiKey = process.env.VALUESERP_API_KEY
+    if (!apiKey) return []
+
+    const encoded = encodeURIComponent(query)
+    const url = `https://api.valueserp.com/search?api_key=${apiKey}&amp;q=${encoded}&amp;location=Nigeria&amp;gl=ng&amp;hl=en&amp;search_type=shopping&amp;num=20`
+
+    const controller = new AbortController()
+    const timer = setTimeout(() =&gt; controller.abort(), 10000)
+
+    const res = await fetch(url, { signal: controller.signal })
+    clearTimeout(timer)
+
+    if (!res.ok) return []
+    const json = await res.json()
+
+    const results: any[] = json?.shopping_results || []
+    const prices: number[] = []
+
+    for (const item of results) {
+      const title = item?.title || ''
+      if (!isTitleRelevant(title, productName)) continue
+      const priceRaw = String(item?.price || item?.extracted_price || '')
+      const price = parsePrice(priceRaw)
+      if (price &amp;&amp; price &gt; 500) prices.push(price)
+    }
+
+    return prices
+  } catch {
+    return []
+  }
+}
+
+// ── Core price check function ─────────────────────────────────────────────────
+
+async function checkMarketPrice(
+  name: string,
+  price: number,
+  variantValues: string[],
+  category: string,
+): Promise&lt;PriceResult&gt; {
+  const condition = detectCondition(variantValues)
+  const query = buildSearchQuery(name, variantValues, condition)
+
+  let prices: number[] = []
+
+  try {
+    // Step 1: Primary scraper based on condition
+    if (condition === 'USED') {
+      prices = await fetchJijiPrices(query, name)
+    } else {
+      prices = await fetchJumiaPrices(query, name)
+    }
+
+    await delay(300)
+
+    // Step 2: Fallback to ValueSERP if no results
+    if (prices.length &lt; 2) {
+      const fallbackPrices = await fetchValueSerpPrices(query, name)
+      prices = [...prices, ...fallbackPrices]
+    }
+
+    // Step 3: Filter, clean, and compute
+    if (prices.length &lt; 2) {
+      return { marketPrice: null, discountPercent: null, isDeal: false }
+    }
+
+    const cleaned = removeOutliers(prices)
+    if (cleaned.length &lt; 1) {
+      return { marketPrice: null, discountPercent: null, isDeal: false }
+    }
+
+    const marketPrice = Math.round(median(cleaned))
+
+    // Step 4: Compare
+    if (price &lt; marketPrice) {
+      const discountPercent = Math.round(((marketPrice - price) / marketPrice) * 100)
+      // Only show as deal if discount is meaningful (≥5%)
+      if (discountPercent &gt;= 5) {
+        return { marketPrice, discountPercent, isDeal: true }
+      }
+    }
+
+    return { marketPrice, discountPercent: null, isDeal: false }
+  } catch {
+    return { marketPrice: null, discountPercent: null, isDeal: false }
+  }
+}
+
+// ── Route handlers ────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/price-check
+ * Body: { productId }
+ * Called in background after product creation.
+ * Updates product with marketPrice, discountPercent, isDeal fields.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { productId } = body
+
+    if (!productId) {
+      return NextResponse.json({ error: 'productId required' }, { status: 400 })
+    }
+
+    // Fetch the product
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        category: true,
+        subcategory: true,
+        description: true,
+        sellerId: true,
+      },
+    })
+
+    if (!product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    }
+
+    // Security: only the seller can trigger price check for their product
+    if (product.sellerId !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Extract variant values from encoded description
+    let variantValues: string[] = []
+    try {
+      // Description is encoded as VARIANTS_V2:... by encodeProductData
+      if (product.description?.startsWith('VARIANTS_V2:')) {
+        const json = JSON.parse(product.description.slice('VARIANTS_V2:'.length))
+        variantValues = Object.values(json.variants || {}).flat() as string[]
+      }
+    } catch {
+      // ignore parse errors
+    }
+
+    // Run the check
+    const result = await checkMarketPrice(
+      product.name,
+      product.price,
+      variantValues,
+      product.category,
+    )
+
+    // Update product — only if we got a valid result
+    if (result.marketPrice !== null) {
+      await prisma.product.update({
+        where: { id: productId },
+        data: {
+          marketPrice: result.marketPrice,
+          discountPercent: result.discountPercent,
+          isDeal: result.isDeal,
+        },
+      })
+    }
+
+    return NextResponse.json({ success: true, ...result })
+  } catch (error) {
+    console.error('Price check error:', error)
+    // Never break — always return a safe response
+    return NextResponse.json({
+      success: false,
+      marketPrice: null,
+      discountPercent: null,
+      isDeal: false,
+    })
+  }
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/route.ts</div><pre>// app/api/products/route.ts
 export const dynamic = 'force-dynamic'
 
@@ -34187,8 +34557,11 @@ model Product {
   deletedAt    DateTime?
   isDeleted    Boolean         @default(false)
   universityId String?
-  subcategory  String?
-  cartItems    CartItem[]
+  subcategory     String?
+  marketPrice     Float?          // Median market price found online via price-check
+  discountPercent Int?            // % cheaper than market; null = not a deal
+  isDeal          Boolean         @default(false)
+  cartItems       CartItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   university   University?     @relation(fields: [universityId], references: [id])

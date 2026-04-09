@@ -151,8 +151,12 @@ model Product {
   deletedAt    DateTime?
   isDeleted    Boolean         @default(false)
   universityId String?
-  subcategory  String?
-  cartItems    CartItem[]
+  subcategory     String?
+  marketPrice     Float?          // Median market price found online via price-check
+  discountPercent Int?            // % cheaper than market; null = not a deal
+  isDeal          Boolean         @default(false)
+  lastCheckedAt   DateTime?       // When market price was last fetched
+  cartItems       CartItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   university   University?     @relation(fields: [universityId], references: [id])

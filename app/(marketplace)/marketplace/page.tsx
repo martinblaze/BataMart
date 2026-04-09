@@ -332,11 +332,6 @@ function getSignal(productId: string, index: number) {
   return { icon: signal.icon, text: signal.text(count) }
 }
 
-function getDiscount(productId: string) {
-  const hash = productId.charCodeAt(0) * 3 + productId.charCodeAt(productId.length - 1)
-  return [10, 15, 20, 25, 30, 0, 0, 0][hash % 8]
-}
-
 function getStockLevel(productId: string) {
   const hash = productId.charCodeAt(0) + productId.charCodeAt(1)
   return [null, null, null, 3, 5, 7, null, null][hash % 8]
@@ -401,11 +396,15 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
   product: any; onClick: () => void; delay?: number; showSignal?: boolean
 }) {
   const tags         = parseTags(product.description)
-  const discount     = getDiscount(product.id)
+  // Use real discount from market price check (stored in DB), not a fake computed value
+  const discount     = (product.isDeal && product.discountPercent) ? product.discountPercent : 0
   const stockLeft    = getStockLevel(product.id)
   const deliveryTag  = getDeliveryTag(product.id)
   const signal       = showSignal ? getSignal(product.id, delay) : null
-  const originalPrice = discount ? Math.round(product.price * (1 + discount / 100)) : null
+  // Show the actual market price as the "original" crossed-out price when it's a deal
+  const originalPrice = (product.isDeal && product.marketPrice && product.marketPrice > product.price)
+    ? Math.round(product.marketPrice)
+    : null
 
   return (
     <div
@@ -433,8 +432,8 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
           )}
         </div>
         {discount > 0 && (
-          <div className="float-badge absolute top-2 right-2 discount-badge text-white text-[11px] font-black px-2 py-1 rounded-lg">
-            -{discount}%
+          <div className="float-badge absolute top-2 right-2 discount-badge text-white text-[11px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
+            <Percent className="w-2.5 h-2.5" />-{discount}%
           </div>
         )}
         {product.images?.length > 1 && (
@@ -1847,7 +1846,7 @@ export default function MarketplacePage() {
               {CATEGORIES.map(cat => (
                 <button
                   key={cat.name}
-                  onClick={() => setSelectedCategory(cat.name)}
+                  onClick={() => handleCategorySelect(cat.name)}
                   className={`cat-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold whitespace-nowrap text-[11px] sm:text-xs flex-shrink-0 transition-all ${
                     selectedCategory === cat.name
                       ? 'cat-active bg-white text-BATAMART-primary shadow-sm'
