@@ -1,4 +1,5 @@
 // app/(marketplace)/orders/page.tsx
+// ── UPGRADED: Parses variant selection from orderNote and displays it ─────────
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -7,11 +8,43 @@ import Link from 'next/link'
 import {
   Star, CheckCircle, Loader2, Package, MapPin, User,
   Bike, ChevronRight, ArrowRight, ShoppingBag, Clock,
-  X, BadgeCheck, AlertCircle,
+  X, BadgeCheck, AlertCircle, Tag,
 } from 'lucide-react'
 import { OrderNotificationBanner } from '@/components/layout/OrderNotificationBanner'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { getClientCache, setClientCache } from '@/lib/client-cache'
+
+// ── Parse variant summary out of orderNote ────────────────────────────────────
+// Format stored by checkout: "[Order: 128GB · Black · UK Used] — extra note"
+function parseVariantNote(orderNote?: string | null): { variantSummary: string; extraNote: string } {
+  if (!orderNote) return { variantSummary: '', extraNote: '' }
+  const match = orderNote.match(/^\[Order:\s*([^\]]+)\](?:\s*—\s*(.*))?$/s)
+  if (match) return { variantSummary: match[1]?.trim() || '', extraNote: match[2]?.trim() || '' }
+  return { variantSummary: '', extraNote: orderNote }
+}
+
+function VariantBadges({ orderNote }: { orderNote?: string | null }) {
+  const { variantSummary, extraNote } = parseVariantNote(orderNote)
+  if (!variantSummary && !extraNote) return null
+  const chips = variantSummary ? variantSummary.split(' · ').filter(Boolean) : []
+  return (
+    <div className="mt-1.5 space-y-1">
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {chips.map(chip => (
+            <span key={chip} className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-600 font-bold px-2.5 py-0.5 rounded-full">
+              <Tag className="w-2.5 h-2.5" />
+              {chip}
+            </span>
+          ))}
+        </div>
+      )}
+      {extraNote && (
+        <p className="text-[10px] text-gray-400 italic">Note: {extraNote}</p>
+      )}
+    </div>
+  )
+}
 
 interface ProductReview { id: string; rating: number; comment: string; createdAt: string }
 interface Review { id: string; type: string; rating: number; comment: string | null; createdAt: string }
@@ -32,6 +65,7 @@ interface PeopleLikeYouItem {
 interface Order {
   id: string; orderNumber?: string; status: string; totalAmount: number; quantity?: number
   deliveryAddress: string; createdAt: string; completedAt?: string; isPaid?: boolean
+  orderNote?: string | null
   seller: Seller; product: Product; rider?: Rider; reviews?: Review[]; productReviews?: ProductReview[]
 }
 
@@ -361,6 +395,8 @@ export default function OrdersPage() {
                           )}
                         </p>
                       </div>
+                      {/* ── Variant badges from order note ── */}
+                      <VariantBadges orderNote={order.orderNote} />
                       <div className="flex items-center gap-3 mt-2.5">
                         <span className="text-BATAMART-primary font-black text-lg">{formatPrice(order.totalAmount)}</span>
                         <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full font-semibold">

@@ -66,6 +66,8 @@ export async function GET(request: NextRequest) {
 
     const formattedOrders = orders.map(order => ({
       ...order,
+      // ── Include orderNote so variant display works on the orders page ──
+      orderNote: order.orderNote ?? null,
       deliveryAddress: `${order.deliveryHostel}, Room ${order.deliveryRoom}${order.deliveryLandmark ? `, ${order.deliveryLandmark}` : ''}`,
       isPaid: order.status === 'COMPLETED',
     }))

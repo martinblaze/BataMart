@@ -1,8 +1,3 @@
-// prisma/schema.prisma
-// ============================================================
-// COMPLETE PRISMA SCHEMA — BATAMART
-// ============================================================
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
@@ -13,6 +8,549 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
   schemas   = ["public"]
+}
+
+model University {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  shortName     String    @unique
+  slug          String    @unique
+  location      String
+  isActive      Boolean   @default(true)
+  deliveryAreas Json      @default("[]")
+  hostels       Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  products      Product[]
+  users         User[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@schema("public")
+}
+
+model User {
+  id                       String              @id @default(cuid())
+  phone                    String              @unique
+  email                    String?             @unique
+  password                 String
+  matricNumber             String?             @unique
+  name                     String
+  profilePhoto             String?
+  role                     UserRole            @default(BUYER)
+  isSellerMode             Boolean             @default(true)
+  hostelName               String?
+  roomNumber               String?
+  landmark                 String?
+  bio                      String?
+  trustLevel               TrustLevel          @default(BRONZE)
+  avgRating                Float               @default(0)
+  totalReviews             Int                 @default(0)
+  completedOrders          Int                 @default(0)
+  penaltyPoints            Int                 @default(0)
+  isSuspended              Boolean             @default(false)
+  suspendedUntil           DateTime?
+  warningCount             Int                 @default(0)
+  lastWarningAt            DateTime?
+  pendingBalance           Decimal             @default(0) @db.Decimal(12, 2)
+  availableBalance         Decimal             @default(0) @db.Decimal(12, 2)
+  isRiderVerified          Boolean             @default(false)
+  riderIdDocument          String?
+  isAvailable              Boolean             @default(true)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  suspensionReason         String?
+  deletedAt                DateTime?
+  isDeleted                Boolean             @default(false)
+  referralCode             String              @unique
+  referredById             String?
+  withdrawalPin            String?
+  withdrawalPinAttempts    Int                 @default(0)
+  withdrawalPinLockedUntil DateTime?
+  universityId             String?
+  auditLogs                AuditLog[]
+  cart                     Cart?
+  buyerBatches             DeliveryBatch[]     @relation("BuyerBatches")
+  riderBatches             DeliveryBatch[]     @relation("RiderBatches")
+  disputesAsBuyer          Dispute[]           @relation("BuyerDisputes")
+  resolvedDisputes         Dispute[]           @relation("ResolvedBy")
+  disputesAsSeller         Dispute[]           @relation("SellerDisputes")
+  notifications            Notification[]
+  orders                   Order[]             @relation("BuyerOrders")
+  riderDeliveries          Order[]             @relation("RiderDeliveries")
+  sellerOrders             Order[]             @relation("SellerOrders")
+  issuedPenalties          Penalty[]           @relation("IssuedBy")
+  penaltiesReceived        Penalty[]           @relation("UserPenalties")
+  products                 Product[]
+  productReviewsGiven      ProductReview[]     @relation("ProductReviewsGiven")
+  pushSubscriptions        PushSubscription[]
+  referralRewardsGenerated ReferralReward[]    @relation("ReferredUserRewards")
+  referralRewardsEarned    ReferralReward[]    @relation("ReferrerRewards")
+  reportsReceived          Report[]            @relation("ReportsReceived")
+  reportsSubmitted         Report[]            @relation("ReportsSubmitted")
+  resolvedReports          Report[]            @relation("ResolvedBy")
+  reviewsReceived          Review[]            @relation("UserReviewsReceived")
+  reviewsGiven             Review[]            @relation("UserReviewsGiven")
+  supportTickets           SupportTicket[]
+  transactions             Transaction[]
+  referredBy               User?               @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals                User[]              @relation("UserReferrals")
+  university               University?         @relation(fields: [universityId], references: [id])
+  withdrawalRequests       WithdrawalRequest[]
+
+  @@index([role])
+  @@index([trustLevel])
+  @@index([isSuspended])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([referralCode])
+  @@index([universityId])
+  @@schema("public")
+}
+
+model DeliveryBatch {
+  id               String      @id @default(cuid())
+  batchNumber      String      @unique
+  buyerId          String
+  riderId          String?
+  universityId     String
+  paymentReference String?
+  referralPaid     Boolean     @default(false)
+  status           BatchStatus @default(PENDING)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  buyer            User        @relation("BuyerBatches", fields: [buyerId], references: [id])
+  rider            User?       @relation("RiderBatches", fields: [riderId], references: [id])
+  orders           Order[]
+
+  @@index([buyerId])
+  @@index([riderId])
+  @@index([status])
+  @@index([universityId])
+  @@schema("public")
+}
+
+model Product {
+  id           String          @id @default(cuid())
+  name         String
+  description  String
+  price        Float
+  images       String[]
+  category     String
+  quantity     Int             @default(1)
+  hostelName   String
+  roomNumber   String
+  landmark     String
+  sellerId     String
+  isActive     Boolean         @default(true)
+  viewCount    Int             @default(0)
+  avgRating    Float           @default(0)
+  totalReviews Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
+  isDeleted    Boolean         @default(false)
+  universityId String?
+  subcategory  String?
+  cartItems    CartItem[]
+  orders       Order[]
+  seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  university   University?     @relation(fields: [universityId], references: [id])
+  reviews      ProductReview[]
+  reports      Report[]
+
+  @@index([sellerId])
+  @@index([category])
+  @@index([subcategory])
+  @@index([isActive])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([universityId])
+  @@schema("public")
+}
+
+model Order {
+  id                 String          @id @default(cuid())
+  orderNumber        String          @unique
+  buyerId            String
+  sellerId           String
+  productId          String
+  riderId            String?
+  productPrice       Float
+  deliveryFee        Float
+  totalAmount        Float
+  platformCommission Float           @default(0)
+  quantity           Int             @default(1)
+  deliveryHostel     String
+  deliveryRoom       String
+  deliveryLandmark   String
+  deliveryPhone      String
+  status             OrderStatus     @default(PENDING)
+  orderedAt          DateTime        @default(now())
+  riderAssignedAt    DateTime?
+  pickedUpAt         DateTime?
+  deliveredAt        DateTime?
+  completedAt        DateTime?
+  isPaid             Boolean         @default(false)
+  isDisputed         Boolean         @default(false)
+  disputeReason      String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  orderNote          String?
+  batchId            String?
+  dispute            Dispute?
+  batch              DeliveryBatch?  @relation(fields: [batchId], references: [id])
+  buyer              User            @relation("BuyerOrders", fields: [buyerId], references: [id])
+  product            Product         @relation(fields: [productId], references: [id])
+  rider              User?           @relation("RiderDeliveries", fields: [riderId], references: [id])
+  seller             User            @relation("SellerOrders", fields: [sellerId], references: [id])
+  payment            Payment?
+  productReviews     ProductReview[]
+  referralReward     ReferralReward?
+  reports            Report[]
+  reviews            Review[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([riderId])
+  @@index([batchId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([orderedAt])
+  @@index([sellerId, status])
+  @@index([riderId, status])
+  @@schema("public")
+}
+
+model Review {
+  id         String     @id @default(cuid())
+  rating     Int
+  comment    String?
+  orderId    String
+  reviewerId String
+  revieweeId String
+  type       ReviewType @default(SELLER)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reviewee   User       @relation("UserReviewsReceived", fields: [revieweeId], references: [id])
+  reviewer   User       @relation("UserReviewsGiven", fields: [reviewerId], references: [id])
+
+  @@unique([orderId, type, reviewerId])
+  @@index([orderId])
+  @@index([revieweeId])
+  @@index([reviewerId])
+  @@schema("public")
+}
+
+model ProductReview {
+  id         String   @id @default(cuid())
+  rating     Int
+  comment    String
+  orderId    String
+  productId  String
+  reviewerId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation("ProductReviewsGiven", fields: [reviewerId], references: [id])
+
+  @@unique([orderId, productId, reviewerId])
+  @@index([orderId])
+  @@index([productId])
+  @@index([reviewerId])
+  @@schema("public")
+}
+
+model OTP {
+  id        String   @id @default(cuid())
+  phone     String?
+  email     String?
+  code      String
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@index([email])
+  @@schema("public")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String        @unique
+  amount          Float
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  transactionId   String?       @unique
+  gatewayResponse Json?
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  refundAmount    Float?
+  refundReason    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([transactionId])
+  @@index([createdAt])
+  @@schema("public")
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  userId        String
+  type          TransactionType
+  amount        Float
+  description   String
+  reference     String?
+  balanceBefore Float
+  balanceAfter  Float
+  createdAt     DateTime        @default(now())
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@schema("public")
+}
+
+model WithdrawalRequest {
+  id          String           @id @default(cuid())
+  userId      String
+  amount      Float
+  bankDetails Json
+  status      WithdrawalStatus @default(PENDING)
+  adminNotes  String?
+  processedAt DateTime?
+  processedBy String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@schema("public")
+}
+
+model Report {
+  id                String       @id @default(cuid())
+  type              ReportType
+  reason            ReportReason
+  description       String
+  evidence          String[]
+  reporterId        String
+  reportedUserId    String?
+  reportedProductId String?
+  reportedOrderId   String?
+  status            ReportStatus @default(PENDING)
+  adminNotes        String?
+  resolvedAt        DateTime?
+  resolvedBy        String?
+  disputeId         String?      @unique
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  dispute           Dispute?     @relation(fields: [disputeId], references: [id])
+  reportedOrder     Order?       @relation(fields: [reportedOrderId], references: [id])
+  reportedProduct   Product?     @relation(fields: [reportedProductId], references: [id])
+  reportedUser      User?        @relation("ReportsReceived", fields: [reportedUserId], references: [id])
+  reporter          User         @relation("ReportsSubmitted", fields: [reporterId], references: [id])
+  resolver          User?        @relation("ResolvedBy", fields: [resolvedBy], references: [id])
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([reportedProductId])
+  @@index([status])
+  @@schema("public")
+}
+
+model Dispute {
+  id                   String           @id @default(cuid())
+  orderId              String           @unique
+  buyerId              String
+  sellerId             String
+  reason               String
+  buyerEvidence        String[]
+  sellerEvidence       String[]
+  status               DisputeStatus    @default(OPEN)
+  resolution           String?
+  refundAmount         Float?
+  resolvedAt           DateTime?
+  resolvedBy           String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  pickupAddress        Json?
+  resolutionPreference String?
+  buyer                User             @relation("BuyerDisputes", fields: [buyerId], references: [id])
+  order                Order            @relation(fields: [orderId], references: [id])
+  resolver             User?            @relation("ResolvedBy", fields: [resolvedBy], references: [id])
+  seller               User             @relation("SellerDisputes", fields: [sellerId], references: [id])
+  messages             DisputeMessage[]
+  report               Report?
+
+  @@index([orderId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@schema("public")
+}
+
+model DisputeMessage {
+  id          String   @id @default(cuid())
+  disputeId   String
+  senderId    String
+  senderType  String
+  message     String
+  attachments String[]
+  createdAt   DateTime @default(now())
+  dispute     Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@schema("public")
+}
+
+model Penalty {
+  id          String        @id @default(cuid())
+  userId      String
+  action      PenaltyAction
+  reason      String
+  pointsAdded Int
+  reportId    String?
+  disputeId   String?
+  bannedUntil DateTime?
+  issuedBy    String?
+  createdAt   DateTime      @default(now())
+  issuer      User?         @relation("IssuedBy", fields: [issuedBy], references: [id])
+  user        User          @relation("UserPenalties", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@schema("public")
+}
+
+model Notification {
+  id               String           @id @default(cuid())
+  userId           String
+  type             NotificationType
+  title            String
+  message          String
+  orderId          String?
+  productId        String?
+  disputeId        String?
+  reportId         String?
+  reviewId         String?
+  metadata         Json?
+  isRead           Boolean          @default(false)
+  readAt           DateTime?
+  createdAt        DateTime         @default(now())
+  referralRewardId String?
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([type])
+  @@schema("public")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@schema("public")
+}
+
+model SupportTicket {
+  id         String                @id @default(cuid())
+  name       String
+  email      String
+  message    String
+  category   SupportTicketCategory @default(OTHER)
+  userId     String?
+  status     SupportTicketStatus   @default(OPEN)
+  adminNotes String?
+  resolvedAt DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+  user       User?                 @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@schema("public")
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+
+  @@index([userId])
+  @@schema("public")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  addedAt   DateTime @default(now())
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+  @@index([productId])
+  @@schema("public")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([action])
+  @@schema("public")
+}
+
+model ReferralReward {
+  id             String   @id @default(cuid())
+  referrerId     String
+  referredUserId String
+  orderId        String   @unique
+  amount         Float
+  createdAt      DateTime @default(now())
+  order          Order    @relation(fields: [orderId], references: [id])
+  referredUser   User     @relation("ReferredUserRewards", fields: [referredUserId], references: [id])
+  referrer       User     @relation("ReferrerRewards", fields: [referrerId], references: [id])
+
+  @@index([referrerId])
+  @@index([referredUserId])
+  @@index([createdAt])
+  @@schema("public")
 }
 
 enum UserRole {
@@ -139,26 +677,20 @@ enum NotificationType {
   ORDER_COMPLETED
   ORDER_DISPUTED
   ORDER_CANCELLED
-
   PRODUCT_REVIEWED
   SELLER_REVIEWED
   RIDER_REVIEWED
-
   DISPUTE_OPENED
   DISPUTE_MESSAGE
   DISPUTE_RESOLVED
-
   REPORT_SUBMITTED
   REPORT_RESOLVED
-
   PENALTY_ISSUED
   ACCOUNT_SUSPENDED
   ACCOUNT_UNSUSPENDED
-
   WITHDRAWAL_PROCESSED
   PAYMENT_RECEIVED
   REFERRAL_REWARD
-
   STOCK_ALERT
 
   @@schema("public")
@@ -211,675 +743,5 @@ enum PaymentMethod {
   WALLET
   ESCROW
 
-  @@schema("public")
-}
-
-model University {
-  id          String  @id @default(cuid())
-  name        String  @unique
-  shortName   String  @unique
-  slug        String  @unique
-  location    String
-  isActive    Boolean @default(true)
-
-  deliveryAreas Json @default("[]")
-  hostels       Json @default("[]")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users    User[]
-  products Product[]
-
-  @@index([slug])
-  @@index([isActive])
-  @@schema("public")
-}
-
-model User {
-  id           String   @id @default(cuid())
-  phone        String   @unique
-  email        String?  @unique
-  password     String
-  matricNumber String?  @unique
-  name         String
-  profilePhoto String?
-  role         UserRole @default(BUYER)
-
-  isSellerMode Boolean @default(true)
-
-  hostelName String?
-  roomNumber String?
-  landmark   String?
-
-  bio String?
-
-  universityId String?
-  university   University? @relation(fields: [universityId], references: [id])
-
-  trustLevel      TrustLevel @default(BRONZE)
-  avgRating       Float      @default(0)
-  totalReviews    Int        @default(0)
-  completedOrders Int        @default(0)
-
-  penaltyPoints    Int       @default(0)
-  isSuspended      Boolean   @default(false)
-  suspendedUntil   DateTime?
-  suspensionReason String?
-
-  withdrawalPin             String?
-  withdrawalPinAttempts     Int       @default(0)
-  withdrawalPinLockedUntil  DateTime?
-
-  warningCount  Int       @default(0)
-  lastWarningAt DateTime?
-
-  // ── FIX #4 — Changed from Float to Decimal(12,2) ──────────────────────────
-  // Float uses IEEE 754 floating-point which has rounding errors (e.g.
-  // 0.1 + 0.2 = 0.30000000000000004). For financial balances, Decimal is
-  // exact and safe. Decimal(12,2) supports up to ₦9,999,999,999.99.
-  //
-  // MIGRATION NOTE: Run `prisma migrate dev --name decimal_balances` after
-  // applying this schema change. Existing Float values will be cast to
-  // Decimal automatically by PostgreSQL — no data loss for whole naira values.
-  // ──────────────────────────────────────────────────────────────────────────
-  pendingBalance   Decimal @default(0) @db.Decimal(12, 2)
-  availableBalance Decimal @default(0) @db.Decimal(12, 2)
-
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  referralCode             String          @unique
-  referredById             String?
-  referredBy               User?           @relation("UserReferrals", fields: [referredById], references: [id])
-  referrals                User[]          @relation("UserReferrals")
-  referralRewardsEarned    ReferralReward[] @relation("ReferrerRewards")
-  referralRewardsGenerated ReferralReward[] @relation("ReferredUserRewards")
-
-  products        Product[]
-  orders          Order[]  @relation("BuyerOrders")
-  sellerOrders    Order[]  @relation("SellerOrders")
-  riderDeliveries Order[]  @relation("RiderDeliveries")
-
-  // DeliveryBatch relations
-  buyerBatches    DeliveryBatch[] @relation("BuyerBatches")
-  riderBatches    DeliveryBatch[] @relation("RiderBatches")
-
-  reviewsGiven    Review[] @relation("UserReviewsGiven")
-  reviewsReceived Review[] @relation("UserReviewsReceived")
-
-  productReviewsGiven ProductReview[] @relation("ProductReviewsGiven")
-
-  reportsSubmitted  Report[]  @relation("ReportsSubmitted")
-  reportsReceived   Report[]  @relation("ReportsReceived")
-  disputesAsBuyer   Dispute[] @relation("BuyerDisputes")
-  disputesAsSeller  Dispute[] @relation("SellerDisputes")
-  penaltiesReceived Penalty[] @relation("UserPenalties")
-
-  resolvedDisputes Dispute[] @relation("ResolvedBy")
-  resolvedReports  Report[]  @relation("ResolvedBy")
-  issuedPenalties  Penalty[] @relation("IssuedBy")
-
-  notifications      Notification[]
-  pushSubscriptions  PushSubscription[]
-  transactions       Transaction[]
-  supportTickets     SupportTicket[]
-  withdrawalRequests WithdrawalRequest[]
-  cart               Cart?
-  auditLogs          AuditLog[]
-
-  isRiderVerified Boolean @default(false)
-  riderIdDocument String?
-  isAvailable     Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([role])
-  @@index([trustLevel])
-  @@index([isSuspended])
-  @@index([isDeleted])
-  @@index([createdAt])
-  @@index([referralCode])
-  @@index([universityId])
-  @@schema("public")
-}
-
-// ── DeliveryBatch groups multiple orders from one checkout ───────────────────
-// One batch per Paystack payment session. The rider accepts a whole batch
-// and gets ₦560 per order inside it. Referral fires once per batch.
-model DeliveryBatch {
-  id           String      @id @default(cuid())
-  batchNumber  String      @unique
-
-  buyerId      String
-  buyer        User        @relation("BuyerBatches", fields: [buyerId], references: [id])
-
-  riderId      String?
-  rider        User?       @relation("RiderBatches", fields: [riderId], references: [id])
-
-  universityId String
-
-  paymentReference String?
-
-  // Prevents referral reward from firing more than once per checkout session
-  referralPaid Boolean     @default(false)
-
-  status       BatchStatus @default(PENDING)
-
-  orders       Order[]
-
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-
-  @@index([buyerId])
-  @@index([riderId])
-  @@index([status])
-  @@index([universityId])
-  @@schema("public")
-}
-
-model Product {
-  id          String   @id @default(cuid())
-  name        String
-  description String
-  price       Float
-  images      String[]
-  category    String
-  quantity    Int      @default(1)
-
-  hostelName String
-  roomNumber String
-  landmark   String
-
-  sellerId String
-  seller   User   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-
-  universityId String?
-  university   University? @relation(fields: [universityId], references: [id])
-
-  isActive     Boolean @default(true)
-  viewCount    Int     @default(0)
-
-  avgRating    Float @default(0)
-  totalReviews Int   @default(0)
-
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-
-  orders    Order[]
-  reviews   ProductReview[]
-  reports   Report[]
-  cartItems CartItem[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([sellerId])
-  @@index([category])
-  @@index([isActive])
-  @@index([isDeleted])
-  @@index([createdAt])
-  @@index([universityId])
-  @@schema("public")
-}
-
-model Order {
-  id          String @id @default(cuid())
-  orderNumber String @unique
-
-  buyerId String
-  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id])
-
-  sellerId String
-  seller   User   @relation("SellerOrders", fields: [sellerId], references: [id])
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-
-  riderId String?
-  rider   User?   @relation("RiderDeliveries", fields: [riderId], references: [id])
-
-  // Link to the DeliveryBatch this order belongs to
-  batchId String?
-  batch   DeliveryBatch? @relation(fields: [batchId], references: [id])
-
-  productPrice       Float
-  deliveryFee        Float
-  totalAmount        Float
-  platformCommission Float       @default(0)
-  quantity           Int         @default(1)
-
-  deliveryHostel   String
-  deliveryRoom     String
-  deliveryLandmark String
-  deliveryPhone    String
-
-  status    OrderStatus @default(PENDING)
-  orderNote String?
-
-  orderedAt       DateTime  @default(now())
-  riderAssignedAt DateTime?
-  pickedUpAt      DateTime?
-  deliveredAt     DateTime?
-  completedAt     DateTime?
-
-  payment Payment?
-
-  isPaid     Boolean @default(false)
-  isDisputed Boolean @default(false)
-  disputeReason String?
-
-  reviews        Review[]
-  productReviews ProductReview[]
-  reports        Report[]
-  dispute        Dispute?
-  referralReward ReferralReward?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([buyerId])
-  @@index([sellerId])
-  @@index([riderId])
-  @@index([batchId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([orderedAt])
-  @@index([sellerId, status])
-  @@index([riderId, status])
-  @@schema("public")
-}
-
-model Review {
-  id      String @id @default(cuid())
-  rating  Int
-  comment String?
-
-  orderId  String
-  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  reviewerId String
-  reviewer   User   @relation("UserReviewsGiven", fields: [reviewerId], references: [id])
-
-  revieweeId String
-  reviewee   User   @relation("UserReviewsReceived", fields: [revieweeId], references: [id])
-
-  type ReviewType @default(SELLER)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([revieweeId])
-  @@index([reviewerId])
-  @@unique([orderId, type, reviewerId])
-  @@schema("public")
-}
-
-model ProductReview {
-  id      String @id @default(cuid())
-  rating  Int
-  comment String
-
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  reviewerId String
-  reviewer   User   @relation("ProductReviewsGiven", fields: [reviewerId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([productId])
-  @@index([reviewerId])
-  @@unique([orderId, productId, reviewerId])
-  @@schema("public")
-}
-
-model OTP {
-  id        String    @id @default(cuid())
-  phone     String?
-  email     String?
-  code      String
-  expiresAt DateTime
-  isUsed    Boolean   @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([phone])
-  @@index([email])
-  @@schema("public")
-}
-
-model Payment {
-  id String @id @default(cuid())
-
-  orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  amount Float
-  method PaymentMethod
-  status PaymentStatus @default(PENDING)
-
-  transactionId   String?  @unique
-  gatewayResponse Json?
-
-  paidAt       DateTime?
-  refundedAt   DateTime?
-  refundAmount Float?
-  refundReason String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([status])
-  @@index([transactionId])
-  @@index([createdAt])
-  @@schema("public")
-}
-
-model Transaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type        TransactionType
-  amount      Float
-  description String
-  reference   String?
-
-  balanceBefore Float
-  balanceAfter  Float
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([type])
-  @@index([createdAt])
-  @@schema("public")
-}
-
-model WithdrawalRequest {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  amount      Float
-  bankDetails Json
-  status      WithdrawalStatus @default(PENDING)
-  adminNotes  String?
-  processedAt DateTime?
-  processedBy String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@schema("public")
-}
-
-model Report {
-  id     String     @id @default(cuid())
-  type   ReportType
-  reason ReportReason
-  description String
-  evidence    String[]
-
-  reporterId String
-  reporter   User   @relation("ReportsSubmitted", fields: [reporterId], references: [id])
-
-  reportedUserId    String?
-  reportedUser      User?    @relation("ReportsReceived", fields: [reportedUserId], references: [id])
-
-  reportedProductId String?
-  reportedProduct   Product? @relation(fields: [reportedProductId], references: [id])
-
-  reportedOrderId String?
-  reportedOrder   Order?  @relation(fields: [reportedOrderId], references: [id])
-
-  status     ReportStatus @default(PENDING)
-  adminNotes String?
-  resolvedAt DateTime?
-  resolvedBy String?
-
-  disputeId String?  @unique
-  dispute   Dispute? @relation(fields: [disputeId], references: [id])
-
-  resolver User? @relation("ResolvedBy", fields: [resolvedBy], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([reporterId])
-  @@index([reportedUserId])
-  @@index([reportedProductId])
-  @@index([status])
-  @@schema("public")
-}
-
-model Dispute {
-  id String @id @default(cuid())
-
-  orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id])
-
-  buyerId String
-  buyer   User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
-
-  sellerId String
-  seller   User   @relation("SellerDisputes", fields: [sellerId], references: [id])
-
-  reason               String
-  resolutionPreference String?
-  pickupAddress        Json?
-  buyerEvidence        String[]
-  sellerEvidence       String[]
-
-  status DisputeStatus @default(OPEN)
-
-  resolution   String?
-  refundAmount Float?
-  resolvedAt   DateTime?
-  resolvedBy   String?
-
-  messages DisputeMessage[]
-  report   Report?
-
-  resolver User? @relation("ResolvedBy", fields: [resolvedBy], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([buyerId])
-  @@index([sellerId])
-  @@index([status])
-  @@schema("public")
-}
-
-model DisputeMessage {
-  id        String  @id @default(cuid())
-  disputeId String
-  dispute   Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
-
-  senderId   String
-  senderType String
-
-  message     String
-  attachments String[]
-
-  createdAt DateTime @default(now())
-
-  @@index([disputeId])
-  @@schema("public")
-}
-
-model Penalty {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation("UserPenalties", fields: [userId], references: [id])
-
-  action      PenaltyAction
-  reason      String
-  pointsAdded Int
-
-  reportId  String?
-  disputeId String?
-
-  bannedUntil DateTime?
-
-  issuedBy String?
-  issuer   User?   @relation("IssuedBy", fields: [issuedBy], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([createdAt])
-  @@schema("public")
-}
-
-model Notification {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type    NotificationType
-  title   String
-  message String
-
-  orderId          String?
-  productId        String?
-  disputeId        String?
-  reportId         String?
-  reviewId         String?
-  referralRewardId String?
-
-  metadata Json?
-
-  isRead Boolean   @default(false)
-  readAt DateTime?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([isRead])
-  @@index([createdAt])
-  @@index([type])
-  @@schema("public")
-}
-
-model PushSubscription {
-  id       String @id @default(cuid())
-  endpoint String @unique
-  p256dh   String
-  auth     String
-  userId   String
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@schema("public")
-}
-
-model SupportTicket {
-  id       String                @id @default(cuid())
-  name     String
-  email    String
-  message  String
-  category SupportTicketCategory @default(OTHER)
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  status     SupportTicketStatus @default(OPEN)
-  adminNotes String?
-  resolvedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@schema("public")
-}
-
-model Cart {
-  id     String     @id @default(cuid())
-  userId String     @unique
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items  CartItem[]
-
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@schema("public")
-}
-
-model CartItem {
-  id        String  @id @default(cuid())
-  cartId    String
-  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity  Int     @default(1)
-
-  addedAt DateTime @default(now())
-
-  @@unique([cartId, productId])
-  @@index([cartId])
-  @@index([productId])
-  @@schema("public")
-}
-
-model AuditLog {
-  id     String @id @default(cuid())
-  userId String?
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  action     String
-  entityType String
-  entityId   String
-  oldValue   Json?
-  newValue   Json?
-  ipAddress  String?
-  userAgent  String?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([entityType, entityId])
-  @@index([createdAt])
-  @@index([action])
-  @@schema("public")
-}
-
-model ReferralReward {
-  id String @id @default(cuid())
-
-  referrerId String
-  referrer   User   @relation("ReferrerRewards", fields: [referrerId], references: [id])
-
-  referredUserId String
-  referredUser   User   @relation("ReferredUserRewards", fields: [referredUserId], references: [id])
-
-  orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id])
-
-  amount    Float
-  createdAt DateTime @default(now())
-
-  @@index([referrerId])
-  @@index([referredUserId])
-  @@index([createdAt])
   @@schema("public")
 }

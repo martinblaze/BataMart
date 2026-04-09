@@ -15,6 +15,7 @@ import {
 import { isSplashPending } from '@/components/SplashScreen'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { getClientCache, setClientCache } from '@/lib/client-cache'
+import { decodeProductData, getCategoryList } from '@/lib/variants'
 
 // ─────────────────────────────────────────────
 // Pull-to-refresh constants
@@ -282,16 +283,19 @@ const ANIM_CSS = `
 // ─────────────────────────────────────────────
 // Static data
 // ─────────────────────────────────────────────
+// ── UPGRADED: Category list now matches the full variant system ──────────────
 const CATEGORIES = [
-  { name: 'All',              icon: '🛍️', color: '#6366f1' },
-  { name: 'Fashion & Clothing', icon: '👔', color: '#ec4899' },
-  { name: 'Food Services',    icon: '🍔', color: '#f97316' },
-  { name: 'Room Essentials',  icon: '🏠', color: '#0891b2' },
-  { name: 'School Supplies',  icon: '🎒', color: '#16a34a' },
-  { name: 'Tech Gadgets',     icon: '🎧', color: '#7c3aed' },
-  { name: 'Cosmetics',        icon: '💄', color: '#db2777' },
-  { name: 'Snacks',           icon: '🍿', color: '#d97706' },
-  { name: 'Books',            icon: '📚', color: '#2563eb' },
+  { name: 'All',                      icon: '🛍️', color: '#6366f1' },
+  { name: 'Electronics',              icon: '📱', color: '#7c3aed' },
+  { name: 'Fashion',                  icon: '👔', color: '#ec4899' },
+  { name: 'Home & Kitchen',           icon: '🏠', color: '#0891b2' },
+  { name: 'Beauty & Personal Care',   icon: '💄', color: '#db2777' },
+  { name: 'Groceries / Food / Fast Food', icon: '🍔', color: '#f97316' },
+  { name: 'Computing',                icon: '💻', color: '#2563eb' },
+  { name: 'Gaming',                   icon: '🎮', color: '#16a34a' },
+  { name: 'Automotive',               icon: '🚗', color: '#d97706' },
+  { name: 'Baby Products',            icon: '👶', color: '#0d9488' },
+  { name: 'Pets',                     icon: '🐾', color: '#7c3aed' },
 ]
 
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
@@ -312,12 +316,12 @@ const ACTIVITY_SIGNALS = [
 ]
 
 const CATEGORY_SPOTLIGHTS = [
-  { title: 'Level up your Tech',  categories: ['Earbuds','Laptops','Power Banks','Accessories'], icon: '🎧', bg: 'from-violet-50 to-indigo-50', accent: '#6366f1', catFilter: 'Tech Gadgets' },
-  { title: 'Campus Fashion',      categories: ['Hoodies','Sneakers','Bags','Accessories'],       icon: '👔', bg: 'from-pink-50 to-rose-50',    accent: '#ec4899', catFilter: 'Fashion & Clothing' },
-  { title: 'Room Essentials',     categories: ['Bedding','Storage','Lighting','Decor'],          icon: '🏠', bg: 'from-sky-50 to-blue-50',     accent: '#0891b2', catFilter: 'Room Essentials' },
-  { title: 'Food & Snacks',       categories: ['Jollof Rice','Snacks','Drinks','Meal Prep'],     icon: '🍔', bg: 'from-orange-50 to-amber-50', accent: '#f97316', catFilter: 'Food Services' },
-  { title: 'School Supplies',     categories: ['Textbooks','Stationery','Calculators','Notes'],  icon: '🎒', bg: 'from-emerald-50 to-green-50', accent: '#16a34a', catFilter: 'School Supplies' },
-  { title: 'Beauty & Care',       categories: ['Skincare','Makeup','Hair','Perfume'],             icon: '💄', bg: 'from-fuchsia-50 to-pink-50', accent: '#db2777', catFilter: 'Cosmetics' },
+  { title: 'Level up your Tech',  categories: ['Phones','Laptops','Earbuds','Power Banks'],   icon: '📱', bg: 'from-violet-50 to-indigo-50', accent: '#6366f1', catFilter: 'Electronics' },
+  { title: 'Campus Fashion',      categories: ['Sneakers','Bags','Watches','Accessories'],     icon: '👔', bg: 'from-pink-50 to-rose-50',    accent: '#ec4899', catFilter: 'Fashion' },
+  { title: 'Home & Kitchen',      categories: ['Furniture','Appliances','Bedding','Decor'],    icon: '🏠', bg: 'from-sky-50 to-blue-50',     accent: '#0891b2', catFilter: 'Home & Kitchen' },
+  { title: 'Food & Snacks',       categories: ['Jollof Rice','Snacks','Drinks','Fast Food'],   icon: '🍔', bg: 'from-orange-50 to-amber-50', accent: '#f97316', catFilter: 'Groceries / Food / Fast Food' },
+  { title: 'Gaming Zone',         categories: ['PS5','Xbox','Controllers','Games'],            icon: '🎮', bg: 'from-emerald-50 to-green-50', accent: '#16a34a', catFilter: 'Gaming' },
+  { title: 'Beauty & Care',       categories: ['Skincare','Makeup','Hair','Perfume'],          icon: '💄', bg: 'from-fuchsia-50 to-pink-50', accent: '#db2777', catFilter: 'Beauty & Personal Care' },
 ]
 
 const JUST_DROPPED_PAGE_SIZE = 12
@@ -348,10 +352,14 @@ function getDeliveryTag(productId: string) {
   return ['Campus Pickup', 'Fast Delivery', 'Free Delivery', null, null][hash % 5]
 }
 
+// ── UPGRADED: handles both legacy pipe-tags AND new VARIANTS_V2 format ────────
 function parseTags(description: string): string[] {
-  if (!description) return []
-  if (description.includes(' | ')) return description.split(' | ').map(t => t.trim()).filter(Boolean)
-  return []
+  const { tags, variants } = decodeProductData(description)
+  // Show top variant values as chips (max 3 total)
+  const variantValues = Object.values(variants).flat().slice(0, 3) as string[]
+  const allChips = [...variantValues, ...tags].filter(Boolean)
+  // Deduplicate and limit
+  return [...new Set(allChips)].slice(0, 5)
 }
 
 const fmt = (p: number) =>
@@ -450,13 +458,15 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
       </div>
 
       <div className="p-2.5 sm:p-3 flex flex-col flex-1">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{product.category}</p>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+          {product.subcategory ? `${product.category} · ${product.subcategory}` : product.category}
+        </p>
         <h3 className="font-bold text-gray-900 line-clamp-2 text-xs sm:text-sm leading-snug flex-1">{product.name}</h3>
 
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
-            {tags.slice(0, 2).map((tag: string) => (
-              <span key={tag} className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-[9px] font-semibold rounded-full">{tag}</span>
+            {tags.slice(0, 3).map((tag: string) => (
+              <span key={tag} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 text-[9px] font-bold rounded-full">{tag}</span>
             ))}
           </div>
         )}
@@ -797,12 +807,18 @@ function JustDroppedSection({ allProducts, onProductClick }: {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return allNew
-    return allNew.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.category?.toLowerCase().includes(q) ||
-      p.seller?.name?.toLowerCase().includes(q) ||
-      parseTags(p.description).some((t: string) => t.toLowerCase().includes(q))
-    )
+    return allNew.filter(p => {
+      const { variants, tags } = decodeProductData(p.description || '')
+      const variantValues = Object.values(variants).flat() as string[]
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.category?.toLowerCase().includes(q) ||
+        (p.subcategory?.toLowerCase() || '').includes(q) ||
+        p.seller?.name?.toLowerCase().includes(q) ||
+        tags.some((t: string) => t.toLowerCase().includes(q)) ||
+        variantValues.some((v: string) => v.toLowerCase().includes(q))
+      )
+    })
   }, [allNew, search])
 
   const visible = filtered.slice(0, visibleCount)

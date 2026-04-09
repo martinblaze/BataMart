@@ -13,6 +13,8 @@ import SplashScreen from '@/components/SplashScreen'
 import InstallPrompt from '@/components/InstallPrompt'
 import IosInstallPrompt from '@/components/IosInstallPrompt'
 import { IOSAppShell } from '@/components/layout/IOSAppShell'
+import { OfflineStatusBanner } from '@/components/layout/OfflineStatusBanner'
+import { RoutePrefetcher } from '@/components/layout/RoutePrefetcher'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -120,13 +122,20 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
+                  if (!sessionStorage.getItem('batamart_launch_path')) {
+                    sessionStorage.setItem('batamart_launch_path', window.location.pathname);
+                  }
+
                   var isStandalone = window.matchMedia('(display-mode: standalone)').matches
                     || window.navigator.standalone === true;
                   var isAppParam = window.location.search.indexOf('app=true') !== -1;
+                  var isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                  var isMarketplace = window.location.pathname === '/marketplace';
                   var isAndroid = window.location.search.indexOf('android=true') !== -1;
                   var splashShown = sessionStorage.getItem('batamart_splash_app');
+                  var shouldGuardIOSMarketplace = isiOS &amp;&amp; isMarketplace &amp;&amp; !splashShown;
 
-                  if (!isAndroid &amp;&amp; (isStandalone || isAppParam) &amp;&amp; !splashShown) {
+                  if (!isAndroid &amp;&amp; ((isStandalone || isAppParam) || shouldGuardIOSMarketplace) &amp;&amp; !splashShown) {
                     document.documentElement.classList.add('splash-pending');
                     document.addEventListener('DOMContentLoaded', function() {
                       var style = document.createElement('style');
@@ -157,6 +166,8 @@ export default function RootLayout({
 
       &lt;body className={inter.className}&gt;
         &lt;ThemeProvider&gt;
+          &lt;OfflineStatusBanner /&gt;
+          &lt;RoutePrefetcher /&gt;
           &lt;PWARegister /&gt;
           &lt;SplashScreen /&gt;
           &lt;InstallPrompt /&gt;
@@ -171,7 +182,8 @@ export default function RootLayout({
       &lt;/body&gt;
     &lt;/html&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/page.tsx</div><pre>'use client'
 
 import Link from 'next/link'
@@ -930,7 +942,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Users, Package, AlertTriangle,
-  FileText, DollarSign, BarChart3, LogOut, Menu, X, MessageSquare,
+  FileText, DollarSign, BarChart3, LogOut, Menu, X, MessageSquare, Navigation,
 } from 'lucide-react'
 
 const adminRoutes = [
@@ -942,6 +954,7 @@ const adminRoutes = [
   { label: 'Revenue',   icon: DollarSign,      href: '/admin/revenue',   color: 'text-emerald-400' },
   { label: 'Analytics', icon: BarChart3,       href: '/admin/analytics', color: 'text-cyan-400' },
   { label: 'Support',   icon: MessageSquare,   href: '/admin/support',   color: 'text-pink-400' },
+  { label: 'Rider GPS', icon: Navigation,      href: '/admin/rider-tracking', color: 'text-sky-400' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -1080,7 +1093,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(admin)/admin/page.tsx</div><pre>// app/(admin)/admin/page.tsx
 'use client'
 
@@ -2376,6 +2390,294 @@ export default function RevenuePage() {
     &lt;/div&gt;
   )
 } </pre></div>
+<div class='file-block'><div class='file-header'>app/(admin)/admin/rider-tracking/page.tsx</div><pre>'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { Calendar, Crosshair, Loader2, MapPin, Navigation, Phone, Route, Search } from 'lucide-react'
+
+function fmtDate(date?: string | null) {
+  if (!date) return 'N/A'
+  return new Date(date).toLocaleString()
+}
+
+function checkpointLabel(checkpoint: any) {
+  if (checkpoint?.status === 'RIDER_ASSIGNED') return 'Rider accepted order'
+  if (checkpoint?.status === 'PICKED_UP') return 'Item picked up'
+  if (checkpoint?.status === 'ON_THE_WAY') return 'Rider on the way'
+  if (checkpoint?.status === 'DELIVERED') return 'Marked delivered'
+  if (checkpoint?.action === 'RIDER_TRACKING_STARTED') return 'Live tracking started'
+  return checkpoint?.status?.replace(/_/g, ' ') || checkpoint?.action || 'Update'
+}
+
+export default function AdminRiderTrackingPage() {
+  const [rows, setRows] = useState&lt;any[]&gt;([])
+  const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [selectedOrderId, setSelectedOrderId] = useState&lt;string | null&gt;(null)
+  const [detail, setDetail] = useState&lt;any&gt;(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const limit = 20
+
+  const totalPages = useMemo(() =&gt; Math.max(1, Math.ceil(total / limit)), [total])
+
+  const fetchRows = async () =&gt; {
+    setLoading(true)
+    try {
+      const token = localStorage.getItem('adminToken')
+      const qs = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+      })
+      if (search) qs.set('search', search)
+
+      const res = await fetch(`/api/admin/rider-tracking?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRows(data.rows || [])
+        setTotal(data.total || 0)
+      } else {
+        setRows([])
+      }
+    } catch {
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchDetail = async (orderId: string) =&gt; {
+    setDetailLoading(true)
+    try {
+      const token = localStorage.getItem('adminToken')
+      const res = await fetch(`/api/admin/rider-tracking?orderId=${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setDetail(data)
+      } else {
+        setDetail(null)
+      }
+    } catch {
+      setDetail(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  useEffect(() =&gt; {
+    fetchRows()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search])
+
+  useEffect(() =&gt; {
+    if (!selectedOrderId) {
+      setDetail(null)
+      return
+    }
+    fetchDetail(selectedOrderId)
+  }, [selectedOrderId])
+
+  const latestPoint = detail?.tracking?.latestPoint || null
+  const mapEmbed = latestPoint
+    ? `https://www.google.com/maps?q=${latestPoint.lat},${latestPoint.lng}&amp;z=16&amp;output=embed`
+    : null
+
+  return (
+    &lt;div className="space-y-6"&gt;
+      &lt;div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3"&gt;
+        &lt;div&gt;
+          &lt;h1 className="text-2xl font-bold text-white"&gt;Rider GPS Records&lt;/h1&gt;
+          &lt;p className="text-sm text-gray-400 mt-0.5"&gt;Track rider movement per delivered/completed order.&lt;/p&gt;
+        &lt;/div&gt;
+        &lt;div className="flex items-center gap-2"&gt;
+          &lt;div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 min-w-[260px]"&gt;
+            &lt;Search className="w-4 h-4 text-gray-500" /&gt;
+            &lt;input
+              value={searchInput}
+              onChange={e =&gt; setSearchInput(e.target.value)}
+              placeholder="Search order, rider, product..."
+              className="bg-transparent text-sm text-white outline-none flex-1"
+            /&gt;
+          &lt;/div&gt;
+          &lt;button
+            onClick={() =&gt; { setPage(1); setSearch(searchInput.trim()) }}
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold"
+          &gt;
+            Filter
+          &lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div className="grid grid-cols-1 xl:grid-cols-5 gap-6"&gt;
+        &lt;div className="xl:col-span-3 bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden"&gt;
+          &lt;div className="px-4 py-3 border-b border-gray-700"&gt;
+            &lt;p className="text-sm text-gray-300 font-semibold"&gt;Delivered Orders with Tracking Data&lt;/p&gt;
+          &lt;/div&gt;
+          {loading ? (
+            &lt;div className="p-8 flex items-center justify-center text-gray-400"&gt;
+              &lt;Loader2 className="w-5 h-5 animate-spin mr-2" /&gt; Loading records...
+            &lt;/div&gt;
+          ) : rows.length === 0 ? (
+            &lt;div className="p-8 text-center text-gray-400"&gt;No tracking records found.&lt;/div&gt;
+          ) : (
+            &lt;div className="divide-y divide-gray-700"&gt;
+              {rows.map((row: any) =&gt; {
+                const active = selectedOrderId === row.id
+                return (
+                  &lt;button
+                    key={row.id}
+                    onClick={() =&gt; setSelectedOrderId(row.id)}
+                    className={`w-full text-left px-4 py-3 hover:bg-gray-700/40 transition-colors ${
+                      active ? 'bg-gray-700/50' : ''
+                    }`}
+                  &gt;
+                    &lt;div className="flex items-start gap-3"&gt;
+                      &lt;img
+                        src={row.product?.images?.[0] || '/placeholder.png'}
+                        alt={row.product?.name || 'Product'}
+                        className="w-12 h-12 rounded-lg object-cover bg-gray-700"
+                      /&gt;
+                      &lt;div className="flex-1 min-w-0"&gt;
+                        &lt;p className="text-sm font-semibold text-white truncate"&gt;{row.product?.name || 'Product'}&lt;/p&gt;
+                        &lt;p className="text-xs text-gray-400 mt-0.5"&gt;
+                          #{row.orderNumber} • Rider: {row.rider?.name || 'N/A'}
+                        &lt;/p&gt;
+                        &lt;div className="flex items-center gap-4 mt-2 text-[11px] text-gray-400"&gt;
+                          &lt;span className="inline-flex items-center gap-1"&gt;
+                            &lt;Crosshair className="w-3.5 h-3.5 text-cyan-400" /&gt;
+                            {row.trackingSummary?.totalPings || 0} pings
+                          &lt;/span&gt;
+                          &lt;span className="inline-flex items-center gap-1"&gt;
+                            &lt;Route className="w-3.5 h-3.5 text-violet-400" /&gt;
+                            {row.trackingSummary?.checkpointCount || 0} checkpoints
+                          &lt;/span&gt;
+                          &lt;span className="inline-flex items-center gap-1"&gt;
+                            &lt;Calendar className="w-3.5 h-3.5 text-amber-400" /&gt;
+                            {fmtDate(row.deliveredAt)}
+                          &lt;/span&gt;
+                        &lt;/div&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+                  &lt;/button&gt;
+                )
+              })}
+            &lt;/div&gt;
+          )}
+
+          &lt;div className="flex items-center justify-between px-4 py-3 border-t border-gray-700"&gt;
+            &lt;p className="text-xs text-gray-400"&gt;
+              Page {page} of {totalPages} • {total} total orders
+            &lt;/p&gt;
+            &lt;div className="flex items-center gap-2"&gt;
+              &lt;button
+                onClick={() =&gt; setPage(p =&gt; Math.max(1, p - 1))}
+                disabled={page &lt;= 1}
+                className="px-3 py-1.5 rounded-lg text-xs bg-gray-700 text-gray-200 disabled:opacity-40"
+              &gt;
+                Prev
+              &lt;/button&gt;
+              &lt;button
+                onClick={() =&gt; setPage(p =&gt; Math.min(totalPages, p + 1))}
+                disabled={page &gt;= totalPages}
+                className="px-3 py-1.5 rounded-lg text-xs bg-gray-700 text-gray-200 disabled:opacity-40"
+              &gt;
+                Next
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div className="xl:col-span-2 bg-gray-800 border border-gray-700 rounded-2xl p-4"&gt;
+          {!selectedOrderId ? (
+            &lt;div className="h-full flex items-center justify-center text-gray-400 text-sm"&gt;
+              Select an order to view full GPS trail.
+            &lt;/div&gt;
+          ) : detailLoading ? (
+            &lt;div className="h-full flex items-center justify-center text-gray-400 text-sm"&gt;
+              &lt;Loader2 className="w-4 h-4 animate-spin mr-2" /&gt; Loading order trail...
+            &lt;/div&gt;
+          ) : !detail ? (
+            &lt;div className="h-full flex items-center justify-center text-gray-400 text-sm"&gt;
+              Failed to load this order trail.
+            &lt;/div&gt;
+          ) : (
+            &lt;div className="space-y-4"&gt;
+              &lt;div&gt;
+                &lt;p className="text-xs text-gray-400"&gt;Order&lt;/p&gt;
+                &lt;p className="text-white font-semibold"&gt;#{detail.order?.orderNumber}&lt;/p&gt;
+                &lt;p className="text-xs text-gray-400 mt-0.5"&gt;{detail.order?.product?.name}&lt;/p&gt;
+              &lt;/div&gt;
+
+              &lt;div className="grid grid-cols-2 gap-2"&gt;
+                &lt;div className="bg-gray-900/60 rounded-xl p-3"&gt;
+                  &lt;p className="text-[11px] text-gray-400"&gt;Rider&lt;/p&gt;
+                  &lt;p className="text-sm text-white font-semibold"&gt;{detail.order?.rider?.name || 'N/A'}&lt;/p&gt;
+                  &lt;p className="text-xs text-gray-400 inline-flex items-center gap-1 mt-0.5"&gt;
+                    &lt;Phone className="w-3 h-3" /&gt; {detail.order?.rider?.phone || 'N/A'}
+                  &lt;/p&gt;
+                &lt;/div&gt;
+                &lt;div className="bg-gray-900/60 rounded-xl p-3"&gt;
+                  &lt;p className="text-[11px] text-gray-400"&gt;GPS Pings&lt;/p&gt;
+                  &lt;p className="text-sm text-cyan-300 font-bold"&gt;{detail.tracking?.totalPings || 0}&lt;/p&gt;
+                  &lt;p className="text-xs text-gray-400 mt-0.5"&gt;{fmtDate(detail.tracking?.latestPoint?.at)}&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              {mapEmbed ? (
+                &lt;div className="rounded-xl overflow-hidden border border-gray-700"&gt;
+                  &lt;iframe title="Admin rider GPS map" src={mapEmbed} className="w-full h-52" loading="lazy" /&gt;
+                &lt;/div&gt;
+              ) : (
+                &lt;div className="rounded-xl border border-gray-700 bg-gray-900/50 p-3 text-sm text-gray-400"&gt;
+                  No GPS coordinates saved for this order.
+                &lt;/div&gt;
+              )}
+
+              &lt;div&gt;
+                &lt;p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2 inline-flex items-center gap-1.5"&gt;
+                  &lt;Navigation className="w-3.5 h-3.5 text-blue-400" /&gt;
+                  Checkpoints
+                &lt;/p&gt;
+                &lt;div className="space-y-2 max-h-52 overflow-auto pr-1"&gt;
+                  {(detail.tracking?.checkpoints || []).map((checkpoint: any) =&gt; (
+                    &lt;div key={checkpoint.id} className="bg-gray-900/60 rounded-lg px-3 py-2"&gt;
+                      &lt;p className="text-sm text-white"&gt;{checkpointLabel(checkpoint)}&lt;/p&gt;
+                      &lt;p className="text-xs text-gray-400 mt-0.5"&gt;{fmtDate(checkpoint.at)}&lt;/p&gt;
+                    &lt;/div&gt;
+                  ))}
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;div&gt;
+                &lt;p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2 inline-flex items-center gap-1.5"&gt;
+                  &lt;MapPin className="w-3.5 h-3.5 text-cyan-400" /&gt;
+                  GPS Trail (latest first)
+                &lt;/p&gt;
+                &lt;div className="space-y-2 max-h-56 overflow-auto pr-1"&gt;
+                  {[...(detail.tracking?.points || [])].reverse().slice(0, 30).map((point: any) =&gt; (
+                    &lt;div key={point.id} className="bg-gray-900/60 rounded-lg px-3 py-2"&gt;
+                      &lt;p className="text-xs text-cyan-300 font-semibold"&gt;
+                        {point.lat?.toFixed(6)}, {point.lng?.toFixed(6)}
+                      &lt;/p&gt;
+                      &lt;p className="text-xs text-gray-400 mt-0.5"&gt;{fmtDate(point.at)}&lt;/p&gt;
+                    &lt;/div&gt;
+                  ))}
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          )}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(admin)/admin/support/page.tsx</div><pre>// app/(admin)/admin/support/page.tsx
 'use client'
 
@@ -5357,6 +5659,10 @@ export default function CartPage() {
   const fmt = (price: number) =&gt;
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(price);
 
+  const handleRemoveSingleItem = (productId: string) =&gt; {
+    removeItem(productId);
+  };
+
   const handleCheckout = () =&gt; {
     if (items.length === 0) return;
     sessionStorage.setItem('checkout_cart', JSON.stringify(items));
@@ -5455,9 +5761,14 @@ export default function CartPage() {
                               &lt;Link href={`/seller/${item.sellerId}`} className="text-indigo-600 font-bold hover:underline"&gt;{item.sellerName}&lt;/Link&gt;
                             &lt;/p&gt;
                           &lt;/div&gt;
-                          &lt;button onClick={() =&gt; removeItem(item.productId)}
-                            className="p-1.5 rounded-xl hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"&gt;
-                            &lt;X className="w-4 h-4" /&gt;
+                          &lt;button
+                            onClick={() =&gt; handleRemoveSingleItem(item.productId)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition-colors flex-shrink-0"
+                            aria-label={`Delete ${item.name} from cart`}
+                            title="Delete this item"
+                          &gt;
+                            &lt;Trash2 className="w-3.5 h-3.5" /&gt;
+                            &lt;span className="text-[11px] font-bold leading-none hidden sm:inline"&gt;Delete&lt;/span&gt;
                           &lt;/button&gt;
                         &lt;/div&gt;
                         &lt;div className="flex items-center justify-between mt-3"&gt;
@@ -5482,6 +5793,13 @@ export default function CartPage() {
                             &lt;Package className="w-3 h-3" /&gt; Max quantity reached
                           &lt;/p&gt;
                         )}
+                        &lt;button
+                          onClick={() =&gt; handleRemoveSingleItem(item.productId)}
+                          className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-red-600 hover:text-red-700 transition-colors"
+                        &gt;
+                          &lt;X className="w-3.5 h-3.5" /&gt;
+                          Remove this product
+                        &lt;/button&gt;
                       &lt;/div&gt;
                     &lt;/div&gt;
                   &lt;/div&gt;
@@ -5558,7 +5876,8 @@ export default function CartPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   );
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/checkout/page.tsx</div><pre>// app/(marketplace)/checkout/page.tsx
 // ── FIX #4: Delivery fee is no longer hardcoded on the client.
 //    The server returns the canonical deliveryFee inside the payment
@@ -6494,6 +6813,29 @@ export default function RiderDashboardPage() {
     &lt;/div&gt;
   )
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/(marketplace)/marketplace/loading.tsx</div><pre>export default function MarketplaceLoading() {
+  return (
+    &lt;div className="min-h-screen bg-[#f0f2f5]"&gt;
+      &lt;div className="h-28 bg-gradient-to-r from-indigo-700 to-indigo-500" /&gt;
+      &lt;div className="max-w-7xl mx-auto px-3 sm:px-6 py-4"&gt;
+        &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
+          {Array.from({ length: 10 }).map((_, i) =&gt; (
+            &lt;div key={i} className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm animate-pulse"&gt;
+              &lt;div className="aspect-square bg-gray-100" /&gt;
+              &lt;div className="p-3 space-y-2"&gt;
+                &lt;div className="h-3 bg-gray-100 rounded w-1/2" /&gt;
+                &lt;div className="h-4 bg-gray-100 rounded w-full" /&gt;
+                &lt;div className="h-4 bg-gray-100 rounded w-2/3" /&gt;
+                &lt;div className="h-5 bg-gray-100 rounded w-1/3 mt-2" /&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/marketplace/page.tsx</div><pre>'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
@@ -6506,9 +6848,11 @@ import {
   Package, Zap, Award, ArrowRight, Tag, Eye, Heart,
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
   BadgeCheck, Timer, Percent, MapPin, Bell, Menu,
-  ChevronDown, Grid3X3, List, Sliders, Loader2,
+  ChevronDown, Grid3X3, List, Sliders, Loader2, Copy,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { getClientCache, setClientCache } from '@/lib/client-cache'
 
 // ─────────────────────────────────────────────
 // Pull-to-refresh constants
@@ -6791,6 +7135,12 @@ const CATEGORIES = [
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
+const MARKETPLACE_FEED_CACHE_KEY = 'batamart_marketplace_feed_cache_v1'
+const MARKETPLACE_PEOPLE_CACHE_KEY = 'batamart_marketplace_people_cache_v1'
+const MARKETPLACE_CATEGORY_CACHE_PREFIX = 'batamart_marketplace_cat_'
+const MARKETPLACE_FEED_CACHE_TTL = 1000 * 60 * 3
+const MARKETPLACE_PEOPLE_CACHE_TTL = 1000 * 60 * 20
+const MARKETPLACE_VIEW_QUEUE_KEY = 'batamart_product_view_queue_v1'
 
 const ACTIVITY_SIGNALS = [
   { icon: '🔥', text: (n: number) =&gt; `${n} viewing now` },
@@ -7397,6 +7747,7 @@ function JustDroppedSection({ allProducts, onProductClick }: {
 export default function MarketplacePage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
+  const isOnline = useOnlineStatus()
 
   const isApp = searchParams.get('app') === 'true' ||
     (typeof window !== 'undefined' &amp;&amp; window.matchMedia('(display-mode: standalone)').matches)
@@ -7418,6 +7769,14 @@ export default function MarketplacePage() {
   const [mounted,           setMounted]           = useState(false)
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState&lt;string&gt;('')
+  const [peopleLikeYouBought, setPeopleLikeYouBought] = useState&lt;any[]&gt;([])
+  const [usingCachedFeed, setUsingCachedFeed] = useState(false)
+
+  // ── Referral popup — shows once per app session, only on first marketplace visit ──
+  const [showReferralPopup, setShowReferralPopup] = useState(false)
+  const [referralCode, setReferralCode]           = useState('')
+  const [referralLink, setReferralLink]           = useState('')
+  const [referralCopied, setReferralCopied]       = useState(false)
 
   // Pull-to-refresh state
   const [pullDistance,  setPullDistance]  = useState(0)
@@ -7456,7 +7815,20 @@ export default function MarketplacePage() {
     setMounted(true)
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
+
+    try {
+      const cachedFeed = getClientCache&lt;any[]&gt;(MARKETPLACE_FEED_CACHE_KEY)
+      if (cachedFeed?.value?.length) {
+        setAllProducts(cachedFeed.value)
+        setUsingCachedFeed(true)
+        setLoading(false)
+      }
+      const cachedPeople = getClientCache&lt;any[]&gt;(MARKETPLACE_PEOPLE_CACHE_KEY)
+      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
+    } catch {}
+
     fetchFeed()
+    fetchPeopleLikeYouBought()
     const token = localStorage.getItem('token')
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
@@ -7465,6 +7837,29 @@ export default function MarketplacePage() {
         .catch(() =&gt; {})
     }
   }, [])
+
+  // ── Referral Popup — once per session, only on first marketplace render ──
+  // sessionStorage resets on tab/app close, so popup shows again next open.
+  // If user navigates away and comes back within same session, it won't re-show.
+  useEffect(() =&gt; {
+    if (!mounted) return
+    const KEY = 'batamart_referral_popup_shown'
+    if (sessionStorage.getItem(KEY)) return
+    sessionStorage.setItem(KEY, '1')
+
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    fetch('/api/referrals', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r =&gt; r.ok ? r.json() : null)
+      .then(data =&gt; {
+        if (!data) return
+        setReferralCode(data.referralCode || '')
+        setReferralLink(data.referralLink || '')
+        setTimeout(() =&gt; setShowReferralPopup(true), 1200)
+      })
+      .catch(() =&gt; {})
+  }, [mounted])
 
   // ── Close dropdown on outside click ──
   useEffect(() =&gt; {
@@ -7574,6 +7969,38 @@ export default function MarketplacePage() {
   }, [updateDropdownPos])
 
   // ── API calls ──
+  const enqueueProductView = (id: string) =&gt; {
+    try {
+      const queue = JSON.parse(localStorage.getItem(MARKETPLACE_VIEW_QUEUE_KEY) || '[]') as string[]
+      const next = [...queue, id].slice(-100)
+      localStorage.setItem(MARKETPLACE_VIEW_QUEUE_KEY, JSON.stringify(next))
+    } catch {}
+  }
+
+  const flushQueuedProductViews = async () =&gt; {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const queue = JSON.parse(localStorage.getItem(MARKETPLACE_VIEW_QUEUE_KEY) || '[]') as string[]
+      if (!queue.length) return
+      const uniqueIds = Array.from(new Set(queue))
+      await Promise.allSettled(
+        uniqueIds.map(id =&gt;
+          fetch(`/api/products/${id}/view`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        )
+      )
+      localStorage.removeItem(MARKETPLACE_VIEW_QUEUE_KEY)
+    } catch {}
+  }
+
+  useEffect(() =&gt; {
+    if (isOnline) flushQueuedProductViews()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline])
+
   const buildFeedSignals = () =&gt; {
     let viewed = ''; let searched = ''
     try {
@@ -7596,14 +8023,47 @@ export default function MarketplacePage() {
       const res  = await fetch(`/api/products/feed?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) {
-        setAllProducts(data.products || [])
+        const products = data.products || []
+        setAllProducts(products)
+        setUsingCachedFeed(false)
+        setClientCache(MARKETPLACE_FEED_CACHE_KEY, products, MARKETPLACE_FEED_CACHE_TTL)
         const cats = Array.from(new Set(
-          (data.products || []).filter((p: any) =&gt; p.isPersonalised).map((p: any) =&gt; p.category)
+          products.filter((p: any) =&gt; p.isPersonalised).map((p: any) =&gt; p.category)
         )) as string[]
         setInterestCategories(cats.slice(0, 4))
       }
-    } catch {}
+    } catch {
+      const cachedFeed = getClientCache&lt;any[]&gt;(MARKETPLACE_FEED_CACHE_KEY)
+      if (cachedFeed?.value?.length) {
+        setAllProducts(cachedFeed.value)
+        setUsingCachedFeed(true)
+      }
+    }
     finally { setLoading(false) }
+  }
+
+  const fetchPeopleLikeYouBought = async () =&gt; {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const res = await fetch('/api/products/people-like-you?mode=top&amp;pageSize=14', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) return
+      const items = (data.items || [])
+        .map((it: any) =&gt; ({
+          ...it.product,
+          soldCount: it.soldCount,
+          isTrending: true,
+        }))
+        .filter((p: any) =&gt; p?.id)
+      setPeopleLikeYouBought(items)
+      setClientCache(MARKETPLACE_PEOPLE_CACHE_KEY, items, MARKETPLACE_PEOPLE_CACHE_TTL)
+    } catch {
+      const cachedPeople = getClientCache&lt;any[]&gt;(MARKETPLACE_PEOPLE_CACHE_KEY)
+      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
+    }
   }
 
   const fetchByCategory = async (category: string) =&gt; {
@@ -7613,12 +8073,49 @@ export default function MarketplacePage() {
       if (!token) return
       const res  = await fetch(`/api/products?category=${encodeURIComponent(category)}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
-      if (res.ok) setAllProducts(data.products || [])
-    } catch {}
+      if (res.ok) {
+        const products = data.products || []
+        setAllProducts(products)
+        setUsingCachedFeed(false)
+        setClientCache(`${MARKETPLACE_CATEGORY_CACHE_PREFIX}${category}`, products, MARKETPLACE_FEED_CACHE_TTL)
+      }
+    } catch {
+      const cachedCategory = getClientCache&lt;any[]&gt;(`${MARKETPLACE_CATEGORY_CACHE_PREFIX}${category}`)
+      if (cachedCategory?.value?.length) {
+        setAllProducts(cachedCategory.value)
+        setUsingCachedFeed(true)
+      }
+    }
     finally { setLoading(false) }
   }
 
   // ── Interaction handlers ──
+  const copyReferralCode = async () =&gt; {
+    const textToCopy = referralLink || referralCode
+    if (!textToCopy) return
+    try {
+      await navigator.clipboard.writeText(textToCopy)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = textToCopy
+      ta.style.cssText = 'position:fixed;opacity:0;'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setReferralCopied(true)
+    setTimeout(() =&gt; setReferralCopied(false), 2500)
+  }
+
+  const shareReferralWhatsApp = () =&gt; {
+    if (!referralLink) return
+    const text = encodeURIComponent(
+      `🔥 I'm on BATAMART — the hottest campus marketplace at ${universityShortName || 'UNIZIK'}!\nSign up with my link and start buying &amp; selling today:\n${referralLink}`
+    )
+    window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
   const handleProductClick = (id: string) =&gt; {
     const token = localStorage.getItem('token')
     try {
@@ -7631,7 +8128,11 @@ export default function MarketplacePage() {
       }
     } catch {}
     if (token) {
-      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() =&gt; {})
+      fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() =&gt; {
+        enqueueProductView(id)
+      })
+    } else {
+      enqueueProductView(id)
     }
     window.location.href = token ? `/product/${id}` : '/login'
   }
@@ -7739,7 +8240,7 @@ export default function MarketplacePage() {
               &lt;div className="w-8 h-8 rounded-lg bg-BATAMART-primary/10 flex items-center justify-center flex-shrink-0"&gt;
                 &lt;Search className="w-4 h-4 text-BATAMART-primary" /&gt;
               &lt;/div&gt;
-              &lt;span className="text-sm font-bold text-BATAMART-primary"&gt;Search for &amp;quot;{searchInput}&amp;quot;&lt;/span&gt;
+              &lt;span className="text-sm font-bold text-BATAMART-primary"&gt;Search for "{searchInput}"&lt;/span&gt;
               &lt;ArrowRight className="w-3.5 h-3.5 text-BATAMART-primary flex-shrink-0 ml-auto" /&gt;
             &lt;/button&gt;
           )}
@@ -7751,8 +8252,112 @@ export default function MarketplacePage() {
   if (!splashDone) return &lt;div className="min-h-screen bg-white" /&gt;
 
   return (
-    &lt;div className="min-h-screen bg-[#f0f2f5]"&gt;
+    &lt;div className={`${isApp ? 'min-h-screen bg-[#e7ebf2]' : 'min-h-screen bg-[#f0f2f5]'} marketplace-shell`}&gt;
       {SuggestionsDropdown}
+
+      {/* ── Referral Popup Modal ── */}
+      {showReferralPopup &amp;&amp; mounted &amp;&amp; createPortal(
+        &lt;div
+          className="fixed inset-0 z-[9990] flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+          onClick={() =&gt; setShowReferralPopup(false)}
+        &gt;
+          &lt;div
+            className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+            style={{
+              background: 'linear-gradient(145deg, #0f172a 0%, #1e3a5f 50%, #0ea5e9 100%)',
+              animation: 'referralPopIn 0.45s cubic-bezier(0.34,1.4,0.64,1) both',
+            }}
+            onClick={e =&gt; e.stopPropagation()}
+          &gt;
+            {/* Glow orbs */}
+            &lt;div style={{ position:'absolute', top:'-40px', right:'-40px', width:'150px', height:'150px', borderRadius:'50%', background:'rgba(14,165,233,0.25)', filter:'blur(40px)', pointerEvents:'none' }} /&gt;
+            &lt;div style={{ position:'absolute', bottom:'-30px', left:'-30px', width:'120px', height:'120px', borderRadius:'50%', background:'rgba(99,102,241,0.2)', filter:'blur(35px)', pointerEvents:'none' }} /&gt;
+
+            {/* Close btn */}
+            &lt;button
+              onClick={() =&gt; setShowReferralPopup(false)}
+              className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            &gt;
+              &lt;X className="w-4 h-4 text-white" /&gt;
+            &lt;/button&gt;
+
+            {/* Content */}
+            &lt;div className="p-6 pb-7 text-white relative z-[1]"&gt;
+              {/* Badge */}
+              &lt;div className="inline-flex items-center gap-1.5 bg-yellow-400/20 border border-yellow-400/40 rounded-full px-3 py-1 mb-4"&gt;
+                &lt;span className="text-yellow-300 text-xs font-bold tracking-wide"&gt;🎁 EARN REAL MONEY&lt;/span&gt;
+              &lt;/div&gt;
+
+              {/* Headline */}
+              &lt;h2 className="text-2xl font-black leading-tight mb-1"&gt;
+                Refer Friends &amp;&lt;br /&gt;
+                &lt;span className="text-[#0ea5e9]"&gt;Earn ₦120 Per Order!&lt;/span&gt;
+              &lt;/h2&gt;
+              &lt;p className="text-blue-200 text-sm leading-relaxed mb-5"&gt;
+                Every time someone you refer completes a delivery order on BataMart, &lt;span className="text-white font-semibold"&gt;₦120 drops straight into your wallet&lt;/span&gt; — no limit, no stress. Stack up referrals, stack up cash. 💰
+              &lt;/p&gt;
+
+              {/* Stats row */}
+              &lt;div className="grid grid-cols-2 gap-3 mb-5"&gt;
+                &lt;div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10"&gt;
+                  &lt;p className="text-2xl font-black text-yellow-300"&gt;₦120&lt;/p&gt;
+                  &lt;p className="text-xs text-blue-200 mt-0.5"&gt;per completed order&lt;/p&gt;
+                &lt;/div&gt;
+                &lt;div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10"&gt;
+                  &lt;p className="text-2xl font-black text-green-300"&gt;Unlimited&lt;/p&gt;
+                  &lt;p className="text-xs text-blue-200 mt-0.5"&gt;referrals you can make&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              {/* Referral code display */}
+              {referralCode &amp;&amp; (
+                &lt;div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex items-center gap-3 mb-4"&gt;
+                  &lt;div className="flex-1 min-w-0"&gt;
+                    &lt;p className="text-xs text-blue-300 mb-0.5"&gt;Your referral code&lt;/p&gt;
+                    &lt;p className="font-black text-white tracking-widest text-sm truncate"&gt;{referralCode}&lt;/p&gt;
+                  &lt;/div&gt;
+                  &lt;button
+                    onClick={copyReferralCode}
+                    className="flex-shrink-0 flex items-center gap-1.5 bg-white text-[#1e3a5f] font-bold text-xs px-3 py-2 rounded-xl hover:bg-blue-50 transition-colors"
+                  &gt;
+                    {referralCopied
+                      ? &lt;&gt;&lt;CheckCircle className="w-3.5 h-3.5 text-green-500" /&gt; Copied!&lt;/&gt;
+                      : &lt;&gt;&lt;Copy className="w-3.5 h-3.5" /&gt; Copy Link&lt;/&gt;
+                    }
+                  &lt;/button&gt;
+                &lt;/div&gt;
+              )}
+
+              {/* Action buttons */}
+              &lt;div className="flex gap-3"&gt;
+                &lt;button
+                  onClick={shareReferralWhatsApp}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm"
+                  style={{ background: '#25D366', color: '#fff' }}
+                &gt;
+                  &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"&gt;&lt;path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/&gt;&lt;/svg&gt;
+                  Share on WhatsApp
+                &lt;/button&gt;
+                &lt;button
+                  onClick={() =&gt; { setShowReferralPopup(false); router.push('/referrals') }}
+                  className="px-4 py-3 rounded-2xl font-bold text-sm bg-white/15 border border-white/20 text-white hover:bg-white/25 transition-colors flex items-center gap-1.5"
+                &gt;
+                  &lt;Users className="w-4 h-4" /&gt; View
+                &lt;/button&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          &lt;style&gt;{`
+            @keyframes referralPopIn {
+              from { opacity: 0; transform: scale(0.85) translateY(20px); }
+              to   { opacity: 1; transform: scale(1) translateY(0); }
+            }
+          `}&lt;/style&gt;
+        &lt;/div&gt;,
+        document.body
+      )}
 
       {/* Pull-to-refresh indicator */}
       {(pullDistance &gt; 0 || isRefreshing) &amp;&amp; (
@@ -7764,17 +8369,17 @@ export default function MarketplacePage() {
 
       {/* ══ HEADER ══ */}
       &lt;header
-        className="batamart-header sticky top-0 z-40 shadow-lg"
+        className={`batamart-header marketplace-header sticky top-0 z-40 ${isApp ? 'shadow-[0_8px_24px_rgba(15,23,42,0.16)]' : 'shadow-lg'}`}
         style={{
           // Subtle push-down effect during PTR — keeps header anchored-feeling
           transform: pullDistance &gt; 0 ? `translateY(${Math.min(pullDistance * 0.15, 16)}px)` : undefined,
           transition: isRefreshing || pullDistance === 0 ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)' : 'none',
         }}
       &gt;
-        &lt;div className="max-w-7xl mx-auto px-3 sm:px-6"&gt;
+        &lt;div className={`marketplace-header-inner ${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6`}&gt;
 
           {/* Top row */}
-          &lt;div className="flex items-center gap-2 sm:gap-4 py-3"&gt;
+          &lt;div className={`marketplace-top-row flex items-center gap-2 sm:gap-4 ${isApp ? 'py-3.5' : 'py-3'}`}&gt;
             &lt;div className="flex-shrink-0 flex items-center gap-2"&gt;
               &lt;div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/15 flex items-center justify-center"&gt;
                 &lt;ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-white" /&gt;
@@ -7791,7 +8396,7 @@ export default function MarketplacePage() {
 
             {/* Search bar */}
             &lt;div ref={searchRef} className="flex-1 min-w-0"&gt;
-              &lt;div className="search-input flex items-center gap-2 bg-white rounded-xl shadow-md px-3 sm:px-4 ring-2 ring-transparent"&gt;
+              &lt;div className="marketplace-search-input search-input flex items-center gap-2 bg-white rounded-xl shadow-md px-3 sm:px-4 ring-2 ring-transparent"&gt;
                 &lt;div
                   className="hidden sm:flex items-center gap-1 border-r border-gray-200 pr-3 mr-1 flex-shrink-0 cursor-pointer hover:text-BATAMART-primary transition-colors"
                   onClick={() =&gt; {}}
@@ -7844,7 +8449,7 @@ export default function MarketplacePage() {
           &lt;/div&gt;
 
           {/* Category nav */}
-          &lt;div className="flex items-center justify-between gap-2 pb-2 border-t border-white/10 pt-2"&gt;
+          &lt;div className="marketplace-categories flex items-center justify-between gap-2 pb-2 border-t border-white/10 pt-2"&gt;
             &lt;div className="flex gap-1 overflow-x-auto no-scrollbar flex-1"&gt;
               {CATEGORIES.map(cat =&gt; (
                 &lt;button
@@ -7897,7 +8502,14 @@ export default function MarketplacePage() {
       &lt;/header&gt;
 
       {/* ── MAIN CONTENT ── */}
-      &lt;div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5 pb-28 safe-bottom space-y-4"&gt;
+      &lt;div className={`marketplace-feed ${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6 ${isApp ? 'py-3 sm:py-4' : 'py-4 sm:py-5'} pb-28 safe-bottom space-y-4`}&gt;
+        {(!isOnline || usingCachedFeed) &amp;&amp; (
+          &lt;div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700"&gt;
+            {!isOnline
+              ? 'Offline mode: showing last synced marketplace data.'
+              : 'Showing cached marketplace data while syncing latest updates...'}
+          &lt;/div&gt;
+        )}
 
         {loading ? (
           &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
@@ -7941,6 +8553,17 @@ export default function MarketplacePage() {
             &lt;div className="flex items-center justify-between mb-3 bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm"&gt;
               &lt;LiveStatsBar count={allProducts.length} /&gt;
             &lt;/div&gt;
+            {peopleLikeYouBought.length &gt; 0 &amp;&amp; (
+              &lt;div className="mb-4"&gt;
+                &lt;BestSellersRow
+                  products={peopleLikeYouBought}
+                  onProductClick={handleProductClick}
+                  onSeeAll={() =&gt; router.push('/most-bought')}
+                  title="People Like You Bought"
+                  subtitle="Popular with students who shop like you"
+                /&gt;
+              &lt;/div&gt;
+            )}
             &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
               {allProducts.map((p, i) =&gt; (
                 &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 30} /&gt;
@@ -7987,6 +8610,16 @@ export default function MarketplacePage() {
                 onSeeAll={() =&gt; setSelectedCategory('All')}
                 title="Picked for You"
                 subtitle="Based on what you browse, search, and order"
+              /&gt;
+            )}
+
+            {peopleLikeYouBought.length &gt; 0 &amp;&amp; (
+              &lt;BestSellersRow
+                products={peopleLikeYouBought}
+                onProductClick={handleProductClick}
+                onSeeAll={() =&gt; router.push('/most-bought')}
+                title="People Like You Bought"
+                subtitle="Popular with students who shop like you"
               /&gt;
             )}
 
@@ -8107,7 +8740,292 @@ export default function MarketplacePage() {
       )}
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
+<div class='file-block'><div class='file-header'>app/(marketplace)/most-bought/loading.tsx</div><pre>export default function MostBoughtLoading() {
+  return (
+    &lt;div className="min-h-screen bg-[#f7f8fa]"&gt;
+      &lt;div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 sm:py-7"&gt;
+        &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 mb-4 animate-pulse"&gt;
+          &lt;div className="h-7 bg-gray-100 rounded w-56 mb-2" /&gt;
+          &lt;div className="h-4 bg-gray-100 rounded w-72" /&gt;
+        &lt;/div&gt;
+        &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"&gt;
+          {Array.from({ length: 12 }).map((_, i) =&gt; (
+            &lt;div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden animate-pulse"&gt;
+              &lt;div className="aspect-square bg-gray-100" /&gt;
+              &lt;div className="p-3 space-y-2"&gt;
+                &lt;div className="h-3 bg-gray-100 rounded" /&gt;
+                &lt;div className="h-3 bg-gray-100 rounded w-2/3" /&gt;
+                &lt;div className="h-4 bg-gray-100 rounded w-1/2" /&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</pre></div>
+<div class='file-block'><div class='file-header'>app/(marketplace)/most-bought/page.tsx</div><pre>'use client'
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, Loader2, TrendingUp, Users } from 'lucide-react'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { getClientCache, setClientCache } from '@/lib/client-cache'
+
+interface DailyBoughtItem {
+  key: string
+  dateKey: string
+  soldCount: number
+  uniqueBuyers: number
+  product: {
+    id: string
+    name: string
+    price: number
+    images: string[]
+    category: string
+    seller: {
+      id: string
+      name: string
+      avgRating: number
+      trustLevel: string
+    }
+  }
+}
+
+const PAGE_SIZE = 20
+const MOST_BOUGHT_CACHE_KEY = 'batamart_most_bought_cache_v1'
+const MOST_BOUGHT_CACHE_TTL = 1000 * 60 * 30
+
+const fmt = (n: number) =&gt;
+  new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(n)
+
+export default function MostBoughtPage() {
+  const router = useRouter()
+  const isOnline = useOnlineStatus()
+  const [items, setItems] = useState&lt;DailyBoughtItem[]&gt;([])
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState('')
+  const [usingCachedData, setUsingCachedData] = useState(false)
+  const [navigatingProductId, setNavigatingProductId] = useState&lt;string | null&gt;(null)
+  const sentinelRef = useRef&lt;HTMLDivElement&gt;(null)
+
+  const fetchPage = useCallback(async (targetPage: number, append: boolean) =&gt; {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      router.push('/login')
+      return
+    }
+
+    append ? setLoadingMore(true) : setLoading(true)
+    setError('')
+
+    try {
+      const res = await fetch(
+        `/api/products/people-like-you?mode=daily&amp;page=${targetPage}&amp;pageSize=${PAGE_SIZE}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Failed to load most bought feed')
+        if (!append) {
+          const cached = getClientCache&lt;DailyBoughtItem[]&gt;(MOST_BOUGHT_CACHE_KEY)
+          if (cached?.value?.length) {
+            setItems(cached.value)
+            setUsingCachedData(true)
+          }
+        }
+        return
+      }
+      const nextItems = (data.items || []) as DailyBoughtItem[]
+      const merged = append ? [...items, ...nextItems] : nextItems
+      setItems(prev =&gt; append ? [...prev, ...nextItems] : nextItems)
+      setHasMore(!!data.hasMore)
+      setPage(targetPage)
+      if (!append) {
+        setUsingCachedData(false)
+        setClientCache(MOST_BOUGHT_CACHE_KEY, merged, MOST_BOUGHT_CACHE_TTL)
+      }
+    } catch {
+      setError('Network error. Please try again.')
+      if (!append) {
+        const cached = getClientCache&lt;DailyBoughtItem[]&gt;(MOST_BOUGHT_CACHE_KEY)
+        if (cached?.value?.length) {
+          setItems(cached.value)
+          setUsingCachedData(true)
+          setError('')
+        }
+      }
+    } finally {
+      append ? setLoadingMore(false) : setLoading(false)
+    }
+  }, [router, items])
+
+  useEffect(() =&gt; {
+    const cached = getClientCache&lt;DailyBoughtItem[]&gt;(MOST_BOUGHT_CACHE_KEY)
+    if (cached?.value?.length) {
+      setItems(cached.value)
+      setUsingCachedData(true)
+      setLoading(false)
+    }
+    fetchPage(1, false)
+  }, [fetchPage])
+
+  useEffect(() =&gt; {
+    if (!sentinelRef.current || !hasMore || loading || loadingMore) return
+    const obs = new IntersectionObserver((entries) =&gt; {
+      if (entries[0].isIntersecting &amp;&amp; hasMore &amp;&amp; !loadingMore) {
+        fetchPage(page + 1, true)
+      }
+    }, { threshold: 0.1 })
+    obs.observe(sentinelRef.current)
+    return () =&gt; obs.disconnect()
+  }, [fetchPage, hasMore, loading, loadingMore, page])
+
+  const list = useMemo(() =&gt; {
+    const todayKey = new Date().toISOString().slice(0, 10)
+    return items.map((it) =&gt; ({
+      ...it,
+      isToday: it.dateKey === todayKey,
+      dateLabel: new Date(it.dateKey).toLocaleDateString('en-NG', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }),
+    }))
+  }, [items])
+
+  return (
+    &lt;div className="min-h-screen bg-[#f7f8fa]"&gt;
+      &lt;div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 sm:py-7"&gt;
+        &lt;button
+          onClick={() =&gt; router.back()}
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-BATAMART-primary mb-4"
+        &gt;
+          &lt;ChevronLeft className="w-4 h-4" /&gt; Back
+        &lt;/button&gt;
+
+        &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 mb-4"&gt;
+          &lt;div className="flex items-center gap-2 mb-1"&gt;
+            &lt;TrendingUp className="w-5 h-5 text-orange-500" /&gt;
+            &lt;h1 className="text-xl sm:text-2xl font-black text-gray-900"&gt;Most Bought Daily&lt;/h1&gt;
+          &lt;/div&gt;
+          &lt;p className="text-sm text-gray-500"&gt;
+            Updated every day and stacked over time. Keep scrolling.
+          &lt;/p&gt;
+        &lt;/div&gt;
+
+        {(!isOnline || usingCachedData) &amp;&amp; (
+          &lt;div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700"&gt;
+            {!isOnline
+              ? 'Offline mode: showing last synced most-bought feed.'
+              : 'Showing cached feed while syncing latest updates...'}
+          &lt;/div&gt;
+        )}
+
+        {loading ? (
+          &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"&gt;
+            {Array.from({ length: 12 }).map((_, i) =&gt; (
+              &lt;div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden animate-pulse"&gt;
+                &lt;div className="aspect-square bg-gray-100" /&gt;
+                &lt;div className="p-3 space-y-2"&gt;
+                  &lt;div className="h-3 bg-gray-100 rounded" /&gt;
+                  &lt;div className="h-3 bg-gray-100 rounded w-2/3" /&gt;
+                  &lt;div className="h-4 bg-gray-100 rounded w-1/2" /&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            ))}
+          &lt;/div&gt;
+        ) : error ? (
+          &lt;div className="bg-white rounded-2xl border border-red-100 p-10 text-center"&gt;
+            &lt;p className="text-red-600 font-semibold"&gt;{error}&lt;/p&gt;
+          &lt;/div&gt;
+        ) : list.length === 0 ? (
+          &lt;div className="bg-white rounded-2xl border border-gray-100 p-10 text-center"&gt;
+            &lt;p className="text-gray-500 font-semibold"&gt;No trending purchases yet.&lt;/p&gt;
+          &lt;/div&gt;
+        ) : (
+          &lt;&gt;
+            &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"&gt;
+              {list.map((item) =&gt; (
+                &lt;div
+                  key={item.key}
+                  onClick={() =&gt; {
+                    setNavigatingProductId(item.product.id)
+                    router.push(`/product/${item.product.id}`)
+                  }}
+                  className="bg-white rounded-xl border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                &gt;
+                  &lt;div className="relative aspect-square bg-gray-50 overflow-hidden"&gt;
+                    &lt;img
+                      src={item.product.images?.[0] || '/placeholder.png'}
+                      alt={item.product.name}
+                      className="w-full h-full object-cover"
+                    /&gt;
+                    {item.isToday &amp;&amp; (
+                      &lt;span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black shadow"&gt;
+                        NEW TODAY
+                      &lt;/span&gt;
+                    )}
+                  &lt;/div&gt;
+                  &lt;div className="p-2.5"&gt;
+                    &lt;div className="flex items-center gap-2"&gt;
+                      &lt;p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider"&gt;{item.dateLabel}&lt;/p&gt;
+                      {item.isToday &amp;&amp; (
+                        &lt;span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full"&gt;
+                          HOT NOW
+                        &lt;/span&gt;
+                      )}
+                    &lt;/div&gt;
+                    &lt;p className="text-xs font-semibold text-gray-800 line-clamp-2 mt-1"&gt;{item.product.name}&lt;/p&gt;
+                    &lt;p className="text-xs font-black text-BATAMART-primary mt-1"&gt;{fmt(item.product.price)}&lt;/p&gt;
+                    &lt;div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-500"&gt;
+                      &lt;span&gt;{item.soldCount} bought&lt;/span&gt;
+                      &lt;span&gt;•&lt;/span&gt;
+                      &lt;span className="inline-flex items-center gap-1"&gt;
+                        &lt;Users className="w-3 h-3" /&gt;
+                        {item.uniqueBuyers}
+                      &lt;/span&gt;
+                    &lt;/div&gt;
+                    {navigatingProductId === item.product.id &amp;&amp; (
+                      &lt;div className="mt-1.5 text-[10px] text-BATAMART-primary font-bold inline-flex items-center gap-1"&gt;
+                        &lt;Loader2 className="w-3 h-3 animate-spin" /&gt;
+                        Opening...
+                      &lt;/div&gt;
+                    )}
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              ))}
+            &lt;/div&gt;
+
+            &lt;div ref={sentinelRef} className="h-8 w-full mt-2" /&gt;
+
+            {loadingMore &amp;&amp; (
+              &lt;div className="flex justify-center py-4 text-gray-500 text-sm font-semibold"&gt;
+                &lt;Loader2 className="w-4 h-4 animate-spin mr-2" /&gt; Loading more...
+              &lt;/div&gt;
+            )}
+
+            {!hasMore &amp;&amp; (
+              &lt;p className="text-center text-xs text-gray-400 py-5"&gt;You have reached the end for now.&lt;/p&gt;
+            )}
+          &lt;/&gt;
+        )}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/my-shop/page.tsx</div><pre>'use client'
 // app/(marketplace)/my-shop/page.tsx
 
@@ -9000,6 +9918,33 @@ export default function NotificationsPage() {
     &lt;/div&gt;
   )
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/(marketplace)/orders/loading.tsx</div><pre>export default function OrdersLoading() {
+  return (
+    &lt;div className="min-h-screen bg-[#f7f8fa] pb-20"&gt;
+      &lt;div className="bg-white border-b border-gray-100"&gt;
+        &lt;div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-pulse"&gt;
+          &lt;div className="h-8 bg-gray-100 rounded w-44 mb-2" /&gt;
+          &lt;div className="h-4 bg-gray-100 rounded w-32" /&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-4"&gt;
+        {Array.from({ length: 4 }).map((_, i) =&gt; (
+          &lt;div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 animate-pulse"&gt;
+            &lt;div className="flex gap-4"&gt;
+              &lt;div className="w-20 h-20 bg-gray-100 rounded-xl" /&gt;
+              &lt;div className="flex-1 space-y-2"&gt;
+                &lt;div className="h-4 bg-gray-100 rounded w-2/3" /&gt;
+                &lt;div className="h-3 bg-gray-100 rounded w-1/2" /&gt;
+                &lt;div className="h-5 bg-gray-100 rounded w-1/4 mt-3" /&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        ))}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/page.tsx</div><pre>// app/(marketplace)/orders/page.tsx
 'use client'
 
@@ -9012,17 +9957,35 @@ import {
   X, BadgeCheck, AlertCircle,
 } from 'lucide-react'
 import { OrderNotificationBanner } from '@/components/layout/OrderNotificationBanner'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { getClientCache, setClientCache } from '@/lib/client-cache'
 
 interface ProductReview { id: string; rating: number; comment: string; createdAt: string }
 interface Review { id: string; type: string; rating: number; comment: string | null; createdAt: string }
 interface Seller { id: string; name: string; profilePhoto: string | null; email: string; phone: string; avgRating: number; trustLevel: string }
 interface Product { id: string; name: string; images: string[]; price: number }
 interface Rider { id: string; name: string; phone: string | null }
+interface PeopleLikeYouItem {
+  key: string
+  soldCount: number
+  product: {
+    id: string
+    name: string
+    price: number
+    images: string[]
+    seller: { name: string; avgRating: number }
+  }
+}
 interface Order {
   id: string; orderNumber?: string; status: string; totalAmount: number; quantity?: number
   deliveryAddress: string; createdAt: string; completedAt?: string; isPaid?: boolean
   seller: Seller; product: Product; rider?: Rider; reviews?: Review[]; productReviews?: ProductReview[]
 }
+
+const ORDERS_CACHE_KEY = 'batamart_orders_cache_v1'
+const PEOPLE_LIKE_CACHE_KEY = 'batamart_people_like_orders_cache_v1'
+const ORDERS_CACHE_TTL = 1000 * 60 * 3
+const PEOPLE_LIKE_CACHE_TTL = 1000 * 60 * 15
 
 const STATUS_CONFIG: Record&lt;string, { label: string; color: string; bg: string; ring: string; dot: string }&gt; = {
   PENDING: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', ring: 'ring-amber-200', dot: 'bg-amber-400' },
@@ -9050,6 +10013,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function OrdersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isOnline = useOnlineStatus()
   const [orders, setOrders] = useState&lt;Order[]&gt;([])
   const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -9057,6 +10021,8 @@ export default function OrdersPage() {
   const [postPayment, setPostPayment] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [actionLoading, setActionLoading] = useState&lt;Record&lt;string, boolean&gt;&gt;({})
+  const [peopleLikeYouBought, setPeopleLikeYouBought] = useState&lt;PeopleLikeYouItem[]&gt;([])
+  const [usingCachedData, setUsingCachedData] = useState(false)
 
   useEffect(() =&gt; {
     const token = localStorage.getItem('token')
@@ -9082,7 +10048,18 @@ export default function OrdersPage() {
       window.history.replaceState({}, '', '/orders')
     }
 
+    try {
+      const cachedOrders = getClientCache&lt;Order[]&gt;(ORDERS_CACHE_KEY)
+      if (cachedOrders?.value?.length) {
+        setOrders(cachedOrders.value)
+        setUsingCachedData(true)
+      }
+      const cachedPeople = getClientCache&lt;PeopleLikeYouItem[]&gt;(PEOPLE_LIKE_CACHE_KEY)
+      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
+    } catch {}
+
     fetchOrders()
+    fetchPeopleLikeYouBought()
   }, [searchParams])
 
   const fetchOrders = async () =&gt; {
@@ -9090,9 +10067,30 @@ export default function OrdersPage() {
       const token = localStorage.getItem('token')
       const response = await fetch('/api/orders', { headers: { 'Authorization': `Bearer ${token}` } })
       const data = await response.json()
-      if (response.ok) setOrders(data.orders || [])
+      if (response.ok) {
+        const nextOrders = data.orders || []
+        setOrders(nextOrders)
+        setUsingCachedData(false)
+        setClientCache(ORDERS_CACHE_KEY, nextOrders, ORDERS_CACHE_TTL)
+      }
     } catch (error) { console.error('Error fetching orders:', error) }
     finally { setLoading(false) }
+  }
+
+  const fetchPeopleLikeYouBought = async () =&gt; {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      const response = await fetch('/api/products/people-like-you?mode=top&amp;pageSize=10', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json()
+      if (response.ok) {
+        const items = data.items || []
+        setPeopleLikeYouBought(items)
+        setClientCache(PEOPLE_LIKE_CACHE_KEY, items, PEOPLE_LIKE_CACHE_TTL)
+      }
+    } catch {}
   }
 
   const confirmDelivery = async (orderId: string) =&gt; {
@@ -9182,6 +10180,49 @@ export default function OrdersPage() {
       &lt;/div&gt;
 
       &lt;div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8"&gt;
+        {(!isOnline || usingCachedData) &amp;&amp; (
+          &lt;div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700"&gt;
+            {!isOnline
+              ? 'You are offline. Showing last synced orders.'
+              : 'Showing cached orders while refreshing latest data...'}
+          &lt;/div&gt;
+        )}
+
+        {peopleLikeYouBought.length &gt; 0 &amp;&amp; (
+          &lt;div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4"&gt;
+            &lt;div className="flex items-center justify-between mb-3"&gt;
+              &lt;h2 className="text-base font-black text-gray-900"&gt;People Like You Bought&lt;/h2&gt;
+              &lt;button
+                onClick={() =&gt; router.push('/most-bought')}
+                className="text-xs font-bold text-BATAMART-primary flex items-center gap-1 hover:underline"
+              &gt;
+                See more &lt;ChevronRight className="w-3.5 h-3.5" /&gt;
+              &lt;/button&gt;
+            &lt;/div&gt;
+            &lt;div className="flex gap-3 overflow-x-auto no-scrollbar pb-1"&gt;
+              {peopleLikeYouBought.map((item) =&gt; (
+                &lt;div
+                  key={item.key}
+                  onClick={() =&gt; router.push(`/product/${item.product.id}`)}
+                  className="flex-shrink-0 w-36 sm:w-44 rounded-xl border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow bg-white"
+                &gt;
+                  &lt;div className="aspect-square bg-gray-50 overflow-hidden"&gt;
+                    &lt;img
+                      src={item.product.images?.[0] || '/placeholder.png'}
+                      alt={item.product.name}
+                      className="w-full h-full object-cover"
+                    /&gt;
+                  &lt;/div&gt;
+                  &lt;div className="p-2.5"&gt;
+                    &lt;p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug"&gt;{item.product.name}&lt;/p&gt;
+                    &lt;p className="text-xs font-black text-BATAMART-primary mt-1"&gt;{formatPrice(item.product.price)}&lt;/p&gt;
+                    &lt;p className="text-[10px] text-gray-500 mt-1"&gt;{item.soldCount} bought&lt;/p&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              ))}
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )}
 
         {/* Loading skeletons */}
         {loading ? (
@@ -9388,7 +10429,8 @@ export default function OrdersPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/dispute/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/orders/[id]/review-product/page.tsx</div><pre>Could not read file.</pre></div>
@@ -10157,7 +11199,7 @@ export default function ReportPage() {
 // ── No alert() / confirm() — all feedback via inline Toast.
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, AlertTriangle, MapPin, Phone, Package,
@@ -10219,9 +11261,27 @@ export default function RiderDashboardPage() {
   const [actionLoading,    setActionLoading]    = useState&lt;Record&lt;string, boolean&gt;&gt;({})
 
   const [toast, setToast] = useState&lt;{ message: string; type: 'success' | 'error' | 'info' } | null&gt;(null)
+  const [trackingActive, setTrackingActive] = useState(false)
+  const [trackingError, setTrackingError] = useState&lt;string | null&gt;(null)
+  const [lastTrackingPing, setLastTrackingPing] = useState&lt;Date | null&gt;(null)
+
+  const watchIdRef = useRef&lt;number | null&gt;(null)
+  const lastSentAtRef = useRef(0)
+  const lastCoordsRef = useRef&lt;{ lat: number; lng: number } | null&gt;(null)
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') =&gt; {
     setToast({ message, type })
     setTimeout(() =&gt; setToast(null), 4000)
+  }
+
+  const getDistanceMeters = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =&gt; {
+    const R = 6371000
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180
+    const la1 = (a.lat * Math.PI) / 180
+    const la2 = (b.lat * Math.PI) / 180
+    const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(la1) * Math.cos(la2)
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
   }
 
   useEffect(() =&gt; {
@@ -10356,10 +11416,116 @@ export default function RiderDashboardPage() {
     }
   }
 
-  const hasDisputePickupPending = disputePickups.length &gt; 0
+  const getDisputeReturnStage = (status: string) =&gt; {
+    if (status === 'RIDER_ASSIGNED') return { label: 'Awaiting Pickup', tone: 'bg-yellow-100 text-yellow-700' }
+    if (status === 'PICKED_UP') return { label: 'Picked Up - Head to Seller', tone: 'bg-blue-100 text-blue-700' }
+    if (status === 'ON_THE_WAY') return { label: 'On The Way to Seller', tone: 'bg-indigo-100 text-indigo-700' }
+    if (status === 'DELIVERED') return { label: 'Delivered - Waiting Seller Confirmation', tone: 'bg-emerald-100 text-emerald-700' }
+    return { label: status.replace(/_/g, ' '), tone: 'bg-gray-100 text-gray-600' }
+  }
+
+  const hasDisputePickupPending = disputePickups.some((o: any) =&gt; o.status !== 'DELIVERED')
+  const blockingDisputeReturns = disputePickups.filter((o: any) =&gt; o.status !== 'DELIVERED')
 
   // ── Active orders count across all batches ────────────────────────────────
   const totalActiveOrders = myBatches.reduce((sum, b) =&gt; sum + b.orders.length, 0)
+  const liveOrderIds = useMemo(() =&gt; {
+    const set = new Set&lt;string&gt;()
+    myBatches.forEach((batch: any) =&gt; {
+      batch.orders.forEach((order: any) =&gt; {
+        if (['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'].includes(order.status)) {
+          set.add(order.id)
+        }
+      })
+    })
+    disputePickups.forEach((order: any) =&gt; {
+      if (['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY'].includes(order.status)) {
+        set.add(order.id)
+      }
+    })
+    return Array.from(set)
+  }, [myBatches, disputePickups])
+
+  useEffect(() =&gt; {
+    if (liveOrderIds.length === 0) {
+      setTrackingActive(false)
+      setTrackingError(null)
+      if (watchIdRef.current !== null &amp;&amp; typeof navigator !== 'undefined' &amp;&amp; navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+      watchIdRef.current = null
+      lastCoordsRef.current = null
+      return
+    }
+
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setTrackingError('Live tracking is not supported on this device.')
+      setTrackingActive(false)
+      return
+    }
+
+    setTrackingError(null)
+
+    const sendLocation = async (position: GeolocationPosition) =&gt; {
+      const lat = position.coords.latitude
+      const lng = position.coords.longitude
+      const now = Date.now()
+      const lastPoint = lastCoordsRef.current
+
+      const movedEnough = !lastPoint || getDistanceMeters(lastPoint, { lat, lng }) &gt;= 12
+      const intervalReached = now - lastSentAtRef.current &gt;= 10000
+      if (!movedEnough &amp;&amp; !intervalReached) return
+
+      lastCoordsRef.current = { lat, lng }
+      lastSentAtRef.current = now
+
+      try {
+        const firstBatchId = myBatches[0]?.id
+        await authFetch('/api/riders/live-location', {
+          method: 'POST',
+          body: JSON.stringify({
+            orderIds: liveOrderIds,
+            batchId: firstBatchId,
+            lat,
+            lng,
+            accuracy: position.coords.accuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+          }),
+        })
+        setLastTrackingPing(new Date())
+        setTrackingActive(true)
+      } catch {
+        setTrackingError('Could not send live location. Check your internet.')
+      }
+    }
+
+    const handleError = (error: GeolocationPositionError) =&gt; {
+      if (error.code === error.PERMISSION_DENIED) {
+        setTrackingError('Location permission denied. Buyer live map is off.')
+      } else {
+        setTrackingError('Live location temporarily unavailable.')
+      }
+      setTrackingActive(false)
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      sendLocation,
+      handleError,
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 5000,
+      }
+    )
+
+    return () =&gt; {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+      watchIdRef.current = null
+    }
+  }, [liveOrderIds, myBatches])
 
   if (loading) {
     return (
@@ -10417,6 +11583,26 @@ export default function RiderDashboardPage() {
               &lt;p className="text-xs font-semibold text-violet-600 mt-0.5"&gt;Earned&lt;/p&gt;
             &lt;/div&gt;
           &lt;/div&gt;
+
+          {liveOrderIds.length &gt; 0 &amp;&amp; (
+            &lt;div className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${
+              trackingError
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}&gt;
+              &lt;p className="font-bold"&gt;
+                {trackingError
+                  ? 'Live Tracking Issue'
+                  : trackingActive
+                    ? 'Live Tracking On'
+                    : 'Starting Live Tracking...'}
+              &lt;/p&gt;
+              &lt;p className="mt-0.5"&gt;
+                {trackingError || `Buyer can view your live route for ${liveOrderIds.length} active order${liveOrderIds.length &gt; 1 ? 's' : ''}.`}
+                {!trackingError &amp;&amp; lastTrackingPing ? ` Last sync ${lastTrackingPing.toLocaleTimeString()}.` : ''}
+              &lt;/p&gt;
+            &lt;/div&gt;
+          )}
         &lt;/div&gt;
 
         {/* ── Dispute Pickup Jobs ───────────────────────────────────────── */}
@@ -10426,7 +11612,7 @@ export default function RiderDashboardPage() {
               &lt;AlertTriangle className="w-4 h-4 text-red-500" /&gt;
               &lt;h2 className="text-base font-black text-red-600"&gt;Return Pickup Required&lt;/h2&gt;
               &lt;span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold"&gt;
-                {disputePickups.length} pending
+                {blockingDisputeReturns.length} pending
               &lt;/span&gt;
             &lt;/div&gt;
 
@@ -10453,6 +11639,12 @@ export default function RiderDashboardPage() {
                       &lt;/div&gt;
                       &lt;span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold"&gt;
                         ₦560 on done
+                      &lt;/span&gt;
+                    &lt;/div&gt;
+
+                    &lt;div className="mb-3"&gt;
+                      &lt;span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${getDisputeReturnStage(order.status).tone}`}&gt;
+                        {getDisputeReturnStage(order.status).label}
                       &lt;/span&gt;
                     &lt;/div&gt;
 
@@ -10487,16 +11679,72 @@ export default function RiderDashboardPage() {
                       )}
                     &lt;/div&gt;
 
-                    &lt;button
-                      onClick={() =&gt; markDisputePickedUp(order.id)}
-                      disabled={actionLoading[`dispute-pickup-${order.id}`]}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
-                    &gt;
-                      {actionLoading[`dispute-pickup-${order.id}`]
-                        ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
-                        : 'I Have Collected the Item from Buyer'
-                      }
-                    &lt;/button&gt;
+                    &lt;div className="mb-3 p-3 bg-emerald-50 rounded-xl"&gt;
+                      &lt;div className="flex items-center gap-1.5 mb-1.5"&gt;
+                        &lt;MapPin className="w-3.5 h-3.5 text-emerald-500" /&gt;
+                        &lt;p className="text-xs font-bold text-emerald-700 uppercase"&gt;Return to seller&lt;/p&gt;
+                      &lt;/div&gt;
+                      &lt;div className="text-sm space-y-0.5"&gt;
+                        &lt;p className="font-semibold text-gray-800"&gt;
+                          {order.seller?.hostelName || order.product?.hostelName || 'Seller hostel not set'}
+                          {order.seller?.roomNumber ? `, Room ${order.seller.roomNumber}` : ''}
+                        &lt;/p&gt;
+                        {order.seller?.landmark &amp;&amp; &lt;p className="text-gray-500 text-xs"&gt;{order.seller.landmark}&lt;/p&gt;}
+                        {order.seller?.phone &amp;&amp; (
+                          &lt;p className="text-emerald-700 font-semibold flex items-center gap-1 mt-1"&gt;
+                            &lt;Phone className="w-3 h-3" /&gt; {order.seller.phone}
+                          &lt;/p&gt;
+                        )}
+                        &lt;p className="text-[11px] text-gray-500 mt-1"&gt;
+                          Seller: &lt;span className="font-semibold text-gray-700"&gt;{order.seller?.name || 'N/A'}&lt;/span&gt;
+                        &lt;/p&gt;
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+
+                    {order.status === 'RIDER_ASSIGNED' &amp;&amp; (
+                      &lt;button
+                        onClick={() =&gt; markDisputePickedUp(order.id)}
+                        disabled={actionLoading[`dispute-pickup-${order.id}`]}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                      &gt;
+                        {actionLoading[`dispute-pickup-${order.id}`]
+                          ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
+                          : 'I Have Collected the Item from Buyer'
+                        }
+                      &lt;/button&gt;
+                    )}
+
+                    {order.status === 'PICKED_UP' &amp;&amp; (
+                      &lt;button
+                        onClick={() =&gt; updateStatus(order.id, 'ON_THE_WAY')}
+                        disabled={actionLoading[`status-${order.id}`]}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                      &gt;
+                        {actionLoading[`status-${order.id}`]
+                          ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
+                          : &lt;&gt;&lt;ArrowRight className="w-4 h-4" /&gt; On The Way to Seller&lt;/&gt;
+                        }
+                      &lt;/button&gt;
+                    )}
+
+                    {order.status === 'ON_THE_WAY' &amp;&amp; (
+                      &lt;button
+                        onClick={() =&gt; updateStatus(order.id, 'DELIVERED')}
+                        disabled={actionLoading[`status-${order.id}`]}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                      &gt;
+                        {actionLoading[`status-${order.id}`]
+                          ? &lt;&gt;&lt;Loader2 className="w-4 h-4 animate-spin" /&gt; Updating...&lt;/&gt;
+                          : &lt;&gt;&lt;CheckCircle className="w-4 h-4" /&gt; Delivered to Seller&lt;/&gt;
+                        }
+                      &lt;/button&gt;
+                    )}
+
+                    {order.status === 'DELIVERED' &amp;&amp; (
+                      &lt;div className="w-full py-3 px-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold text-center"&gt;
+                        Return delivered. Waiting for seller confirmation.
+                      &lt;/div&gt;
+                    )}
                   &lt;/div&gt;
                 )
               })}
@@ -10773,7 +12021,8 @@ export default function RiderDashboardPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/search/page.tsx</div><pre>'use client'
 
 import { useState, useEffect, useMemo, Suspense } from 'react'
@@ -13142,7 +14391,7 @@ const faqs = [
   },
   {
     question: 'What if I have an issue with my order?',
-    answer: 'You can open a dispute within 7 days of delivery. Our team will review and help resolve the issue fairly.'
+    answer: 'You can open a dispute within 72 hours of delivery. Our team will review and help resolve the issue fairly.'
   },
   {
     question: 'How do I become a seller?',
@@ -13479,7 +14728,8 @@ export default function ContactPage() {
 
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/disputes/[id]/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/myprofile/page.tsx</div><pre>'use client'
 
@@ -14553,7 +15803,7 @@ export default function TermsPage() {
         "Pay for items promptly after purchase",
         "Provide accurate delivery information",
         "Inspect items upon delivery",
-        "Report issues within 7 days of delivery",
+        "Report issues within 72 hours of delivery",
         "Treat sellers and riders with respect"
       ]
     }
@@ -14861,7 +16111,8 @@ export default function TermsPage() {
       &lt;/section&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/terms/sellers/page.tsx</div><pre>// app/terms/sellers/page.tsx
 import Link from 'next/link'
 
@@ -14942,7 +16193,7 @@ const sections = [
     title: 'Disputes &amp; Returns',
     icon: '⚖️',
     content: [
-      'Buyers may raise a dispute within 24 hours of delivery if a product does not match its listing description.',
+      'Buyers may raise a dispute within 72 hours of delivery if a product does not match its listing description.',
       "BATAMART's support team will review all disputes fairly, considering evidence from both parties.",
       "If a dispute is resolved in the buyer's favour, the funds will be refunded from escrow and the seller will bear the cost.",
       'Sellers found to have acted in bad faith (e.g. knowingly shipping wrong or damaged items) may face account suspension and forfeiture of escrow funds.',
@@ -15106,7 +16357,8 @@ export default function SellerTermsPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>components/InstallPrompt.tsx</div><pre>'use client'
 
 import { useEffect, useState } from 'react'
@@ -15499,36 +16751,35 @@ function unblockPage() {
   document.documentElement.classList.remove('splash-pending')
 }
 
-// ── Exported helper ────────────────────────────────────────────────────────
+function isAppModeNow(): boolean {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    window.location.search.indexOf('app=true') !== -1
+  )
+}
+
+// Exported helper
 // Called synchronously by MarketplacePage on first render to decide whether
 // to show a blank white screen while splash is active.
 export function isSplashPending(): boolean {
   if (typeof window === 'undefined') return false
   try {
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true
-    const isAppParam = window.location.search.indexOf('app=true') !== -1
     const isAndroid = window.location.search.indexOf('android=true') !== -1
 
     if (isAndroid) return false
 
-    // App mode splash
-    if ((isStandalone || isAppParam) &amp;&amp; !sessionStorage.getItem('batamart_splash_app')) return true
-
-    // Browser mode splash (only on /marketplace)
-    if (!isStandalone &amp;&amp; !isAppParam &amp;&amp; !sessionStorage.getItem('batamart_splash_browser') &amp;&amp;
-      window.location.pathname === '/marketplace') return true
+    // Splash is app/PWA mode only.
+    if (isAppModeNow() &amp;&amp; !sessionStorage.getItem('batamart_splash_app')) return true
 
     return false
   } catch {
     return false
   }
 }
-// ──────────────────────────────────────────────────────────────────────────
 
 export default function SplashScreen() {
-  const [visible, setVisible] = useState(false)
+  const [visible, setVisible] = useState&lt;boolean&gt;(() =&gt; isSplashPending())
   const [phase, setPhase] = useState&lt;'idle' | 'in' | 'out'&gt;('idle')
 
   const router = useRouter()
@@ -15536,16 +16787,16 @@ export default function SplashScreen() {
   const searchParams = useSearchParams()
 
   useEffect(() =&gt; {
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true
+    let outTimer: ReturnType&lt;typeof setTimeout&gt; | null = null
+    let doneTimer: ReturnType&lt;typeof setTimeout&gt; | null = null
+    let cancelled = false
 
-    const isAppParam = searchParams.get('app') === 'true'
-    const isAndroid  = searchParams.get('android') === 'true'
-    const isAppMode  = isStandalone || isAppParam
+    const isAndroid = searchParams.get('android') === 'true'
+    const isAppMode = isAppModeNow()
 
-    // Android has its own native splash — unblock page immediately
+    // Android has its own native splash - unblock page immediately
     if (isAndroid) {
+      setVisible(false)
       unblockPage()
       return
     }
@@ -15553,33 +16804,37 @@ export default function SplashScreen() {
     const shouldShowAppSplash =
       isAppMode &amp;&amp; !sessionStorage.getItem('batamart_splash_app')
 
-    const shouldShowBrowserSplash =
-      !isAppMode &amp;&amp;
-      pathname === '/marketplace' &amp;&amp;
-      !sessionStorage.getItem('batamart_splash_browser')
-
-    // No splash needed — unblock immediately and signal done
-    if (!shouldShowAppSplash &amp;&amp; !shouldShowBrowserSplash) {
+    // No splash needed - unblock immediately and signal done
+    if (!shouldShowAppSplash) {
+      setVisible(false)
       unblockPage()
       window.dispatchEvent(new CustomEvent('batamart:splash-done'))
       return
     }
 
     // Mark session so splash doesn't repeat
-    if (shouldShowAppSplash)     sessionStorage.setItem('batamart_splash_app', '1')
-    if (shouldShowBrowserSplash) sessionStorage.setItem('batamart_splash_browser', '1')
+    sessionStorage.setItem('batamart_splash_app', '1')
+    setPhase('idle')
 
     // Preload logo fully before showing anything
     preloadImage('/BATAMART - logo.png').then(() =&gt; {
+      if (cancelled) return
+
       setVisible(true)
 
       requestAnimationFrame(() =&gt; {
-        requestAnimationFrame(() =&gt; setPhase('in'))
+        requestAnimationFrame(() =&gt; {
+          if (!cancelled) setPhase('in')
+        })
       })
 
-      const outTimer = setTimeout(() =&gt; setPhase('out'), 2500)
+      outTimer = setTimeout(() =&gt; {
+        if (!cancelled) setPhase('out')
+      }, 2500)
 
-      const doneTimer = setTimeout(() =&gt; {
+      doneTimer = setTimeout(() =&gt; {
+        if (cancelled) return
+
         setVisible(false)
         unblockPage()
         // Signal marketplace page that splash is finished
@@ -15588,39 +16843,40 @@ export default function SplashScreen() {
           router.replace('/marketplace?app=true')
         }
       }, 3000)
-
-      return () =&gt; {
-        clearTimeout(outTimer)
-        clearTimeout(doneTimer)
-      }
     })
+
+    return () =&gt; {
+      cancelled = true
+      if (outTimer) clearTimeout(outTimer)
+      if (doneTimer) clearTimeout(doneTimer)
+    }
   }, [pathname, searchParams, router])
 
   if (!visible) return null
 
   const logoStyle: React.CSSProperties = {
-    opacity:   phase === 'in' ? 1 : 0,
+    opacity: phase === 'in' ? 1 : 0,
     transform: phase === 'out' ? 'translateY(-8px)' : 'translateY(0)',
     transition:
       phase === 'in'
         ? 'opacity 700ms cubic-bezier(0.45,0,0.55,1) 200ms'
         : phase === 'out'
-        ? 'opacity 400ms ease, transform 400ms ease'
-        : 'none',
+          ? 'opacity 400ms ease, transform 400ms ease'
+          : 'none',
   }
 
   const textStyle: React.CSSProperties = {
-    opacity:   phase === 'in' ? 1 : 0,
+    opacity: phase === 'in' ? 1 : 0,
     transform:
-      phase === 'in'   ? 'translateY(0)'
-      : phase === 'out' ? 'translateY(-20px)'
-      :                   'translateY(30px)',
+      phase === 'in' ? 'translateY(0)'
+        : phase === 'out' ? 'translateY(-20px)'
+          : 'translateY(30px)',
     transition:
       phase === 'in'
         ? 'opacity 700ms cubic-bezier(0.45,0,0.55,1) 600ms, transform 700ms cubic-bezier(0.45,0,0.55,1) 600ms'
         : phase === 'out'
-        ? 'opacity 400ms ease, transform 400ms ease'
-        : 'none',
+          ? 'opacity 400ms ease, transform 400ms ease'
+          : 'none',
   }
 
   return (
@@ -15651,7 +16907,8 @@ export default function SplashScreen() {
       &lt;/p&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/AppScrollFix.tsx</div><pre>'use client'
 
 import { useEffect, useState, Suspense } from 'react'
@@ -15691,10 +16948,11 @@ export function AppScrollFix({ children }: { children: React.ReactNode }) {
 <div class='file-block'><div class='file-header'>components/layout/IOSAppShell.tsx</div><pre>'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, usePathname } from 'next/navigation'
 
 function IOSAppShellInner({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const isAppParam = searchParams.get('app') === 'true'
   const isAndroid = searchParams.get('android') === 'true'
 
@@ -15713,6 +16971,16 @@ function IOSAppShellInner({ children }: { children: React.ReactNode }) {
 
   const isApp = isAppParam || isStandalone
   const isIOSApp = isIOS &amp;&amp; isApp &amp;&amp; !isAndroid
+
+  useEffect(() =&gt; {
+    const html = document.documentElement
+    if (isApp) {
+      html.classList.add('app-mode')
+    } else {
+      html.classList.remove('app-mode')
+    }
+    return () =&gt; html.classList.remove('app-mode')
+  }, [isApp])
 
   if (isIOSApp) {
     return (
@@ -15736,6 +17004,8 @@ function IOSAppShellInner({ children }: { children: React.ReactNode }) {
         {/* This div is the ONLY thing that scrolls */}
         &lt;div
           id="ios-scroll-area"
+          key={pathname || 'root'}
+          className="app-route-enter"
           style={{
             flex: 1,
             overflowY: 'scroll',
@@ -15754,7 +17024,12 @@ function IOSAppShellInner({ children }: { children: React.ReactNode }) {
 
   // Non-iOS or browser — render normally, no shell
   return (
-    &lt;div id="page-scroll-container" style={{ paddingBottom: 'calc(64px + max(env(safe-area-inset-bottom), 16px))' }}&gt;
+    &lt;div
+      id="page-scroll-container"
+      key={pathname || 'root'}
+      className={isApp ? 'app-route-enter' : ''}
+      style={{ paddingBottom: 'calc(64px + max(env(safe-area-inset-bottom), 16px))' }}
+    &gt;
       {children}
     &lt;/div&gt;
   )
@@ -15766,7 +17041,8 @@ export function IOSAppShell({ children }: { children: React.ReactNode }) {
       &lt;IOSAppShellInner&gt;{children}&lt;/IOSAppShellInner&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/MobileNav.tsx</div><pre>'use client';
 
 import { X, Menu, Home, ShoppingBag, Package, Wallet, User, Settings, LogOut } from 'lucide-react';
@@ -15943,7 +17219,7 @@ function AppTopBar({
   cartCount: number
 }) {
   return (
-    &lt;nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm"&gt;
+    &lt;nav className="fixed top-0 left-0 right-0 z-50 bg-white/88 backdrop-blur-xl border-b border-white/70 shadow-[0_6px_22px_rgba(15,23,42,0.08)]"&gt;
       &lt;div className="flex items-center justify-between h-14 px-4"&gt;
         &lt;BATAMARTLogo appMode /&gt;
         &lt;div className="flex items-center gap-2"&gt;
@@ -16119,7 +17395,7 @@ function RiderBottomNav({ onLogout }: { onLogout: () =&gt; void }) {
               &lt;Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-400' : 'text-gray-500'
                 }`}
               &gt;
@@ -16177,7 +17453,7 @@ function RiderBottomNav({ onLogout }: { onLogout: () =&gt; void }) {
               &lt;Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-400' : 'text-gray-500'
                 }`}
               &gt;
@@ -16196,7 +17472,7 @@ function RiderBottomNav({ onLogout }: { onLogout: () =&gt; void }) {
 
           &lt;button
             onClick={() =&gt; setProfileOpen(true)}
-            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
               profileOpen ? 'text-blue-400' : 'text-gray-500'
             }`}
           &gt;
@@ -16368,9 +17644,9 @@ function AppBottomNav({
   return (
     &lt;&gt;
       &lt;nav
-        className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100"
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white/92 backdrop-blur-xl border-t border-white/80"
         style={{
-          boxShadow: '0 -4px 24px rgba(0,0,0,0.07)',
+          boxShadow: '0 -8px 28px rgba(15,23,42,0.10)',
           transform: 'translate3d(0,0,0)',
           WebkitTransform: 'translate3d(0,0,0)',
           willChange: 'transform',
@@ -16391,7 +17667,7 @@ function AppBottomNav({
               &lt;Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-600' : 'text-gray-400'
                 }`}
               &gt;
@@ -16407,7 +17683,6 @@ function AppBottomNav({
           })}
 
           &lt;div className="flex-1 flex items-center justify-center relative"&gt;
-            &lt;div className="absolute inset-0 bg-white" /&gt;
             &lt;Link
               href={sellHref}
               className="relative z-10 flex flex-col items-center justify-center -mt-5"
@@ -16431,7 +17706,7 @@ function AppBottomNav({
               &lt;Link
                 key={label}
                 href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
                   active ? 'text-blue-600' : 'text-gray-400'
                 }`}
               &gt;
@@ -16448,7 +17723,7 @@ function AppBottomNav({
 
           &lt;button
             onClick={() =&gt; setProfileOpen(true)}
-            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] relative transition-all duration-200 ease-out active:scale-[0.98] ${
               profileOpen ? 'text-blue-600' : 'text-gray-400'
             }`}
           &gt;
@@ -17016,7 +18291,8 @@ export function Navbar() {
       )}
     &lt;/nav&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/NavbarWrapper.tsx</div><pre>'use client'
 
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -17386,6 +18662,25 @@ export default function NotificationBell() {
     &lt;/div&gt;
   )
 }</pre></div>
+<div class='file-block'><div class='file-header'>components/layout/OfflineStatusBanner.tsx</div><pre>'use client'
+
+import { WifiOff } from 'lucide-react'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+
+export function OfflineStatusBanner() {
+  const isOnline = useOnlineStatus()
+  if (isOnline) return null
+
+  return (
+    &lt;div className="fixed top-0 left-0 right-0 z-[12000] bg-amber-500 text-white"&gt;
+      &lt;div className="max-w-7xl mx-auto px-4 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2"&gt;
+        &lt;WifiOff className="w-4 h-4" /&gt;
+        You are offline. Showing last synced data where available.
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/OrderNotificationBanner.tsx</div><pre>// components/layout/OrderNotificationBanner.tsx
 'use client'
 
@@ -17610,6 +18905,49 @@ export function OrderNotificationBanner({ postPayment = false }: Props) {
     &lt;/&gt;
   )
 }</pre></div>
+<div class='file-block'><div class='file-header'>components/layout/RoutePrefetcher.tsx</div><pre>'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
+const ROUTES_TO_PREFETCH = [
+  '/marketplace',
+  '/orders',
+  '/cart',
+  '/sell',
+  '/profile',
+  '/most-bought',
+]
+
+export function RoutePrefetcher() {
+  const router = useRouter()
+
+  useEffect(() =&gt; {
+    let cancelled = false
+    const run = () =&gt; {
+      if (cancelled) return
+      ROUTES_TO_PREFETCH.forEach(route =&gt; {
+        try { router.prefetch(route) } catch {}
+      })
+    }
+
+    const id = (window as any).requestIdleCallback
+      ? (window as any).requestIdleCallback(run, { timeout: 1200 })
+      : window.setTimeout(run, 350)
+
+    return () =&gt; {
+      cancelled = true
+      if ((window as any).cancelIdleCallback &amp;&amp; typeof id === 'number') {
+        ;(window as any).cancelIdleCallback(id)
+      } else {
+        clearTimeout(id)
+      }
+    }
+  }, [router])
+
+  return null
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>components/layout/SuspensionGuard.tsx</div><pre>'use client'
 
 import { useSuspensionGuard } from '@/hooks/Usesuspensionguard'
@@ -19600,6 +20938,13 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function generateReferralCode(name: string) {
+  const clean = (name || 'ADMIN').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const base = clean.slice(0, 4) || 'ADMN';
+  const suffix = Math.floor(100000 + Math.random() * 900000);
+  return `${base}${suffix}`;
+}
+
 async function createAdmin() {
   try {
     // CHANGE THESE DETAILS! ↓↓↓
@@ -19640,6 +20985,7 @@ async function createAdmin() {
         name: adminName,
         role: 'ADMIN', // Set role to ADMIN
         isSellerMode: false,
+        referralCode: generateReferralCode(adminName),
       }
     });
 
@@ -19669,7 +21015,8 @@ async function createAdmin() {
   }
 }
 
-createAdmin();</pre></div>
+createAdmin();
+</pre></div>
 <div class='file-block'><div class='file-header'>middleware.ts</div><pre>// middleware.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
@@ -21525,6 +22872,201 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch revenue' }, { status: 500 })
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/api/admin/rider-tracking/route.ts</div><pre>export const dynamic = 'force-dynamic'
+
+import { NextRequest, NextResponse } from 'next/server'
+import jwt from 'jsonwebtoken'
+import prisma from '@/lib/prisma'
+
+async function verifyAdmin(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) return null
+  try {
+    const token = authHeader.substring(7)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    if (decoded.role !== 'ADMIN') return null
+    return decoded
+  } catch {
+    return null
+  }
+}
+
+function toNumberOrNull(value: unknown) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+export async function GET(req: NextRequest) {
+  const admin = await verifyAdmin(req)
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const { searchParams } = new URL(req.url)
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)))
+    const skip = (page - 1) * limit
+    const search = (searchParams.get('search') || '').trim()
+    const riderId = (searchParams.get('riderId') || '').trim()
+    const orderId = (searchParams.get('orderId') || '').trim()
+
+    if (orderId) {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          createdAt: true,
+          deliveredAt: true,
+          rider: { select: { id: true, name: true, phone: true } },
+          buyer: { select: { id: true, name: true, phone: true } },
+          seller: { select: { id: true, name: true, phone: true } },
+          product: { select: { id: true, name: true, images: true, category: true } },
+        },
+      })
+
+      if (!order) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+      }
+
+      const logs = await prisma.auditLog.findMany({
+        where: {
+          entityType: 'ORDER_TRACKING',
+          entityId: orderId,
+          action: { in: ['RIDER_TRACKING_STARTED', 'RIDER_STATUS_CHECKPOINT', 'RIDER_LOCATION_UPDATE'] },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          action: true,
+          createdAt: true,
+          newValue: true,
+          userId: true,
+        },
+      })
+
+      const points = logs
+        .filter(log =&gt; log.action === 'RIDER_LOCATION_UPDATE')
+        .map(log =&gt; {
+          const payload = (log.newValue || {}) as any
+          return {
+            id: log.id,
+            at: log.createdAt,
+            lat: toNumberOrNull(payload.lat),
+            lng: toNumberOrNull(payload.lng),
+            accuracy: toNumberOrNull(payload.accuracy),
+            heading: toNumberOrNull(payload.heading),
+            speed: toNumberOrNull(payload.speed),
+          }
+        })
+        .filter(point =&gt; point.lat != null &amp;&amp; point.lng != null)
+
+      const checkpoints = logs
+        .filter(log =&gt; log.action !== 'RIDER_LOCATION_UPDATE')
+        .map(log =&gt; {
+          const payload = (log.newValue || {}) as any
+          return {
+            id: log.id,
+            action: log.action,
+            status: typeof payload.status === 'string' ? payload.status : null,
+            note: typeof payload.note === 'string' ? payload.note : null,
+            at: log.createdAt,
+          }
+        })
+
+      return NextResponse.json({
+        order,
+        tracking: {
+          points,
+          checkpoints,
+          latestPoint: points.length ? points[points.length - 1] : null,
+          totalPings: points.length,
+        },
+      })
+    }
+
+    const where: any = {
+      status: { in: ['DELIVERED', 'COMPLETED'] },
+      riderId: { not: null },
+    }
+
+    if (riderId) where.riderId = riderId
+    if (search) {
+      where.OR = [
+        { orderNumber: { contains: search, mode: 'insensitive' } },
+        { rider: { name: { contains: search, mode: 'insensitive' } } },
+        { product: { name: { contains: search, mode: 'insensitive' } } },
+      ]
+    }
+
+    const [total, orders] = await Promise.all([
+      prisma.order.count({ where }),
+      prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { deliveredAt: 'desc' },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          createdAt: true,
+          deliveredAt: true,
+          rider: { select: { id: true, name: true, phone: true } },
+          buyer: { select: { id: true, name: true } },
+          seller: { select: { id: true, name: true } },
+          product: { select: { id: true, name: true, images: true, category: true } },
+        },
+      }),
+    ])
+
+    const orderIds = orders.map(o =&gt; o.id)
+    const logs = orderIds.length
+      ? await prisma.auditLog.findMany({
+          where: {
+            entityType: 'ORDER_TRACKING',
+            entityId: { in: orderIds },
+            action: { in: ['RIDER_TRACKING_STARTED', 'RIDER_STATUS_CHECKPOINT', 'RIDER_LOCATION_UPDATE'] },
+          },
+          select: { entityId: true, action: true, createdAt: true },
+        })
+      : []
+
+    const summaryMap = new Map&lt;string, { totalPings: number; checkpointCount: number; latestPingAt: Date | null }&gt;()
+    for (const log of logs) {
+      const current = summaryMap.get(log.entityId) || { totalPings: 0, checkpointCount: 0, latestPingAt: null }
+      if (log.action === 'RIDER_LOCATION_UPDATE') {
+        current.totalPings += 1
+        if (!current.latestPingAt || log.createdAt &gt; current.latestPingAt) current.latestPingAt = log.createdAt
+      } else {
+        current.checkpointCount += 1
+      }
+      summaryMap.set(log.entityId, current)
+    }
+
+    const rows = orders.map(order =&gt; ({
+      ...order,
+      trackingSummary: summaryMap.get(order.id) || {
+        totalPings: 0,
+        checkpointCount: 0,
+        latestPingAt: null,
+      },
+    }))
+
+    return NextResponse.json({
+      rows,
+      total,
+      page,
+      limit,
+    })
+  } catch (error) {
+    console.error('admin rider-tracking error:', error)
+    return NextResponse.json({ error: 'Failed to fetch rider tracking' }, { status: 500 })
+  }
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/admin/riders/create/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/admin/riders/create/route.ts
 // Admin-only endpoint to create rider accounts.
@@ -22774,6 +24316,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { notifyDisputeOpened } from '@/lib/notification'
+import { DISPUTE_WINDOW_MS } from '@/lib/escrow'
 
 async function getUserFromToken(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -22843,13 +24386,16 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { orderId, reason, evidence = [] } = body
+    const { orderId, reason, description, evidence = [], resolutionPreference, pickupAddress } = body
 
     // Validation
-    if (!orderId || !reason) {
+    if (!orderId || !reason || !description) {
       return NextResponse.json({ 
-        error: 'Order ID and reason are required' 
+        error: 'Order ID, reason and description are required' 
       }, { status: 400 })
+    }
+    if (!Array.isArray(evidence) || evidence.length &lt; 1) {
+      return NextResponse.json({ error: 'At least one evidence image is required' }, { status: 400 })
     }
 
     // Check if order exists and user is the buyer
@@ -22876,10 +24422,20 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Only allow disputes for completed/delivered orders
+    // Only allow disputes for delivered/completed orders
     if (!['DELIVERED', 'COMPLETED'].includes(order.status)) {
       return NextResponse.json({ 
         error: 'Can only dispute delivered or completed orders' 
+      }, { status: 400 })
+    }
+    const deliveredAt = order.deliveredAt || order.completedAt
+    if (!deliveredAt) {
+      return NextResponse.json({ error: 'Order has no delivery timestamp yet' }, { status: 400 })
+    }
+    const ageMs = Date.now() - new Date(deliveredAt).getTime()
+    if (ageMs &gt; DISPUTE_WINDOW_MS) {
+      return NextResponse.json({
+        error: 'Dispute window expired. You can only open disputes within 72 hours of delivery.',
       }, { status: 400 })
     }
 
@@ -22892,6 +24448,8 @@ export async function POST(req: NextRequest) {
           buyerId: user.id,
           sellerId: order.sellerId,
           reason,
+          resolutionPreference: resolutionPreference || 'REFUND_WITH_PICKUP',
+          pickupAddress: pickupAddress || null,
           buyerEvidence: evidence,
           status: 'OPEN'
         },
@@ -22913,7 +24471,11 @@ export async function POST(req: NextRequest) {
       // Mark order as disputed
       await tx.order.update({
         where: { id: orderId },
-        data: { isDisputed: true }
+        data: {
+          isDisputed: true,
+          status: 'DISPUTED',
+          disputeReason: `${reason}: ${description}`.slice(0, 500),
+        }
       })
 
       // Create initial message from buyer
@@ -22922,7 +24484,7 @@ export async function POST(req: NextRequest) {
           disputeId: newDispute.id,
           senderId: user.id,
           senderType: 'BUYER',
-          message: reason,
+          message: `${reason}\n\n${description}`.trim(),
           attachments: evidence
         }
       })
@@ -22952,6 +24514,7 @@ export async function POST(req: NextRequest) {
 }
 </pre></div>
 <div class='file-block'><div class='file-header'>app/api/disputes/[id]/route.ts</div><pre>Could not read file.</pre></div>
+<div class='file-block'><div class='file-header'>app/api/disputes/[id]/confirm-return/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/disputes/[id]/messages/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/notifications/route.ts</div><pre>// app/api/notifications/route.ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -23340,7 +24903,7 @@ export async function POST(request: NextRequest) {
     // batch instead of one reward for the whole batch.
     const order = await prisma.order.findUnique({
       where:   { id: orderId },
-      include: { seller: true, rider: true },
+      include: { rider: true },
     })
 
     if (!order) {
@@ -23384,7 +24947,6 @@ export async function POST(request: NextRequest) {
     // ═══════════════════════════════════════════════════════════════
 
     const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
-    const sellerShare = subtotal - order.platformCommission
     const riderShare  = 560
     const hasRider    = !!order.riderId
 
@@ -23395,28 +24957,8 @@ export async function POST(request: NextRequest) {
         data:  { status: 'COMPLETED', completedAt: new Date() },
       })
 
-      // 2. Release seller payment
-      const sellerAvailable = Number(order.seller.availableBalance ?? 0)
-
-      await tx.user.update({
-        where: { id: order.sellerId },
-        data:  {
-          pendingBalance:   { decrement: sellerShare },
-          availableBalance: { increment: sellerShare },
-        },
-      })
-
-      await tx.transaction.create({
-        data: {
-          userId:        order.sellerId,
-          type:          'CREDIT',
-          amount:        sellerShare,
-          description:   `Payment received for Order: ${order.orderNumber}`,
-          reference:     `${order.orderNumber}-SELLER-RELEASE`,
-          balanceBefore: sellerAvailable,
-          balanceAfter:  sellerAvailable + sellerShare,
-        },
-      })
+      // 2. Keep seller funds in pending escrow for 72 hours after delivery.
+      // Auto-release happens via wallet/withdraw checks when no dispute exists.
 
       // 3. Release rider payment (if assigned)
       if (order.riderId) {
@@ -23473,7 +25015,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '🎉 Payment released! Seller and rider have been paid.',
+      message: '🎉 Delivery confirmed. Seller funds stay in escrow for 72 hours; rider payment released.',
       order:   result,
     })
   } catch (error) {
@@ -23495,11 +25037,13 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/orders/my-orders/route.ts</div><pre>import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 import { OrderStatus } from '@prisma/client'
+import { DISPUTE_WINDOW_MS } from '@/lib/escrow'
 
 export const dynamic = 'force-dynamic'
 
@@ -23543,16 +25087,8 @@ function checkDisputeEligibility(order: any) {
     }
   }
 
-  // Check if order status allows disputes
-  const disputableStatuses = [
-    OrderStatus.DELIVERED,
-    OrderStatus.COMPLETED,
-    OrderStatus.ON_THE_WAY,
-    OrderStatus.PICKED_UP,
-    OrderStatus.RIDER_ASSIGNED,
-    OrderStatus.PROCESSING,
-    OrderStatus.SHIPPED
-  ]
+  // Disputes are only allowed after delivery/completion.
+  const disputableStatuses = [OrderStatus.DELIVERED, OrderStatus.COMPLETED]
 
   if (!disputableStatuses.includes(order.status)) {
     return {
@@ -23562,7 +25098,7 @@ function checkDisputeEligibility(order: any) {
     }
   }
 
-  // For delivered/completed orders, check delivery date and 7-day window
+  // For delivered/completed orders, check 72-hour window.
   if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED) {
     // Use completedAt if deliveredAt is not available
     const deliveryDate = order.deliveredAt || order.completedAt;
@@ -23580,44 +25116,26 @@ function checkDisputeEligibility(order: any) {
       }
     }
 
-    // Check if within 7 days of delivery/completion
+    // Check if within 72 hours of delivery/completion
     const deliveredDate = new Date(deliveryDate)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const deadline = new Date(deliveredDate.getTime() + DISPUTE_WINDOW_MS)
     
-    if (deliveredDate &lt;= sevenDaysAgo) {
-      const daysAgo = Math.floor((Date.now() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (Date.now() &gt; deadline.getTime()) {
+      const hoursAgo = Math.floor((Date.now() - deliveredDate.getTime()) / (1000 * 60 * 60))
       return {
         canDispute: false,
-        reason: `Dispute window expired (${order.status.toLowerCase()} ${daysAgo} days ago)`,
+        reason: `Dispute window expired (${order.status.toLowerCase()} ${hoursAgo} hours ago)`,
         debug: { 
           deliveryDate: deliveredDate, 
-          sevenDaysAgo, 
-          daysAgo,
+          deadline,
+          hoursAgo,
           dateFieldUsed: order.deliveredAt ? 'deliveredAt' : 'completedAt'
         }
       }
     }
   }
 
-  // For in-transit orders, allow disputes
-  if ([OrderStatus.ON_THE_WAY, OrderStatus.PICKED_UP, OrderStatus.RIDER_ASSIGNED].includes(order.status)) {
-    return {
-      canDispute: true,
-      reason: 'Order is in transit and can be disputed',
-      debug: { status: order.status, inTransit: true }
-    }
-  }
-
-  // For processing/shipped orders, allow disputes
-  if ([OrderStatus.PROCESSING, OrderStatus.SHIPPED].includes(order.status)) {
-    return {
-      canDispute: true,
-      reason: 'Order is processing/shipped and can be disputed',
-      debug: { status: order.status, processing: true }
-    }
-  }
-
-  // All checks passed for delivered/completed within 7 days
+  // All checks passed for delivered/completed within 72 hours
   return {
     canDispute: true,
     reason: 'Eligible for dispute',
@@ -23625,7 +25143,7 @@ function checkDisputeEligibility(order: any) {
       status: order.status, 
       deliveredAt: order.deliveredAt,
       completedAt: order.completedAt,
-      within7Days: true 
+      within72Hours: true 
     }
   }
 }
@@ -23799,7 +25317,8 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/orders/seller-orders/route.ts</div><pre>// app/api/orders/seller-orders/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -23868,6 +25387,7 @@ export async function GET(req: NextRequest) {
   }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/orders/[id]/route.ts</div><pre>Could not read file.</pre></div>
+<div class='file-block'><div class='file-header'>app/api/orders/[id]/live-location/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/payments/initialize/route.ts</div><pre>// app/api/payments/initialize/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/auth'
@@ -25194,6 +26714,218 @@ export async function GET(request: NextRequest) {
     }, { status: 500 })
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>app/api/products/people-like-you/route.ts</div><pre>export const dynamic = 'force-dynamic'
+
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth/auth'
+
+type RankedItem = {
+  key: string
+  dateKey: string
+  score: number
+  soldCount: number
+  uniqueBuyers: number
+  product: {
+    id: string
+    name: string
+    price: number
+    images: string[]
+    category: string
+    seller: {
+      id: string
+      name: string
+      avgRating: number
+      trustLevel: string
+    }
+  }
+}
+
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user.universityId) {
+      return NextResponse.json({ items: [], page: 1, hasMore: false, total: 0 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const mode = searchParams.get('mode') === 'daily' ? 'daily' : 'top'
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const pageSize = Math.min(40, Math.max(1, parseInt(searchParams.get('pageSize') || (mode === 'daily' ? '20' : '12'))))
+    const daysBack = Math.min(180, Math.max(14, parseInt(searchParams.get('daysBack') || '120')))
+
+    const since = new Date()
+    since.setDate(since.getDate() - daysBack)
+
+    const [myOrders, orders] = await Promise.all([
+      prisma.order.findMany({
+        where: { buyerId: user.id },
+        take: 120,
+        orderBy: { orderedAt: 'desc' },
+        select: { product: { select: { category: true } } },
+      }),
+      prisma.order.findMany({
+        where: {
+          status: { in: ['DELIVERED', 'COMPLETED'] },
+          orderedAt: { gte: since },
+          product: {
+            universityId: user.universityId,
+            isActive: true,
+            isDeleted: false,
+            quantity: { gt: 0 },
+          },
+        },
+        select: {
+          productId: true,
+          buyerId: true,
+          quantity: true,
+          orderedAt: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              price: true,
+              images: true,
+              category: true,
+              sellerId: true,
+              seller: {
+                select: {
+                  id: true,
+                  name: true,
+                  avgRating: true,
+                  trustLevel: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ])
+
+    const preferredCategories = new Set(
+      myOrders.map(o =&gt; o.product?.category).filter(Boolean) as string[]
+    )
+
+    const byDayAndProduct = new Map&lt;string, {
+      dateKey: string
+      soldCount: number
+      buyers: Set&lt;string&gt;
+      product: RankedItem['product']
+    }&gt;()
+
+    const byProduct = new Map&lt;string, {
+      soldCount: number
+      buyers: Set&lt;string&gt;
+      newestDate: Date
+      product: RankedItem['product']
+    }&gt;()
+
+    for (const o of orders) {
+      if (!o.product || o.product.sellerId === user.id) continue
+      const qty = Math.max(1, Number(o.quantity || 1))
+      const dateKey = toDateKey(new Date(o.orderedAt))
+      const dayProductKey = `${dateKey}:${o.productId}`
+
+      if (!byDayAndProduct.has(dayProductKey)) {
+        byDayAndProduct.set(dayProductKey, {
+          dateKey,
+          soldCount: 0,
+          buyers: new Set&lt;string&gt;(),
+          product: o.product,
+        })
+      }
+      const d = byDayAndProduct.get(dayProductKey)!
+      d.soldCount += qty
+      d.buyers.add(o.buyerId)
+
+      if (!byProduct.has(o.productId)) {
+        byProduct.set(o.productId, {
+          soldCount: 0,
+          buyers: new Set&lt;string&gt;(),
+          newestDate: new Date(o.orderedAt),
+          product: o.product,
+        })
+      }
+      const p = byProduct.get(o.productId)!
+      p.soldCount += qty
+      p.buyers.add(o.buyerId)
+      if (new Date(o.orderedAt) &gt; p.newestDate) p.newestDate = new Date(o.orderedAt)
+    }
+
+    let ranked: RankedItem[] = []
+
+    if (mode === 'daily') {
+      ranked = Array.from(byDayAndProduct.entries()).map(([key, v]) =&gt; {
+        const ageDays = Math.max(
+          0,
+          Math.floor((Date.now() - new Date(v.dateKey).getTime()) / (1000 * 60 * 60 * 24))
+        )
+        const recencyBoost = Math.max(0, 24 - ageDays * 2)
+        const todayBoost = ageDays === 0 ? 75 : ageDays === 1 ? 24 : 0
+        const prefBoost = preferredCategories.has(v.product.category) ? 8 : 0
+        const score = v.soldCount * 7 + v.buyers.size * 5 + recencyBoost + todayBoost + prefBoost
+        return {
+          key,
+          dateKey: v.dateKey,
+          score,
+          soldCount: v.soldCount,
+          uniqueBuyers: v.buyers.size,
+          product: v.product,
+        }
+      })
+
+      ranked.sort((a, b) =&gt; {
+        if (a.dateKey !== b.dateKey) return a.dateKey &lt; b.dateKey ? 1 : -1
+        if (b.score !== a.score) return b.score - a.score
+        return b.soldCount - a.soldCount
+      })
+    } else {
+      ranked = Array.from(byProduct.entries()).map(([productId, v]) =&gt; {
+        const ageDays = Math.max(0, Math.floor((Date.now() - v.newestDate.getTime()) / (1000 * 60 * 60 * 24)))
+        const recencyBoost = Math.max(0, 14 - ageDays)
+        const prefBoost = preferredCategories.has(v.product.category) ? 10 : 0
+        const score = v.soldCount * 4 + v.buyers.size * 4 + recencyBoost + prefBoost
+        return {
+          key: productId,
+          dateKey: toDateKey(v.newestDate),
+          score,
+          soldCount: v.soldCount,
+          uniqueBuyers: v.buyers.size,
+          product: v.product,
+        }
+      })
+
+      ranked.sort((a, b) =&gt; {
+        if (b.score !== a.score) return b.score - a.score
+        return b.soldCount - a.soldCount
+      })
+    }
+
+    const total = ranked.length
+    const start = (page - 1) * pageSize
+    const end = start + pageSize
+    const items = ranked.slice(start, end)
+
+    return NextResponse.json({
+      mode,
+      page,
+      pageSize,
+      total,
+      hasMore: end &lt; total,
+      items,
+      generatedAt: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('people-like-you feed error:', error)
+    return NextResponse.json({ error: 'Failed to load people-like-you feed' }, { status: 500 })
+  }
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/[id]/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/[id]/related/route.ts</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/[id]/restock/route.ts</div><pre>Could not read file.</pre></div>
@@ -26049,6 +27781,21 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      await tx.auditLog.createMany({
+        data: batch.orders.map(order =&gt; ({
+          userId: user.id,
+          action: 'RIDER_TRACKING_STARTED',
+          entityType: 'ORDER_TRACKING',
+          entityId: order.id,
+          newValue: {
+            status: 'RIDER_ASSIGNED',
+            batchId,
+            orderNumber: order.orderNumber,
+            note: 'Rider accepted delivery batch',
+          },
+        })),
+      })
+
       // Escrow the full rider share for all orders at once
       const rider = await tx.user.findUnique({
         where:  { id: user.id },
@@ -26106,7 +27853,8 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/riders/available-orders/route.ts</div><pre>// app/api/riders/available-orders/route.ts
 export const dynamic = 'force-dynamic'
 
@@ -26166,14 +27914,30 @@ export async function GET(request: NextRequest) {
       where: {
         riderId:    user.id,
         isDisputed: true,
-        status:     'RIDER_ASSIGNED',
+        status:     { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] },
         dispute: {
-          resolution: '__AWAITING_PICKUP__',
+          resolution: {
+            in: [
+              '__AWAITING_PICKUP__',
+              '__SELLER_FAULT_AWAITING_PICKUP__',
+              '__RETURN_PICKED_UP__',
+              '__RETURN_ON_THE_WAY__',
+              '__RETURN_DELIVERED_TO_SELLER__',
+            ],
+          },
         },
       },
       include: {
         product: true,
-        seller:  { select: { name: true, phone: true } },
+        seller:  {
+          select: {
+            name: true,
+            phone: true,
+            hostelName: true,
+            roomNumber: true,
+            landmark: true,
+          },
+        },
         buyer:   { select: { name: true, phone: true } },
         dispute: {
           select: {
@@ -26190,7 +27954,8 @@ export async function GET(request: NextRequest) {
     console.error('available-orders error:', error)
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/riders/dispute-picked-up/route.ts</div><pre>// app/api/riders/dispute-picked-up/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -26219,7 +27984,7 @@ export async function POST(request: NextRequest) {
         riderId: user.id,
         isDisputed: true,
         status: 'RIDER_ASSIGNED',
-        dispute: { resolution: '__AWAITING_PICKUP__' },
+        dispute: { resolution: { in: ['__AWAITING_PICKUP__', '__SELLER_FAULT_AWAITING_PICKUP__'] } },
       },
       include: {
         dispute: { select: { id: true } },
@@ -26233,19 +27998,25 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Update order status so admin knows rider is on the way back
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: 'PICKED_UP' },
+    // Update dispute return state
+    await prisma.$transaction(async (tx) =&gt; {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'PICKED_UP', pickedUpAt: new Date() },
+      })
+      await tx.dispute.update({
+        where: { id: order.dispute!.id },
+        data: { status: 'UNDER_REVIEW', resolution: '__RETURN_PICKED_UP__' },
+      })
     })
 
     // Notify admin via notification (admin can poll or see in dashboard)
     await prisma.notification.create({
       data: {
-        userId: order.buyer.id, // admin will see this via admin notifications
+        userId: order.buyer.id,
         type: 'ORDER_DISPUTED',
-        title: 'Dispute Item Collected by Rider',
-        message: `Rider ${user.name} has collected the disputed item from ${order.buyer.name} (Order #${order.orderNumber}) and is on the way back.`,
+        title: 'Dispute Return Picked Up',
+        message: `Rider ${user.name} has picked up the disputed item for Order #${order.orderNumber}.`,
         orderId,
         disputeId: order.dispute!.id,
         metadata: {
@@ -26264,7 +28035,104 @@ export async function POST(request: NextRequest) {
     console.error('Dispute picked up error:', error)
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
+<div class='file-block'><div class='file-header'>app/api/riders/live-location/route.ts</div><pre>import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth/auth'
+
+export const dynamic = 'force-dynamic'
+
+const TRACKABLE_STATUSES = ['RIDER_ASSIGNED', 'PICKED_UP', 'ON_THE_WAY']
+
+function isValidCoordinate(lat: number, lng: number) {
+  return Number.isFinite(lat) &amp;&amp; Number.isFinite(lng) &amp;&amp; lat &gt;= -90 &amp;&amp; lat &lt;= 90 &amp;&amp; lng &gt;= -180 &amp;&amp; lng &lt;= 180
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user || user.role !== 'RIDER') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const orderIds = Array.isArray(body?.orderIds) ? body.orderIds.filter(Boolean) : []
+    const batchId = typeof body?.batchId === 'string' ? body.batchId : null
+    const lat = Number(body?.lat)
+    const lng = Number(body?.lng)
+    const accuracy = body?.accuracy != null ? Number(body.accuracy) : null
+    const heading = body?.heading != null ? Number(body.heading) : null
+    const speed = body?.speed != null ? Number(body.speed) : null
+
+    if (!isValidCoordinate(lat, lng)) {
+      return NextResponse.json({ error: 'Invalid location coordinates' }, { status: 400 })
+    }
+
+    const where: any = {
+      riderId: user.id,
+      status: { in: TRACKABLE_STATUSES },
+    }
+
+    if (orderIds.length &gt; 0) {
+      where.id = { in: orderIds }
+    } else if (batchId) {
+      where.batchId = batchId
+    } else {
+      return NextResponse.json({ error: 'orderIds or batchId is required' }, { status: 400 })
+    }
+
+    const activeOrders = await prisma.order.findMany({
+      where,
+      select: { id: true, batchId: true },
+      take: 30,
+    })
+
+    if (activeOrders.length === 0) {
+      return NextResponse.json({ success: true, written: 0 })
+    }
+
+    const nowIso = new Date().toISOString()
+    const ipAddress =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      null
+    const userAgent = request.headers.get('user-agent') || null
+
+    await prisma.auditLog.createMany({
+      data: activeOrders.map(order =&gt; ({
+        userId: user.id,
+        action: 'RIDER_LOCATION_UPDATE',
+        entityType: 'ORDER_TRACKING',
+        entityId: order.id,
+        ipAddress,
+        userAgent,
+        newValue: {
+          event: 'LOCATION_PING',
+          at: nowIso,
+          riderId: user.id,
+          orderId: order.id,
+          batchId: order.batchId,
+          lat,
+          lng,
+          accuracy,
+          heading,
+          speed,
+          source: 'rider-dashboard',
+        },
+      })),
+    })
+
+    return NextResponse.json({ success: true, written: activeOrders.length })
+  } catch (error) {
+    console.error('rider live-location error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update live location' },
+      { status: 500 }
+    )
+  }
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/riders/login/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/riders/login/route.ts
 import { NextRequest, NextResponse } from 'next/server'
@@ -26602,6 +28470,10 @@ export async function POST(request: NextRequest) {
         sellerId:    true,
         orderNumber: true,
         batchId:     true,
+        isDisputed:  true,
+        dispute: {
+          select: { id: true, resolution: true },
+        },
       },
     })
 
@@ -26623,6 +28495,36 @@ export async function POST(request: NextRequest) {
         where: { id: orderId },
         data:  updateData,
       })
+
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'RIDER_STATUS_CHECKPOINT',
+          entityType: 'ORDER_TRACKING',
+          entityId: orderId,
+          newValue: {
+            status,
+            batchId: order.batchId,
+            orderNumber: order.orderNumber,
+            isDisputeReturn: order.isDisputed,
+          },
+        },
+      })
+
+      // Dispute return tracking states
+      if (order.isDisputed &amp;&amp; order.dispute) {
+        if (status === 'ON_THE_WAY') {
+          await tx.dispute.update({
+            where: { id: order.dispute.id },
+            data: { resolution: '__RETURN_ON_THE_WAY__' },
+          })
+        } else if (status === 'DELIVERED') {
+          await tx.dispute.update({
+            where: { id: order.dispute.id },
+            data: { resolution: '__RETURN_DELIVERED_TO_SELLER__' },
+          })
+        }
+      }
 
       // Increment rider completed count when an order is delivered
       if (status === 'DELIVERED') {
@@ -26699,6 +28601,26 @@ export async function POST(request: NextRequest) {
             notifyOrderDelivered(orderId, order.buyerId, orderNumber),
             pushDelivered(order.buyerId, orderNumber),
           ])
+
+          // Notify seller to confirm dispute return receipt
+          if (order.isDisputed &amp;&amp; order.dispute) {
+            const sellerName = (await prisma.user.findUnique({
+              where: { id: order.sellerId },
+              select: { name: true },
+            }))?.name || 'Seller'
+
+            await prisma.notification.create({
+              data: {
+                userId: order.sellerId,
+                type: 'ORDER_DISPUTED',
+                title: 'Dispute Return Delivered',
+                message: `Rider has delivered returned item for Order #${orderNumber}. Confirm receipt to release buyer refund.`,
+                orderId,
+                disputeId: order.dispute.id,
+                metadata: { action: 'SELLER_CONFIRM_RETURN', sellerName },
+              },
+            })
+          }
         }
       })(),
     ]).then(results =&gt; {
@@ -26717,7 +28639,8 @@ export async function POST(request: NextRequest) {
       details: error instanceof Error ? error.message : 'Unknown error',
     }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/sellers/update-stats/route.ts</div><pre>export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
@@ -27234,6 +29157,7 @@ export async function POST(request: NextRequest) {
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import { releaseMaturedSellerEscrowForUser } from '@/lib/escrow'
 
 export const dynamic = 'force-dynamic'
 
@@ -27255,6 +29179,11 @@ export async function GET(request: NextRequest) {
 
     if (!userData) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Auto-release matured seller escrow (72h after delivered, if no dispute).
+    if (userData.role === 'SELLER') {
+      await releaseMaturedSellerEscrowForUser(user.id)
     }
 
     // Count completed orders directly from orders table — accurate regardless
@@ -27287,8 +29216,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       wallet: {
-        availableBalance: Math.max(0, userData.availableBalance),
-        pendingBalance: Math.max(0, userData.pendingBalance),
+        availableBalance: Math.max(0, Number(userData.availableBalance)),
+        pendingBalance: Math.max(0, Number(userData.pendingBalance)),
         completedOrders,
         role: userData.role,
       },
@@ -27300,7 +29229,9 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}</pre></div>
+}
+
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/wallet/reset-pin/route.ts</div><pre>// app/api/wallet/reset-pin/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -27663,6 +29594,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import bcrypt from 'bcryptjs'
+import { releaseMaturedSellerEscrowForUser } from '@/lib/escrow'
 
 export const dynamic = 'force-dynamic'
 
@@ -27707,6 +29639,11 @@ export async function POST(request: NextRequest) {
     const user = await getUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Ensure matured escrow is released before withdrawal checks.
+    if (user.role === 'SELLER') {
+      await releaseMaturedSellerEscrowForUser(user.id)
     }
 
     // ── Rate limit check (per user) ────────────────────────────────────────
@@ -28029,7 +29966,8 @@ async function refundBalance(userId: string, amount: number): Promise&lt;void&gt
     // Log loudly so ops team can manually correct it.
     console.error(`[withdraw] CRITICAL: Failed to refund ₦${amount} to user ${userId}`, err)
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>hooks/use-loading.ts</div><pre>'use client';
 
 import { create } from 'zustand';
@@ -28477,6 +30415,30 @@ export function useNotificationNudge() {
     nudgeState,
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>hooks/useOnlineStatus.ts</div><pre>'use client'
+
+import { useEffect, useState } from 'react'
+
+export function useOnlineStatus() {
+  const [isOnline, setIsOnline] = useState&lt;boolean&gt;(() =&gt; {
+    if (typeof navigator === 'undefined') return true
+    return navigator.onLine
+  })
+
+  useEffect(() =&gt; {
+    const onOnline = () =&gt; setIsOnline(true)
+    const onOffline = () =&gt; setIsOnline(false)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () =&gt; {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
+
+  return isOnline
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>hooks/useReviews.ts</div><pre>'use client';
 
 import { useState, useCallback } from 'react';
@@ -28851,6 +30813,219 @@ export const useCartStore = create&lt;CartState&gt;()(
     }
   )
 );</pre></div>
+<div class='file-block'><div class='file-header'>lib/client-cache.ts</div><pre>type CacheRecord&lt;T&gt; = {
+  value: T
+  expiresAt: number
+  savedAt: number
+}
+
+export function setClientCache&lt;T&gt;(key: string, value: T, ttlMs: number) {
+  if (typeof window === 'undefined') return
+  try {
+    const now = Date.now()
+    const record: CacheRecord&lt;T&gt; = {
+      value,
+      savedAt: now,
+      expiresAt: now + ttlMs,
+    }
+    localStorage.setItem(key, JSON.stringify(record))
+  } catch {}
+}
+
+export function getClientCache&lt;T&gt;(key: string): { value: T; isExpired: boolean; savedAt: number } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CacheRecord&lt;T&gt;
+    if (!parsed || typeof parsed !== 'object' || !('value' in parsed)) return null
+    return {
+      value: parsed.value,
+      isExpired: Date.now() &gt; Number(parsed.expiresAt || 0),
+      savedAt: Number(parsed.savedAt || 0),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function clearClientCache(key: string) {
+  if (typeof window === 'undefined') return
+  try { localStorage.removeItem(key) } catch {}
+}
+</pre></div>
+<div class='file-block'><div class='file-header'>lib/escrow.ts</div><pre>import prisma from '@/lib/prisma'
+
+export const DISPUTE_WINDOW_HOURS = 72
+export const DISPUTE_WINDOW_MS = DISPUTE_WINDOW_HOURS * 60 * 60 * 1000
+
+function getSellerShareFromOrder(order: {
+  totalAmount: number
+  platformCommission: number
+  riderId: string | null
+}) {
+  const subtotal = order.totalAmount - (order.riderId ? 800 : 0)
+  return Math.max(0, subtotal - order.platformCommission)
+}
+
+export function getDisputeDeadline(deliveredAt: Date) {
+  return new Date(deliveredAt.getTime() + DISPUTE_WINDOW_MS)
+}
+
+export async function releaseMaturedSellerEscrowForUser(sellerId: string) {
+  const maturedBefore = new Date(Date.now() - DISPUTE_WINDOW_MS)
+
+  const releasableOrders = await prisma.order.findMany({
+    where: {
+      sellerId,
+      isPaid: true,
+      isDisputed: false,
+      status: { in: ['DELIVERED', 'COMPLETED'] },
+      deliveredAt: { not: null, lte: maturedBefore },
+      dispute: null,
+    },
+    select: {
+      id: true,
+      orderNumber: true,
+      totalAmount: true,
+      platformCommission: true,
+      riderId: true,
+      status: true,
+    },
+  })
+
+  if (!releasableOrders.length) {
+    return { releasedCount: 0, releasedAmount: 0 }
+  }
+
+  let releasedCount = 0
+  let releasedAmount = 0
+
+  for (const order of releasableOrders) {
+    const sellerShare = getSellerShareFromOrder(order)
+    if (sellerShare &lt;= 0) continue
+
+    const releaseRef = `${order.orderNumber}-SELLER-RELEASE-72H`
+
+    await prisma.$transaction(async (tx) =&gt; {
+      const already = await tx.transaction.findFirst({
+        where: { reference: releaseRef, userId: sellerId },
+        select: { id: true },
+      })
+      if (already) return
+
+      const seller = await tx.user.findUnique({
+        where: { id: sellerId },
+        select: { availableBalance: true },
+      })
+      if (!seller) return
+
+      const before = Number(seller.availableBalance ?? 0)
+
+      await tx.user.update({
+        where: { id: sellerId },
+        data: {
+          pendingBalance: { decrement: sellerShare },
+          availableBalance: { increment: sellerShare },
+        },
+      })
+
+      await tx.transaction.create({
+        data: {
+          userId: sellerId,
+          type: 'CREDIT',
+          amount: sellerShare,
+          description: `Escrow release after 72-hour dispute window (Order: ${order.orderNumber})`,
+          reference: releaseRef,
+          balanceBefore: before,
+          balanceAfter: before + sellerShare,
+        },
+      })
+
+      if (order.status !== 'COMPLETED') {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        })
+      }
+    })
+
+    releasedCount += 1
+    releasedAmount += sellerShare
+  }
+
+  return { releasedCount, releasedAmount }
+}
+
+export async function releaseSellerEscrowForOrder(orderId: string, sellerId: string, note: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      orderNumber: true,
+      totalAmount: true,
+      platformCommission: true,
+      riderId: true,
+      status: true,
+    },
+  })
+  if (!order) return { released: false, amount: 0 }
+
+  const amount = getSellerShareFromOrder(order)
+  if (amount &lt;= 0) return { released: false, amount: 0 }
+
+  const releaseRef = `${order.orderNumber}-SELLER-RELEASE-ADMIN`
+
+  let released = false
+
+  await prisma.$transaction(async (tx) =&gt; {
+    const existing = await tx.transaction.findFirst({
+      where: { reference: releaseRef, userId: sellerId },
+      select: { id: true },
+    })
+    if (existing) return
+
+    const seller = await tx.user.findUnique({
+      where: { id: sellerId },
+      select: { availableBalance: true },
+    })
+    if (!seller) return
+
+    const before = Number(seller.availableBalance ?? 0)
+
+    await tx.user.update({
+      where: { id: sellerId },
+      data: {
+        pendingBalance: { decrement: amount },
+        availableBalance: { increment: amount },
+      },
+    })
+
+    await tx.transaction.create({
+      data: {
+        userId: sellerId,
+        type: 'CREDIT',
+        amount,
+        description: note,
+        reference: releaseRef,
+        balanceBefore: before,
+        balanceAfter: before + amount,
+      },
+    })
+
+    if (order.status !== 'COMPLETED') {
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      })
+    }
+
+    released = true
+  })
+
+  return { released, amount }
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>lib/notification.ts</div><pre>// lib/notification.ts
 import { prisma } from '@/lib/prisma'
 import { NotificationType } from '@prisma/client'
@@ -31968,7 +34143,120 @@ nav[class*="fixed"][class*="bottom-0"] {
     -webkit-transform: translateZ(0);
     will-change: transform;
   }
-}</pre></div>
+}
+
+/* App-mode polish: keeps PWA feeling native without changing app logic */
+html.app-mode body {
+  background: #e7ebf2 !important;
+}
+
+html.app-mode #page-scroll-container,
+html.app-mode #ios-scroll-area {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(59, 130, 246, 0.14), transparent 55%),
+    linear-gradient(180deg, #ecf1f7 0%, #e7ebf2 100%);
+}
+
+html.app-mode .bg-white.rounded-2xl {
+  border-radius: 1.15rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+  border-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+html.app-mode .bg-white.rounded-xl {
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+html.app-mode nav[class*="fixed"][class*="bottom-0"] {
+  border-top-color: rgba(255, 255, 255, 0.86) !important;
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Phase 3: app-like motion + touch feel */
+@keyframes appRouteEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html.app-mode .app-route-enter {
+  animation: appRouteEnter 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html.app-mode a,
+html.app-mode button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.app-mode a:active,
+html.app-mode button:active {
+  transform: scale(0.985);
+}
+
+html.app-mode .btn-press:active {
+  transform: scale(0.96);
+}
+
+/* Phase 4: marketplace app-screen treatment (visual-only) */
+html.app-mode .marketplace-shell {
+  background:
+    radial-gradient(140% 80% at 50% -15%, rgba(99, 102, 241, 0.16), transparent 54%),
+    linear-gradient(180deg, #edf2f8 0%, #e7ebf2 42%, #e3e9f1 100%) !important;
+}
+
+html.app-mode .marketplace-header {
+  backdrop-filter: saturate(150%) blur(8px);
+  -webkit-backdrop-filter: saturate(150%) blur(8px);
+}
+
+html.app-mode .marketplace-header-inner {
+  padding-top: max(env(safe-area-inset-top), 4px);
+}
+
+html.app-mode .marketplace-top-row {
+  gap: 0.75rem;
+}
+
+html.app-mode .marketplace-search-input {
+  border-radius: 0.95rem;
+  box-shadow:
+    0 10px 22px rgba(15, 23, 42, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+html.app-mode .marketplace-categories {
+  margin-top: 0.1rem;
+}
+
+html.app-mode .marketplace-categories .cat-btn {
+  border-radius: 0.72rem;
+}
+
+html.app-mode .marketplace-categories .cat-btn.cat-active {
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.22);
+}
+
+html.app-mode .marketplace-feed {
+  padding-top: 0.8rem !important;
+}
+
+html.app-mode .marketplace-feed &gt; div {
+  gap: 1.05rem;
+}
+
+html.app-mode .marketplace-feed .bg-white.rounded-xl,
+html.app-mode .marketplace-feed .bg-white.rounded-2xl {
+  box-shadow:
+    0 12px 26px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>styles/mobile.css</div><pre>/* Mobile-first responsive utilities */
 
 /* Safe area insets for iOS */
@@ -32272,7 +34560,7 @@ body {
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "baseUrl": ".",
+    "ignoreDeprecations": "5.0",
     "paths": {
       "@/*": ["./*"]
     },
@@ -32290,7 +34578,8 @@ body {
     ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>vercel.json</div><pre>{
   "framework": "nextjs",
   "headers": [

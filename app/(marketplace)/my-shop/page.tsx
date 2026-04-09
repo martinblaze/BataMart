@@ -12,6 +12,7 @@ import {
   BadgeCheck, Timer,
 } from 'lucide-react'
 import { authFetch } from '@/lib/auth-client'
+import { decodeProductData } from '@/lib/variants'
 
 const SHOP_CSS = `
   @keyframes fadeUp {
@@ -75,7 +76,8 @@ const SHOP_CSS = `
 
 interface Product {
   id: string; name: string; price: number; quantity: number
-  images: string[]; category: string; isActive: boolean
+  images: string[]; category: string; subcategory?: string
+  description: string; isActive: boolean
   viewCount: number; createdAt: string
   _count: { orders: number }
 }
@@ -222,7 +224,18 @@ export default function MyShopPage() {
     let matchesFilter = true
     if (filter === 'active') matchesFilter = p.quantity > 0 && p.isActive
     if (filter === 'outofstock') matchesFilter = p.quantity === 0
-    const matchesSearch = !searchTerm || p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.category.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = !searchTerm || (() => {
+      const q = searchTerm.toLowerCase()
+      const { variants, tags } = decodeProductData(p.description || '')
+      const variantValues = Object.values(variants).flat() as string[]
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q) ||
+        (p.subcategory?.toLowerCase() || '').includes(q) ||
+        tags.some((t: string) => t.toLowerCase().includes(q)) ||
+        variantValues.some((v: string) => v.toLowerCase().includes(q))
+      )
+    })()
     return matchesFilter && matchesSearch
   })
 
@@ -393,8 +406,22 @@ export default function MyShopPage() {
                       </div>
                     </div>
                     <div className="p-4">
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">{product.category}</p>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">
+                        {product.subcategory ? `${product.category} · ${product.subcategory}` : product.category}
+                      </p>
                       <h3 className="font-black text-gray-900 text-base line-clamp-1 mb-0.5">{product.name}</h3>
+                      {/* ── Variant chips ── */}
+                      {(() => {
+                        const { variants } = decodeProductData(product.description || '')
+                        const chips = Object.values(variants).flat().slice(0, 4) as string[]
+                        return chips.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {chips.map(v => (
+                              <span key={v} className="text-[9px] bg-indigo-50 text-indigo-500 font-bold px-2 py-0.5 rounded-full">{v}</span>
+                            ))}
+                          </div>
+                        ) : null
+                      })()}
                       <p className="font-black text-lg text-indigo-600 mb-3">{fmt(product.price)}</p>
                       <div className="grid grid-cols-2 gap-2 mb-4">
                         <div className="bg-gray-50 rounded-xl p-2.5 text-center">
@@ -445,8 +472,22 @@ export default function MyShopPage() {
                       <div>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{product.category}</p>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                              {product.subcategory ? `${product.category} · ${product.subcategory}` : product.category}
+                            </p>
                             <h3 className="font-black text-gray-900 text-base leading-tight mt-0.5 line-clamp-1">{product.name}</h3>
+                            {/* ── Variant chips ── */}
+                            {(() => {
+                              const { variants } = decodeProductData(product.description || '')
+                              const chips = Object.values(variants).flat().slice(0, 3) as string[]
+                              return chips.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {chips.map(v => (
+                                    <span key={v} className="text-[9px] bg-indigo-50 text-indigo-500 font-bold px-2 py-0.5 rounded-full">{v}</span>
+                                  ))}
+                                </div>
+                              ) : null
+                            })()}
                           </div>
                           <p className="font-black text-lg text-indigo-600 whitespace-nowrap flex-shrink-0">{fmt(product.price)}</p>
                         </div>

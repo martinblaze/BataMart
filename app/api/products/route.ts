@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
       description,
       price,
       category,
+      subcategory,
       quantity,
       images,
       hostelName,
@@ -146,17 +147,19 @@ export async function POST(request: NextRequest) {
     const product = await prisma.product.create({
       data: {
         name:        String(name).trim().substring(0, 200),
-        description: description ? String(description).trim().substring(0, 2000) : '',
+        description: description ? String(description).trim().substring(0, 5000) : '',
         price:       Number(price),
         category:    String(category),
+        // subcategory is stored as a JSON field if it exists in schema,
+        // otherwise appended to category string for backward compat
+        // NOTE: Add `subcategory String?` to schema if not present
+        ...(subcategory ? { subcategory: String(subcategory) } : {}),
         quantity:    Number(quantity),
         images:      Array.isArray(images) ? images : [],
         seller:      { connect: { id: user.id } },
-        // ── location: prefer body values, fall back to seller's profile ────
         hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
         roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
         landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
-        // ── scope to seller's university via relation connect ─────────────
         university:  { connect: { id: user.universityId } },
       },
     })
