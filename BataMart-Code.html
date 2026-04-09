@@ -13,7 +13,6 @@ import SplashScreen from '@/components/SplashScreen'
 import InstallPrompt from '@/components/InstallPrompt'
 import IosInstallPrompt from '@/components/IosInstallPrompt'
 import { IOSAppShell } from '@/components/layout/IOSAppShell'
-import { OfflineStatusBanner } from '@/components/layout/OfflineStatusBanner'
 import { RoutePrefetcher } from '@/components/layout/RoutePrefetcher'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -166,7 +165,6 @@ export default function RootLayout({
 
       &lt;body className={inter.className}&gt;
         &lt;ThemeProvider&gt;
-          &lt;OfflineStatusBanner /&gt;
           &lt;RoutePrefetcher /&gt;
           &lt;PWARegister /&gt;
           &lt;SplashScreen /&gt;
@@ -182,8 +180,7 @@ export default function RootLayout({
       &lt;/body&gt;
     &lt;/html&gt;
   )
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/page.tsx</div><pre>'use client'
 
 import Link from 'next/link'
@@ -6840,8 +6837,7 @@ import {
   ChevronDown, Grid3X3, List, Sliders, Loader2, Copy,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { getClientCache, setClientCache } from '@/lib/client-cache'
+
 import { decodeProductData, getCategoryList } from '@/lib/variants'
 
 // ─────────────────────────────────────────────
@@ -7128,11 +7124,7 @@ const CATEGORIES = [
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
-const MARKETPLACE_FEED_CACHE_KEY = 'batamart_marketplace_feed_cache_v1'
-const MARKETPLACE_PEOPLE_CACHE_KEY = 'batamart_marketplace_people_cache_v1'
-const MARKETPLACE_CATEGORY_CACHE_PREFIX = 'batamart_marketplace_cat_'
-const MARKETPLACE_FEED_CACHE_TTL = 1000 * 60 * 3
-const MARKETPLACE_PEOPLE_CACHE_TTL = 1000 * 60 * 20
+
 const MARKETPLACE_VIEW_QUEUE_KEY = 'batamart_product_view_queue_v1'
 
 const ACTIVITY_SIGNALS = [
@@ -7459,6 +7451,246 @@ function CategorySpotlightGrid({ allProducts, onCategorySelect }: {
 }
 
 // ─────────────────────────────────────────────
+// Seeded shuffle — different order every render, consistent within a render
+// ─────────────────────────────────────────────
+function seededShuffle&lt;T&gt;(arr: T[], seed: number): T[] {
+  const a = [...arr]
+  let s = seed
+  for (let i = a.length - 1; i &gt; 0; i--) {
+    s = (s * 1664525 + 1013904223) &amp; 0xffffffff
+    const j = Math.abs(s) % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// ─────────────────────────────────────────────
+// Price-Range Deal Panels (Amazon "Shop X for less" style)
+// ─────────────────────────────────────────────
+const PRICE_PANELS = [
+  {
+    title: 'Shop Fashion for Less',
+    category: 'Fashion',
+    catFilter: 'Fashion',
+    tiers: [
+      { label: 'Under ₦10k',  max: 10000 },
+      { label: 'Under ₦20k',  max: 20000 },
+      { label: 'Under ₦30k',  max: 30000 },
+      { label: 'Under ₦50k',  max: 50000 },
+    ],
+    bg: 'from-pink-50 to-rose-50',
+    accent: '#ec4899',
+    icon: '👔',
+  },
+  {
+    title: 'Tech Deals on Campus',
+    category: 'Electronics',
+    catFilter: 'Electronics',
+    tiers: [
+      { label: 'Under ₦20k',  max: 20000 },
+      { label: 'Under ₦50k',  max: 50000 },
+      { label: 'Under ₦100k', max: 100000 },
+      { label: 'Under ₦200k', max: 200000 },
+    ],
+    bg: 'from-violet-50 to-indigo-50',
+    accent: '#6366f1',
+    icon: '📱',
+  },
+  {
+    title: 'Beauty Picks for Less',
+    category: 'Beauty &amp; Personal Care',
+    catFilter: 'Beauty &amp; Personal Care',
+    tiers: [
+      { label: 'Under ₦5k',   max: 5000 },
+      { label: 'Under ₦10k',  max: 10000 },
+      { label: 'Under ₦20k',  max: 20000 },
+      { label: 'Under ₦30k',  max: 30000 },
+    ],
+    bg: 'from-fuchsia-50 to-pink-50',
+    accent: '#db2777',
+    icon: '💄',
+  },
+  {
+    title: 'Food &amp; Snacks Under Budget',
+    category: 'Groceries / Food / Fast Food',
+    catFilter: 'Groceries / Food / Fast Food',
+    tiers: [
+      { label: 'Under ₦2k',   max: 2000 },
+      { label: 'Under ₦5k',   max: 5000 },
+      { label: 'Under ₦10k',  max: 10000 },
+      { label: 'Under ₦20k',  max: 20000 },
+    ],
+    bg: 'from-orange-50 to-amber-50',
+    accent: '#f97316',
+    icon: '🍔',
+  },
+]
+
+function PricePanelsRow({ allProducts, onCategorySelect, renderSeed }: {
+  allProducts: any[]
+  onCategorySelect: (cat: string, maxPrice?: number) =&gt; void
+  renderSeed: number
+}) {
+  return (
+    &lt;div className="grid grid-cols-2 lg:grid-cols-4 gap-3"&gt;
+      {PRICE_PANELS.map((panel, pi) =&gt; {
+        const catProds = allProducts.filter(p =&gt; p.category === panel.catFilter)
+        return (
+          &lt;div key={panel.title} className={`bg-gradient-to-br ${panel.bg} rounded-2xl border border-white shadow-sm overflow-hidden`}&gt;
+            &lt;div className="p-3 pb-2"&gt;
+              &lt;p className="text-sm font-black text-gray-900 leading-tight"&gt;{panel.title}&lt;/p&gt;
+            &lt;/div&gt;
+            &lt;div className="grid grid-cols-2 gap-1 px-2 pb-1"&gt;
+              {panel.tiers.map((tier, ti) =&gt; {
+                const tierProds = catProds.filter(p =&gt; p.price &lt;= tier.max)
+                const shuffled = seededShuffle(tierProds, renderSeed + pi * 100 + ti)
+                const pick = shuffled[0]
+                return (
+                  &lt;div
+                    key={tier.label}
+                    onClick={() =&gt; onCategorySelect(panel.catFilter, tier.max)}
+                    className="cursor-pointer group"
+                  &gt;
+                    &lt;div className="aspect-square rounded-xl overflow-hidden bg-white shadow-sm mb-1 relative"&gt;
+                      {pick ? (
+                        &lt;img src={pick.images[0] || '/placeholder.png'} alt={pick.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" /&gt;
+                      ) : (
+                        &lt;div className="w-full h-full flex items-center justify-center text-2xl"&gt;{panel.icon}&lt;/div&gt;
+                      )}
+                    &lt;/div&gt;
+                    &lt;p className="text-[10px] font-bold text-gray-600 text-center leading-tight pb-1"&gt;{tier.label}&lt;/p&gt;
+                  &lt;/div&gt;
+                )
+              })}
+            &lt;/div&gt;
+            &lt;div className="px-3 pb-3"&gt;
+              &lt;button
+                onClick={() =&gt; onCategorySelect(panel.catFilter)}
+                style={{ color: panel.accent }}
+                className="text-[11px] font-black flex items-center gap-1 hover:underline"
+              &gt;
+                See all deals &lt;ChevronRight className="w-3 h-3" /&gt;
+              &lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )
+      })}
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────
+// Amazon-style Category Showcase Panels
+// ─────────────────────────────────────────────
+const SHOWCASE_PANELS = [
+  {
+    title: 'Level up your Tech',
+    catFilter: 'Electronics',
+    subcats: ['Phones', 'Laptops', 'Earbuds', 'Power Banks'],
+    bg: 'from-violet-50 to-indigo-50',
+    accent: '#6366f1',
+    icon: '📱',
+    cta: 'Explore Tech',
+  },
+  {
+    title: 'Campus Fashion',
+    catFilter: 'Fashion',
+    subcats: ['Sneakers', 'Bags', 'Watches', 'Accessories'],
+    bg: 'from-pink-50 to-rose-50',
+    accent: '#ec4899',
+    icon: '👔',
+    cta: 'Shop Fashion',
+  },
+  {
+    title: 'Home &amp; Kitchen',
+    catFilter: 'Home &amp; Kitchen',
+    subcats: ['Furniture', 'Appliances', 'Bedding', 'Decor'],
+    bg: 'from-sky-50 to-blue-50',
+    accent: '#0891b2',
+    icon: '🏠',
+    cta: 'Shop Home',
+  },
+  {
+    title: 'Food &amp; Snacks',
+    catFilter: 'Groceries / Food / Fast Food',
+    subcats: ['Jollof Rice', 'Snacks', 'Drinks', 'Fast Food'],
+    bg: 'from-orange-50 to-amber-50',
+    accent: '#f97316',
+    icon: '🍔',
+    cta: 'Order Food',
+  },
+  {
+    title: 'Gaming Zone',
+    catFilter: 'Gaming',
+    subcats: ['PS5', 'Xbox', 'Controllers', 'Games'],
+    bg: 'from-emerald-50 to-green-50',
+    accent: '#16a34a',
+    icon: '🎮',
+    cta: 'Game On',
+  },
+  {
+    title: 'Beauty &amp; Care',
+    catFilter: 'Beauty &amp; Personal Care',
+    subcats: ['Skincare', 'Makeup', 'Hair', 'Perfume'],
+    bg: 'from-fuchsia-50 to-pink-50',
+    accent: '#db2777',
+    icon: '💄',
+    cta: 'Shop Beauty',
+  },
+]
+
+function ShowcasePanels({ allProducts, onCategorySelect, renderSeed }: {
+  allProducts: any[]
+  onCategorySelect: (cat: string) =&gt; void
+  renderSeed: number
+}) {
+  return (
+    &lt;div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"&gt;
+      {SHOWCASE_PANELS.map((panel, pi) =&gt; {
+        const catProds = allProducts.filter(p =&gt; p.category === panel.catFilter)
+        // Pick 4 random products, shuffled differently each render
+        const shuffled = seededShuffle(catProds, renderSeed + pi * 37)
+        const picks = shuffled.slice(0, 4)
+        return (
+          &lt;div
+            key={panel.title}
+            className={`bg-gradient-to-br ${panel.bg} rounded-2xl border border-white shadow-sm overflow-hidden cursor-pointer group`}
+            onClick={() =&gt; onCategorySelect(panel.catFilter)}
+          &gt;
+            &lt;div className="p-3 pb-1"&gt;
+              &lt;p className="text-sm font-black text-gray-900 leading-tight"&gt;{panel.title}&lt;/p&gt;
+            &lt;/div&gt;
+            {picks.length &gt; 0 ? (
+              &lt;div className="grid grid-cols-2 gap-1 px-2 pb-1"&gt;
+                {picks.map((p, i) =&gt; (
+                  &lt;div key={p.id + i} className="aspect-square rounded-lg overflow-hidden bg-white shadow-sm"&gt;
+                    &lt;img src={p.images[0] || '/placeholder.png'} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" /&gt;
+                  &lt;/div&gt;
+                ))}
+              &lt;/div&gt;
+            ) : (
+              &lt;div className="grid grid-cols-2 gap-1 px-2 pb-1"&gt;
+                {panel.subcats.map((sub, i) =&gt; (
+                  &lt;div key={i} className="aspect-square rounded-lg bg-white/70 flex flex-col items-center justify-center p-1"&gt;
+                    &lt;span className="text-lg"&gt;{panel.icon}&lt;/span&gt;
+                    &lt;span className="text-[8px] font-bold text-gray-600 text-center leading-tight mt-0.5"&gt;{sub}&lt;/span&gt;
+                  &lt;/div&gt;
+                ))}
+              &lt;/div&gt;
+            )}
+            &lt;div className="px-3 pb-3"&gt;
+              &lt;span style={{ color: panel.accent }} className="text-[11px] font-black flex items-center gap-1"&gt;
+                {panel.cta} &lt;ChevronRight className="w-3 h-3" /&gt;
+              &lt;/span&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        )
+      })}
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────
 // Best Sellers Row
 // ─────────────────────────────────────────────
 function BestSellersRow({ products, onProductClick, onSeeAll, title, subtitle }: {
@@ -7752,7 +7984,6 @@ function JustDroppedSection({ allProducts, onProductClick }: {
 export default function MarketplacePage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const isOnline = useOnlineStatus()
 
   const isApp = searchParams.get('app') === 'true' ||
     (typeof window !== 'undefined' &amp;&amp; window.matchMedia('(display-mode: standalone)').matches)
@@ -7775,7 +8006,8 @@ export default function MarketplacePage() {
   const [dropdownPos,       setDropdownPos]       = useState({ top: 0, left: 0, width: 0 })
   const [universityShortName, setUniversityShortName] = useState&lt;string&gt;('')
   const [peopleLikeYouBought, setPeopleLikeYouBought] = useState&lt;any[]&gt;([])
-  const [usingCachedFeed, setUsingCachedFeed] = useState(false)
+  const [renderSeed,          setRenderSeed]          = useState(() =&gt; Date.now())
+  const [maxPriceFilter,      setMaxPriceFilter]      = useState&lt;number | null&gt;(null)
 
   // ── Referral popup — shows once per app session, only on first marketplace visit ──
   const [showReferralPopup, setShowReferralPopup] = useState(false)
@@ -7820,17 +8052,6 @@ export default function MarketplacePage() {
     setMounted(true)
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
     try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
-
-    try {
-      const cachedFeed = getClientCache&lt;any[]&gt;(MARKETPLACE_FEED_CACHE_KEY)
-      if (cachedFeed?.value?.length) {
-        setAllProducts(cachedFeed.value)
-        setUsingCachedFeed(true)
-        setLoading(false)
-      }
-      const cachedPeople = getClientCache&lt;any[]&gt;(MARKETPLACE_PEOPLE_CACHE_KEY)
-      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
-    } catch {}
 
     fetchFeed()
     fetchPeopleLikeYouBought()
@@ -7878,7 +8099,7 @@ export default function MarketplacePage() {
 
   // ── Category change ──
   useEffect(() =&gt; {
-    if (selectedCategory === 'All') { fetchFeed() } else { fetchByCategory(selectedCategory) }
+    if (selectedCategory === 'All') { setMaxPriceFilter(null); fetchFeed() } else { fetchByCategory(selectedCategory) }
   }, [selectedCategory])
 
   // ─────────────────────────────────────────────
@@ -8002,9 +8223,9 @@ export default function MarketplacePage() {
   }
 
   useEffect(() =&gt; {
-    if (isOnline) flushQueuedProductViews()
+    flushQueuedProductViews()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline])
+  }, [])
 
   const buildFeedSignals = () =&gt; {
     let viewed = ''; let searched = ''
@@ -8030,20 +8251,13 @@ export default function MarketplacePage() {
       if (res.ok) {
         const products = data.products || []
         setAllProducts(products)
-        setUsingCachedFeed(false)
-        setClientCache(MARKETPLACE_FEED_CACHE_KEY, products, MARKETPLACE_FEED_CACHE_TTL)
+        setRenderSeed(Date.now())
         const cats = Array.from(new Set(
           products.filter((p: any) =&gt; p.isPersonalised).map((p: any) =&gt; p.category)
         )) as string[]
         setInterestCategories(cats.slice(0, 4))
       }
-    } catch {
-      const cachedFeed = getClientCache&lt;any[]&gt;(MARKETPLACE_FEED_CACHE_KEY)
-      if (cachedFeed?.value?.length) {
-        setAllProducts(cachedFeed.value)
-        setUsingCachedFeed(true)
-      }
-    }
+    } catch { /* silent fail */ }
     finally { setLoading(false) }
   }
 
@@ -8064,11 +8278,7 @@ export default function MarketplacePage() {
         }))
         .filter((p: any) =&gt; p?.id)
       setPeopleLikeYouBought(items)
-      setClientCache(MARKETPLACE_PEOPLE_CACHE_KEY, items, MARKETPLACE_PEOPLE_CACHE_TTL)
-    } catch {
-      const cachedPeople = getClientCache&lt;any[]&gt;(MARKETPLACE_PEOPLE_CACHE_KEY)
-      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
-    }
+    } catch { /* silent fail */ }
   }
 
   const fetchByCategory = async (category: string) =&gt; {
@@ -8081,16 +8291,8 @@ export default function MarketplacePage() {
       if (res.ok) {
         const products = data.products || []
         setAllProducts(products)
-        setUsingCachedFeed(false)
-        setClientCache(`${MARKETPLACE_CATEGORY_CACHE_PREFIX}${category}`, products, MARKETPLACE_FEED_CACHE_TTL)
       }
-    } catch {
-      const cachedCategory = getClientCache&lt;any[]&gt;(`${MARKETPLACE_CATEGORY_CACHE_PREFIX}${category}`)
-      if (cachedCategory?.value?.length) {
-        setAllProducts(cachedCategory.value)
-        setUsingCachedFeed(true)
-      }
-    }
+    } catch { /* silent fail */ }
     finally { setLoading(false) }
   }
 
@@ -8119,6 +8321,15 @@ export default function MarketplacePage() {
       `🔥 I'm on BATAMART — the hottest campus marketplace at ${universityShortName || 'UNIZIK'}!\nSign up with my link and start buying &amp; selling today:\n${referralLink}`
     )
     window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
+  const handleCategorySelect = (cat: string, maxPrice?: number) =&gt; {
+    setSelectedCategory(cat)
+    if (maxPrice !== undefined) {
+      setMaxPriceFilter(maxPrice)
+    } else {
+      setMaxPriceFilter(null)
+    }
   }
 
   const handleProductClick = (id: string) =&gt; {
@@ -8167,10 +8378,11 @@ export default function MarketplacePage() {
     return allProducts.filter(p =&gt; !shown.has(p.id)).slice(0, 16)
   }, [allProducts, forYouProducts, trendingProducts, newListings])
 
-  const filteredByCategory = useMemo(() =&gt;
-    selectedCategory === 'All' ? allProducts : allProducts.filter(p =&gt; p.category === selectedCategory),
-    [allProducts, selectedCategory]
-  )
+  const filteredByCategory = useMemo(() =&gt; {
+    let prods = selectedCategory === 'All' ? allProducts : allProducts.filter(p =&gt; p.category === selectedCategory)
+    if (maxPriceFilter !== null) prods = prods.filter(p =&gt; p.price &lt;= maxPriceFilter)
+    return prods
+  }, [allProducts, selectedCategory, maxPriceFilter])
 
   const productsByCategory = useMemo(() =&gt; {
     const map: Record&lt;string, any[]&gt; = {}
@@ -8508,13 +8720,6 @@ export default function MarketplacePage() {
 
       {/* ── MAIN CONTENT ── */}
       &lt;div className={`marketplace-feed ${isApp ? 'max-w-5xl' : 'max-w-7xl'} mx-auto px-3 sm:px-6 ${isApp ? 'py-3 sm:py-4' : 'py-4 sm:py-5'} pb-28 safe-bottom space-y-4`}&gt;
-        {(!isOnline || usingCachedFeed) &amp;&amp; (
-          &lt;div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700"&gt;
-            {!isOnline
-              ? 'Offline mode: showing last synced marketplace data.'
-              : 'Showing cached marketplace data while syncing latest updates...'}
-          &lt;/div&gt;
-        )}
 
         {loading ? (
           &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
@@ -8526,13 +8731,19 @@ export default function MarketplacePage() {
           &lt;div&gt;
             &lt;div className="flex items-center gap-2 mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3"&gt;
               &lt;button
-                onClick={() =&gt; setSelectedCategory('All')}
+                onClick={() =&gt; handleCategorySelect('All')}
                 className="text-xs font-bold text-gray-400 hover:text-BATAMART-primary transition-colors flex items-center gap-1"
               &gt;
                 &lt;ChevronLeft className="w-3.5 h-3.5" /&gt; All
               &lt;/button&gt;
               &lt;span className="text-gray-300"&gt;/&lt;/span&gt;
               &lt;span className="text-sm font-bold text-gray-700"&gt;{selectedCategory}&lt;/span&gt;
+              {maxPriceFilter !== null &amp;&amp; (
+                &lt;span className="flex items-center gap-1 ml-1 px-2 py-0.5 bg-BATAMART-primary/10 text-BATAMART-primary rounded-full text-[11px] font-black"&gt;
+                  &lt;Tag className="w-3 h-3" /&gt; Under {fmt(maxPriceFilter)}
+                  &lt;button onClick={() =&gt; setMaxPriceFilter(null)} className="ml-1 hover:text-red-500"&gt;&lt;X className="w-3 h-3" /&gt;&lt;/button&gt;
+                &lt;/span&gt;
+              )}
               &lt;span className="ml-auto text-[11px] text-gray-400 font-medium"&gt;{filteredByCategory.length} items&lt;/span&gt;
             &lt;/div&gt;
             {filteredByCategory.length === 0 ? (
@@ -8586,20 +8797,22 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
+            {/* ── Shop by Category (showcase panels) ── */}
             {allProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
                 &lt;div className="flex items-center justify-between mb-3"&gt;
                   &lt;h2 className="text-base font-black text-gray-800 section-header-line"&gt;Shop by Category&lt;/h2&gt;
                 &lt;/div&gt;
-                &lt;CategorySpotlightGrid allProducts={allProducts} onCategorySelect={setSelectedCategory} /&gt;
+                &lt;ShowcasePanels allProducts={allProducts} onCategorySelect={handleCategorySelect} renderSeed={renderSeed} /&gt;
               &lt;/div&gt;
             )}
 
+            {/* ── Flash Deals (trending) ── */}
             {trendingProducts.length &gt; 0 &amp;&amp; (
               &lt;DealsSection
                 products={trendingProducts}
                 onProductClick={handleProductClick}
-                onSeeAll={() =&gt; setSelectedCategory('All')}
+                onSeeAll={() =&gt; handleCategorySelect('All')}
                 sectionClass="section-stripe-orange"
                 icon={&lt;Flame className="w-5 h-5 text-white" /&gt;}
                 title="Flash Deals"
@@ -8608,16 +8821,29 @@ export default function MarketplacePage() {
               /&gt;
             )}
 
+            {/* ── Picked for You ── */}
             {forYouProducts.length &gt; 0 &amp;&amp; (
               &lt;BestSellersRow
                 products={forYouProducts}
                 onProductClick={handleProductClick}
-                onSeeAll={() =&gt; setSelectedCategory('All')}
+                onSeeAll={() =&gt; handleCategorySelect('All')}
                 title="Picked for You"
                 subtitle="Based on what you browse, search, and order"
               /&gt;
             )}
 
+            {/* ── Price-range deal panels ── */}
+            {allProducts.length &gt; 0 &amp;&amp; (
+              &lt;div&gt;
+                &lt;div className="flex items-center justify-between mb-3"&gt;
+                  &lt;h2 className="text-base font-black text-gray-800 section-header-line"&gt;Campus Deals by Budget&lt;/h2&gt;
+                  &lt;span className="text-[11px] text-gray-400 font-medium"&gt;Tap a price to filter&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;PricePanelsRow allProducts={allProducts} onCategorySelect={handleCategorySelect} renderSeed={renderSeed} /&gt;
+              &lt;/div&gt;
+            )}
+
+            {/* ── People Like You Bought ── */}
             {peopleLikeYouBought.length &gt; 0 &amp;&amp; (
               &lt;BestSellersRow
                 products={peopleLikeYouBought}
@@ -8628,6 +8854,7 @@ export default function MarketplacePage() {
               /&gt;
             )}
 
+            {/* ── Recently Viewed ── */}
             {recentlyViewed.length &gt; 0 &amp;&amp; (
               &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"&gt;
                 &lt;div className="flex items-end justify-between px-5 pt-5 pb-3 border-b border-gray-50"&gt;
@@ -8646,16 +8873,22 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {productsByCategory['Tech Gadgets']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Tech Gadgets']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Tech Gadgets')} title="Best Sellers in Tech Gadgets" subtitle="Top picks from campus techies" /&gt;
-            )}
-            {productsByCategory['Fashion &amp; Clothing']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Fashion &amp; Clothing']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Fashion &amp; Clothing')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" /&gt;
-            )}
-            {productsByCategory['Food Services']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Food Services']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Food Services')} title="Best Sellers in Food &amp; Dining" subtitle="Eat well, study harder" /&gt;
+            {/* ── Best Sellers: Electronics ── */}
+            {(productsByCategory['Electronics']?.length &gt; 0) &amp;&amp; (
+              &lt;BestSellersRow products={productsByCategory['Electronics']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Electronics')} title="Best Sellers in Tech" subtitle="Top picks from campus techies" /&gt;
             )}
 
+            {/* ── Best Sellers: Fashion ── */}
+            {(productsByCategory['Fashion']?.length &gt; 0) &amp;&amp; (
+              &lt;BestSellersRow products={productsByCategory['Fashion']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Fashion')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" /&gt;
+            )}
+
+            {/* ── Best Sellers: Food ── */}
+            {(productsByCategory['Groceries / Food / Fast Food']?.length &gt; 0) &amp;&amp; (
+              &lt;BestSellersRow products={productsByCategory['Groceries / Food / Fast Food']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Groceries / Food / Fast Food')} title="Best Sellers in Food &amp; Snacks" subtitle="Eat well, study harder" /&gt;
+            )}
+
+            {/* ── Your Interests ── */}
             {interestCategories.length &gt; 0 &amp;&amp; (
               &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"&gt;
                 &lt;div className="flex items-center gap-2 mb-3"&gt;
@@ -8669,7 +8902,7 @@ export default function MarketplacePage() {
                     return (
                       &lt;button
                         key={cat}
-                        onClick={() =&gt; setSelectedCategory(cat)}
+                        onClick={() =&gt; handleCategorySelect(cat)}
                         className="interest-pill card-enter flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm"
                         style={{ animationDelay: `${i * 50}ms` }}
                       &gt;
@@ -8681,23 +8914,23 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {productsByCategory['School Supplies']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['School Supplies']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('School Supplies')} title="Best Sellers in School Supplies" subtitle="Gear up for the semester" /&gt;
-            )}
-            {productsByCategory['Cosmetics']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Cosmetics']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Cosmetics')} title="Best Sellers in Beauty &amp; Cosmetics" subtitle="Top-rated by campus students" /&gt;
+            {/* ── Best Sellers: Beauty ── */}
+            {(productsByCategory['Beauty &amp; Personal Care']?.length &gt; 0) &amp;&amp; (
+              &lt;BestSellersRow products={productsByCategory['Beauty &amp; Personal Care']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Beauty &amp; Personal Care')} title="Best Sellers in Beauty &amp; Care" subtitle="Top-rated by campus students" /&gt;
             )}
 
+            {/* ── Best Sellers: Gaming ── */}
+            {(productsByCategory['Gaming']?.length &gt; 0) &amp;&amp; (
+              &lt;BestSellersRow products={productsByCategory['Gaming']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Gaming')} title="Best Sellers in Gaming" subtitle="Level up your setup" /&gt;
+            )}
+
+            {/* ── Discover More ── */}
             {discoverProducts.length &gt; 0 &amp;&amp; (
               &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"&gt;
                 &lt;div className="flex items-center justify-between mb-4"&gt;
                   &lt;div&gt;
                     &lt;h2 className="text-base font-black text-gray-900 section-header-line"&gt;Discover More&lt;/h2&gt;
                     &lt;p className="text-xs text-gray-400 mt-1"&gt;Explore everything on campus&lt;/p&gt;
-                  &lt;/div&gt;
-                  &lt;div className="flex items-center gap-1 text-xs text-gray-400"&gt;
-                    &lt;Sliders className="w-3.5 h-3.5" /&gt;
-                    &lt;span className="hidden sm:inline font-medium"&gt;Filter&lt;/span&gt;
                   &lt;/div&gt;
                 &lt;/div&gt;
                 &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
@@ -8708,17 +8941,12 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {productsByCategory['Room Essentials']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Room Essentials']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Room Essentials')} title="Finds for Your Room" subtitle="Make your hostel feel like home" /&gt;
-            )}
-            {productsByCategory['Books']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Books']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Books')} title="Books &amp; Academic Resources" subtitle="Study smarter with the right materials" /&gt;
-            )}
-            {productsByCategory['Snacks']?.length &gt; 0 &amp;&amp; (
-              &lt;BestSellersRow products={productsByCategory['Snacks']} onProductClick={handleProductClick} onSeeAll={() =&gt; setSelectedCategory('Snacks')} title="Snacks &amp; Treats" subtitle="Fuel your study sessions" /&gt;
+            {/* ── Best Sellers: Home &amp; Kitchen ── */}
+            {(productsByCategory['Home &amp; Kitchen']?.length &gt; 0) &amp;&amp; (
+              &lt;BestSellersRow products={productsByCategory['Home &amp; Kitchen']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Home &amp; Kitchen')} title="Finds for Your Room" subtitle="Make your hostel feel like home" /&gt;
             )}
 
-            {/* Just Dropped — always last, infinite scroll */}
+            {/* ── Just Dropped — always last ── */}
             &lt;JustDroppedSection allProducts={allProducts} onProductClick={handleProductClick} /&gt;
 
             {allProducts.length === 0 &amp;&amp; (
@@ -8776,8 +9004,6 @@ export default function MarketplacePage() {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Loader2, TrendingUp, Users } from 'lucide-react'
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { getClientCache, setClientCache } from '@/lib/client-cache'
 
 interface DailyBoughtItem {
   key: string
@@ -8800,8 +9026,6 @@ interface DailyBoughtItem {
 }
 
 const PAGE_SIZE = 20
-const MOST_BOUGHT_CACHE_KEY = 'batamart_most_bought_cache_v1'
-const MOST_BOUGHT_CACHE_TTL = 1000 * 60 * 30
 
 const fmt = (n: number) =&gt;
   new Intl.NumberFormat('en-NG', {
@@ -8812,14 +9036,12 @@ const fmt = (n: number) =&gt;
 
 export default function MostBoughtPage() {
   const router = useRouter()
-  const isOnline = useOnlineStatus()
   const [items, setItems] = useState&lt;DailyBoughtItem[]&gt;([])
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
-  const [usingCachedData, setUsingCachedData] = useState(false)
   const [navigatingProductId, setNavigatingProductId] = useState&lt;string | null&gt;(null)
   const sentinelRef = useRef&lt;HTMLDivElement&gt;(null)
 
@@ -8841,48 +9063,22 @@ export default function MostBoughtPage() {
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Failed to load most bought feed')
-        if (!append) {
-          const cached = getClientCache&lt;DailyBoughtItem[]&gt;(MOST_BOUGHT_CACHE_KEY)
-          if (cached?.value?.length) {
-            setItems(cached.value)
-            setUsingCachedData(true)
-          }
-        }
         return
       }
       const nextItems = (data.items || []) as DailyBoughtItem[]
-      const merged = append ? [...items, ...nextItems] : nextItems
       setItems(prev =&gt; append ? [...prev, ...nextItems] : nextItems)
       setHasMore(!!data.hasMore)
       setPage(targetPage)
-      if (!append) {
-        setUsingCachedData(false)
-        setClientCache(MOST_BOUGHT_CACHE_KEY, merged, MOST_BOUGHT_CACHE_TTL)
-      }
     } catch {
       setError('Network error. Please try again.')
-      if (!append) {
-        const cached = getClientCache&lt;DailyBoughtItem[]&gt;(MOST_BOUGHT_CACHE_KEY)
-        if (cached?.value?.length) {
-          setItems(cached.value)
-          setUsingCachedData(true)
-          setError('')
-        }
-      }
     } finally {
       append ? setLoadingMore(false) : setLoading(false)
     }
-  }, [router, items])
+  }, [router])
 
   useEffect(() =&gt; {
-    const cached = getClientCache&lt;DailyBoughtItem[]&gt;(MOST_BOUGHT_CACHE_KEY)
-    if (cached?.value?.length) {
-      setItems(cached.value)
-      setUsingCachedData(true)
-      setLoading(false)
-    }
     fetchPage(1, false)
-  }, [fetchPage])
+  }, [])
 
   useEffect(() =&gt; {
     if (!sentinelRef.current || !hasMore || loading || loadingMore) return
@@ -8928,14 +9124,6 @@ export default function MostBoughtPage() {
             Updated every day and stacked over time. Keep scrolling.
           &lt;/p&gt;
         &lt;/div&gt;
-
-        {(!isOnline || usingCachedData) &amp;&amp; (
-          &lt;div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700"&gt;
-            {!isOnline
-              ? 'Offline mode: showing last synced most-bought feed.'
-              : 'Showing cached feed while syncing latest updates...'}
-          &lt;/div&gt;
-        )}
 
         {loading ? (
           &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"&gt;
@@ -9028,8 +9216,7 @@ export default function MostBoughtPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/my-shop/page.tsx</div><pre>'use client'
 // app/(marketplace)/my-shop/page.tsx
 
@@ -10003,8 +10190,7 @@ import {
   X, BadgeCheck, AlertCircle, Tag,
 } from 'lucide-react'
 import { OrderNotificationBanner } from '@/components/layout/OrderNotificationBanner'
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { getClientCache, setClientCache } from '@/lib/client-cache'
+
 
 // ── Parse variant summary out of orderNote ────────────────────────────────────
 // Format stored by checkout: "[Order: 128GB · Black · UK Used] — extra note"
@@ -10061,10 +10247,7 @@ interface Order {
   seller: Seller; product: Product; rider?: Rider; reviews?: Review[]; productReviews?: ProductReview[]
 }
 
-const ORDERS_CACHE_KEY = 'batamart_orders_cache_v1'
-const PEOPLE_LIKE_CACHE_KEY = 'batamart_people_like_orders_cache_v1'
-const ORDERS_CACHE_TTL = 1000 * 60 * 3
-const PEOPLE_LIKE_CACHE_TTL = 1000 * 60 * 15
+
 
 const STATUS_CONFIG: Record&lt;string, { label: string; color: string; bg: string; ring: string; dot: string }&gt; = {
   PENDING: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50', ring: 'ring-amber-200', dot: 'bg-amber-400' },
@@ -10092,7 +10275,6 @@ function StatusBadge({ status }: { status: string }) {
 export default function OrdersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const isOnline = useOnlineStatus()
   const [orders, setOrders] = useState&lt;Order[]&gt;([])
   const [loading, setLoading] = useState(true)
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -10101,7 +10283,6 @@ export default function OrdersPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [actionLoading, setActionLoading] = useState&lt;Record&lt;string, boolean&gt;&gt;({})
   const [peopleLikeYouBought, setPeopleLikeYouBought] = useState&lt;PeopleLikeYouItem[]&gt;([])
-  const [usingCachedData, setUsingCachedData] = useState(false)
 
   useEffect(() =&gt; {
     const token = localStorage.getItem('token')
@@ -10127,16 +10308,6 @@ export default function OrdersPage() {
       window.history.replaceState({}, '', '/orders')
     }
 
-    try {
-      const cachedOrders = getClientCache&lt;Order[]&gt;(ORDERS_CACHE_KEY)
-      if (cachedOrders?.value?.length) {
-        setOrders(cachedOrders.value)
-        setUsingCachedData(true)
-      }
-      const cachedPeople = getClientCache&lt;PeopleLikeYouItem[]&gt;(PEOPLE_LIKE_CACHE_KEY)
-      if (cachedPeople?.value?.length) setPeopleLikeYouBought(cachedPeople.value)
-    } catch {}
-
     fetchOrders()
     fetchPeopleLikeYouBought()
   }, [searchParams])
@@ -10149,8 +10320,6 @@ export default function OrdersPage() {
       if (response.ok) {
         const nextOrders = data.orders || []
         setOrders(nextOrders)
-        setUsingCachedData(false)
-        setClientCache(ORDERS_CACHE_KEY, nextOrders, ORDERS_CACHE_TTL)
       }
     } catch (error) { console.error('Error fetching orders:', error) }
     finally { setLoading(false) }
@@ -10167,7 +10336,6 @@ export default function OrdersPage() {
       if (response.ok) {
         const items = data.items || []
         setPeopleLikeYouBought(items)
-        setClientCache(PEOPLE_LIKE_CACHE_KEY, items, PEOPLE_LIKE_CACHE_TTL)
       }
     } catch {}
   }
@@ -10259,13 +10427,6 @@ export default function OrdersPage() {
       &lt;/div&gt;
 
       &lt;div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8"&gt;
-        {(!isOnline || usingCachedData) &amp;&amp; (
-          &lt;div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-700"&gt;
-            {!isOnline
-              ? 'You are offline. Showing last synced orders.'
-              : 'Showing cached orders while refreshing latest data...'}
-          &lt;/div&gt;
-        )}
 
         {peopleLikeYouBought.length &gt; 0 &amp;&amp; (
           &lt;div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-4"&gt;
@@ -21259,6 +21420,11 @@ async function createAdmin() {
 
 createAdmin();
 </pre></div>
+<div class='file-block'><div class='file-header'>custom.d.ts</div><pre>// Type declarations for CSS imports
+declare module '*.css' {
+  const content: { [className: string]: string }
+  export default content
+}</pre></div>
 <div class='file-block'><div class='file-header'>middleware.ts</div><pre>// middleware.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
@@ -26810,8 +26976,6 @@ export async function GET(request: NextRequest) {
         quantity:     { gt: 0 },
         isDeleted:    false,
         universityId: user.universityId,
-        // Exclude the user's own products from their feed
-        NOT: { sellerId: user.id },
       },
       include: {
         seller: {
@@ -35259,13 +35423,13 @@ body {
   },
   "include": [
     "next-env.d.ts",
+    "custom.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
-}
-</pre></div>
+}</pre></div>
 <div class='file-block'><div class='file-header'>vercel.json</div><pre>{
   "framework": "nextjs",
   "headers": [
