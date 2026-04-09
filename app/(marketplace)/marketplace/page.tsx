@@ -1546,7 +1546,14 @@ export default function MarketplacePage() {
 
   // ── Derived data ──
   const forYouProducts = useMemo(() => allProducts.filter(p => p.isPersonalised).slice(0, 12), [allProducts])
-  const trendingProducts = useMemo(() => allProducts.filter(p => p.isTrending).slice(0, 12), [allProducts])
+  // Hot Deals: products with 12%+ discount, sorted highest % off first
+  const HOT_DEAL_MIN_PERCENT = 12
+  const hotDeals = useMemo(() => {
+    return allProducts
+      .filter(p => p.isDeal && p.discountPercent && p.discountPercent >= HOT_DEAL_MIN_PERCENT && p.marketPrice && p.marketPrice > p.price)
+      .sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0))
+  }, [allProducts])
+  const trendingProducts = hotDeals.slice(0, 12)
   const newListings = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
   const discoverProducts = useMemo(() => {
     const shown = new Set([...forYouProducts, ...trendingProducts, ...newListings].map(p => p.id))
@@ -1982,16 +1989,16 @@ export default function MarketplacePage() {
               </div>
             )}
 
-            {/* ── Flash Deals (trending) ── */}
+            {/* ── Flash Deals (highest % off first) ── */}
             {trendingProducts.length > 0 && (
               <DealsSection
                 products={trendingProducts}
                 onProductClick={handleProductClick}
-                onSeeAll={() => handleCategorySelect('All')}
+                onSeeAll={() => router.push('/marketplace/deals')}
                 sectionClass="section-stripe-orange"
                 icon={<Flame className="w-5 h-5 text-white" />}
-                title="Flash Deals"
-                subtitle="Trending on campus right now"
+                title="Hot Deals"
+                subtitle="Biggest discounts on campus right now"
                 badge="HOT"
               />
             )}
