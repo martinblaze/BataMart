@@ -155,10 +155,10 @@ function PinDots({ value }: { value: string }) {
 // ── Modal Shell ───────────────────────────────────────────────────────────────
 function ModalShell({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="scale-in relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+      <div className="scale-in relative bg-white rounded-3xl w-full max-w-md shadow-2xl max-h-[88vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
         {children}
       </div>
     </div>

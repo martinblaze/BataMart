@@ -208,38 +208,40 @@ export default function MyProfilePage() {
       {showIOSInstallModal && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setShowIOSInstallModal(false)} />
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl p-6 shadow-2xl">
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
-                <span className="text-2xl">🛍️</span>
-              </div>
-              <div>
-                <p className="font-black text-gray-900">Add BataMart to Home Screen</p>
-                <p className="text-sm text-gray-500">Get the full app experience 🚀</p>
-              </div>
-            </div>
-            <div className="space-y-3 mb-6">
-              {[
-                { icon: '⎋', bg: 'bg-blue-50', title: 'Tap the Share button', sub: 'At the bottom of your Safari browser' },
-                { icon: '➕', bg: 'bg-indigo-50', title: 'Tap "Add to Home Screen"', sub: 'Scroll down in the share sheet' },
-                { icon: '✅', bg: 'bg-emerald-50', title: 'Tap "Add" to confirm', sub: 'BataMart appears on your home screen' },
-              ].map(({ icon, bg, title, sub }) => (
-                <div key={title} className={`flex items-center gap-3 ${bg} rounded-2xl px-4 py-3.5`}>
-                  <span className="text-xl">{icon}</span>
-                  <div>
-                    <p className="font-black text-sm text-gray-800">{title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
-                  </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl max-h-[88vh] overflow-y-auto">
+              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                  <span className="text-2xl">🛍️</span>
                 </div>
-              ))}
+                <div>
+                  <p className="font-black text-gray-900">Add BataMart to Home Screen</p>
+                  <p className="text-sm text-gray-500">Get the full app experience 🚀</p>
+                </div>
+              </div>
+              <div className="space-y-3 mb-6">
+                {[
+                  { icon: '⎋', bg: 'bg-blue-50', title: 'Tap the Share button', sub: 'At the bottom of your Safari browser' },
+                  { icon: '➕', bg: 'bg-indigo-50', title: 'Tap "Add to Home Screen"', sub: 'Scroll down in the share sheet' },
+                  { icon: '✅', bg: 'bg-emerald-50', title: 'Tap "Add" to confirm', sub: 'BataMart appears on your home screen' },
+                ].map(({ icon, bg, title, sub }) => (
+                  <div key={title} className={`flex items-center gap-3 ${bg} rounded-2xl px-4 py-3.5`}>
+                    <span className="text-xl">{icon}</span>
+                    <div>
+                      <p className="font-black text-sm text-gray-800">{title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setShowIOSInstallModal(false)}
+                className="w-full text-white font-black py-4 rounded-2xl text-sm mb-3"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
+                Got it!
+              </button>
+              <button onClick={() => setShowIOSInstallModal(false)} className="w-full text-gray-400 text-sm font-medium">Maybe later</button>
             </div>
-            <button onClick={() => setShowIOSInstallModal(false)}
-              className="w-full text-white font-black py-4 rounded-2xl text-sm mb-3"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}>
-              Got it!
-            </button>
-            <button onClick={() => setShowIOSInstallModal(false)} className="w-full text-gray-400 text-sm font-medium">Maybe later</button>
           </div>
         </>
       )}
