@@ -15,11 +15,29 @@ import {
   newReviewEmail,
 } from '@/lib/email/emailTemplates'
 
-webpush.setVapidDetails(
-  `mailto:${process.env.VAPID_EMAIL}`,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
+let vapidConfigured = false
+
+function ensureVapidConfigured(): boolean {
+  if (vapidConfigured) return true
+
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  const vapidEmail = process.env.VAPID_EMAIL
+
+  if (!publicKey || !privateKey || !vapidEmail) {
+    console.warn('[Push] VAPID env vars are missing. Push notifications are disabled.')
+    return false
+  }
+
+  try {
+    webpush.setVapidDetails(`mailto:${vapidEmail}`, publicKey, privateKey)
+    vapidConfigured = true
+    return true
+  } catch (error) {
+    console.error('[Push] Failed to initialize VAPID config:', error)
+    return false
+  }
+}
 
 interface PushPayload {
   title: string
@@ -35,6 +53,8 @@ interface PushPayload {
 // Stale/expired subscriptions (410/404) are auto-deleted.
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<boolean> {
   try {
+    if (!ensureVapidConfigured()) return false
+
     const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } })
     if (subscriptions.length === 0) return false
 

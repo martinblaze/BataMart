@@ -3,9 +3,12 @@ import jwt from 'jsonwebtoken'
 
 // ─── Same JWT_SECRET as lib/auth/auth.ts ─────────────────────────────────────
 // Both files must use the SAME secret. Never hardcode a fallback string.
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set.')
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('Server misconfiguration: JWT_SECRET is not set.')
+  }
+  return secret
 }
 
 export interface AuthSession {
@@ -24,7 +27,7 @@ export async function getAuthSession(): Promise<AuthSession | null> {
 
     if (!token) return null
 
-    const decoded = jwt.verify(token, JWT_SECRET!) as {
+    const decoded = jwt.verify(token, getJwtSecret()) as {
       userId: string
       email: string
       name: string | null

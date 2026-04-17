@@ -4,19 +4,22 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set.')
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('Server misconfiguration: JWT_SECRET is not set.')
+  }
+  return secret
 }
 
 // ── FIXED: added optional `role` param so rider tokens carry the role claim ──
 export function generateToken(userId: string, phone: string | null, role?: string): string {
-  return jwt.sign({ userId, phone, ...(role ? { role } : {}) }, JWT_SECRET!, { expiresIn: '30d' })
+  return jwt.sign({ userId, phone, ...(role ? { role } : {}) }, getJwtSecret(), { expiresIn: '30d' })
 }
 
 export function verifyToken(token: string): { userId: string; phone: string; role?: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET!) as { userId: string; phone: string; role?: string }
+    return jwt.verify(token, getJwtSecret()) as { userId: string; phone: string; role?: string }
   } catch {
     return null
   }

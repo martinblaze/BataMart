@@ -44,16 +44,23 @@ setInterval(() => {
 // proves "this email/phone passed OTP". The signup-with-password route verifies
 // this token before creating the account — so you can't sign up with an email
 // you never verified.
-const OTP_SESSION_SECRET  = process.env.JWT_SECRET! // reuse the same secret
 const OTP_SESSION_EXPIRES = '15m' // must complete signup within 15 minutes
 
+function getOtpSessionSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('Server misconfiguration: JWT_SECRET is not set.')
+  }
+  return secret
+}
+
 function issueOtpSessionToken(identifier: string): string {
-  return jwt.sign({ verified: identifier }, OTP_SESSION_SECRET, { expiresIn: OTP_SESSION_EXPIRES })
+  return jwt.sign({ verified: identifier }, getOtpSessionSecret(), { expiresIn: OTP_SESSION_EXPIRES })
 }
 
 export function verifyOtpSessionToken(token: string): string | null {
   try {
-    const payload = jwt.verify(token, OTP_SESSION_SECRET) as { verified: string }
+    const payload = jwt.verify(token, getOtpSessionSecret()) as { verified: string }
     return payload.verified ?? null
   } catch {
     return null
