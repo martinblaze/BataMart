@@ -76,7 +76,6 @@ function SignupForm() {
   const [universities, setUniversities]             = useState<University[]>([])
   const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null)
   const [uniLoading, setUniLoading]                 = useState(true)
-  const [uniError, setUniError]                     = useState('')
 
   const [email, setEmail] = useState('')
   const [name, setName]   = useState('')
@@ -110,31 +109,11 @@ function SignupForm() {
   }, [step])
 
   useEffect(() => {
-    const loadUniversities = async () => {
-      try {
-        const response = await fetch('/api/universities')
-        const contentType = response.headers.get('content-type') || ''
-        const isJson = contentType.includes('application/json')
-        const data = isJson ? await response.json() : null
-
-        if (!response.ok) {
-          setUniError(data?.error || `Failed to load campuses (${response.status})`)
-          setUniversities([])
-          return
-        }
-
-        setUniversities(data?.universities ?? [])
-        setUniError('')
-      } catch (err) {
-        console.error('Failed to load universities:', err)
-        setUniError('Unable to load campuses right now. Please try again shortly.')
-        setUniversities([])
-      } finally {
-        setUniLoading(false)
-      }
-    }
-
-    loadUniversities()
+    fetch('/api/universities')
+      .then(r => r.json())
+      .then(data => setUniversities(data.universities ?? []))
+      .catch(() => {})
+      .finally(() => setUniLoading(false))
   }, [])
 
   const validatePassword = (pwd: string) => {
@@ -289,9 +268,6 @@ function SignupForm() {
             </div>
           ) : (
             <div className="space-y-3">
-              {uniError && (
-                <p className="text-center text-red-600 text-sm py-2">{uniError}</p>
-              )}
               {universities.map(uni => (
                 <button
                   key={uni.id}
@@ -320,7 +296,7 @@ function SignupForm() {
                   </div>
                 </button>
               ))}
-              {!uniError && universities.length === 0 && (
+              {universities.length === 0 && (
                 <p className="text-center text-gray-400 text-sm py-4">No campuses available yet.</p>
               )}
             </div>
