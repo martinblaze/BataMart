@@ -50,9 +50,15 @@ function LoginForm() {
         body:    JSON.stringify({ email, password }),
       })
 
-      const data = await response.json()
+      const contentType = response.headers.get('content-type') || ''
+      const isJson = contentType.includes('application/json')
+      const data = isJson ? await response.json() : null
 
       if (response.ok) {
+        if (!data) {
+          setError('Unexpected server response. Please try again.')
+          return
+        }
         localStorage.setItem('token',    data.token)
         localStorage.setItem('userName', data.user.name)
         localStorage.setItem('userRole', data.user.role || '')
@@ -63,21 +69,22 @@ function LoginForm() {
         window.dispatchEvent(new Event('auth-change'))
         router.push('/marketplace')
 
-      } else if (response.status === 403 && data.isRider) {
+      } else if (response.status === 403 && data?.isRider) {
         // ── Rider tried to log in here — show clear message, do NOT log them in ──
         setError('__RIDER__')
 
-      } else if (response.status === 403 && data.suspended) {
-        setSuspensionMessage(buildSuspensionMessage(data.reason, data.until))
+      } else if (response.status === 403 && data?.suspended) {
+        setSuspensionMessage(buildSuspensionMessage(data.reason ?? null, data.until ?? null))
 
       } else if (response.status === 429) {
         setError('Too many login attempts. Please wait a few minutes and try again.')
 
       } else {
-        setError(data.error || 'Login failed')
+        setError(data?.error || `Login failed (${response.status})`)
       }
-    } catch {
-      setError('Network error. Please try again.')
+    } catch (err) {
+      console.error('Login request failed:', err)
+      setError('Unable to reach server. Check internet or server status and try again.')
     } finally {
       setLoading(false)
     }
