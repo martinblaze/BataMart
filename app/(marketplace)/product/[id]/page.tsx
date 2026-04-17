@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronLeft, ShoppingCart, Star, Shield, Package, Truck,
@@ -324,7 +324,9 @@ function SeeMoreCard({ onClick, loading }: { onClick: () => void; loading: boole
 export default function ProductDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const productId = params?.id as string
+  const isApp = searchParams.get('app') === 'true'
 
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
@@ -657,7 +659,7 @@ export default function ProductDetailPage() {
       <style>{PAGE_CSS}</style>
 
       {/* ── Sticky bottom bar (mobile only) ──────────────── */}
-      <div
+      {!isApp && <div
         className={`sticky-bar fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 p-3 flex gap-2 sm:hidden ${
           showStickyBar ? 'translate-y-0 shadow-2xl' : 'translate-y-full'
         }`}
@@ -677,7 +679,7 @@ export default function ProductDetailPage() {
         >
           Buy Now
         </button>
-      </div>
+      </div>}
 
       {/* ── Top nav ───────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
