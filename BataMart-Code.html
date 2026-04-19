@@ -6835,6 +6835,10 @@ import {
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
   BadgeCheck, Timer, Percent, MapPin, Bell, Menu,
   ChevronDown, Grid3X3, List, Sliders, Loader2, Copy,
+  Gift, Crown, Coffee, BookOpen, Cpu, Shirt, Home,
+  Headphones, Camera, Watch, Dumbbell, Music, Gamepad2,
+  Wifi, Battery, Monitor, Smartphone, ShoppingCart,
+  TrendingDown, BarChart3, Globe, Leaf, Sun, Moon,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
@@ -7101,6 +7105,119 @@ const ANIM_CSS = `
   @supports (padding-bottom: env(safe-area-inset-bottom)) {
     .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   }
+
+  /* ── New panel animations ── */
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .count-up { animation: countUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+  @keyframes marqueeLeft {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .marquee-track { animation: marqueeLeft 20s linear infinite; }
+  .marquee-track:hover { animation-play-state: paused; }
+
+  @keyframes livePing {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.5); opacity: 0.4; }
+  }
+  .live-ping { animation: livePing 1.4s ease-in-out infinite; }
+
+  @keyframes floatY {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-5px); }
+  }
+  .float-y { animation: floatY 3s ease-in-out infinite; }
+
+  @keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .gradient-animated {
+    background-size: 200% 200%;
+    animation: gradientShift 5s ease infinite;
+  }
+
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(30px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .slide-in-right { animation: slideInRight 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+  .stat-card {
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
+  }
+  .stat-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 16px 40px rgba(99,102,241,0.15);
+  }
+
+  .brand-chip {
+    transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1),
+                box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .brand-chip:hover {
+    transform: translateY(-2px) scale(1.06);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  }
+
+  .flash-card {
+    transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.25s ease;
+  }
+  .flash-card:hover {
+    transform: translateY(-5px) scale(1.03);
+    box-shadow: 0 20px 48px rgba(0,0,0,0.14);
+  }
+
+  .trust-bar {
+    background: linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7);
+    background-size: 200% 100%;
+    animation: shimmerBg 3s linear infinite;
+  }
+
+  @keyframes ripple {
+    0%   { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  .ripple-ring {
+    animation: ripple 1.8s ease-out infinite;
+  }
+
+  .mosaic-img {
+    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .mosaic-img:hover { transform: scale(1.08); }
+
+  @keyframes borderPulse {
+    0%, 100% { border-color: rgba(99,102,241,0.3); }
+    50%       { border-color: rgba(99,102,241,0.8); }
+  }
+  .border-pulse { animation: borderPulse 2s ease-in-out infinite; }
+
+  .seller-card {
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
+  }
+  .seller-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.1);
+  }
+
+  @keyframes scanLine {
+    0%   { top: 0%; }
+    100% { top: 100%; }
+  }
+  .scan-line {
+    animation: scanLine 2.5s linear infinite;
+  }
+
+  .countdown-digit {
+    transition: transform 0.2s ease;
+  }
+  .countdown-digit:hover { transform: scale(1.1); }
 `
 
 // ─────────────────────────────────────────────
@@ -7523,6 +7640,66 @@ const PRICE_PANELS = [
     accent: '#f97316',
     icon: '🍔',
   },
+]
+
+// ── Campus Stats (animated numbers shown in the stats banner) ──────────────
+const CAMPUS_STATS = [
+  { label: 'Products Listed',  value: '2,400+', icon: '📦', color: 'text-violet-600' },
+  { label: 'Campus Sellers',   value: '380+',   icon: '🧑‍💼', color: 'text-emerald-600' },
+  { label: 'Orders Delivered', value: '5,100+', icon: '🚀', color: 'text-orange-500' },
+  { label: 'Happy Buyers',     value: '1,200+', icon: '⭐', color: 'text-amber-500' },
+]
+
+// ── Brand/search chips for the brand spotlight row ─────────────────────────
+const BRAND_CHIPS = [
+  { label: 'iPhone',      icon: '📱', cat: 'Electronics' },
+  { label: 'Samsung',     icon: '📺', cat: 'Electronics' },
+  { label: 'Sneakers',    icon: '👟', cat: 'Fashion' },
+  { label: 'Laptops',     icon: '💻', cat: 'Computing' },
+  { label: 'Power Banks', icon: '🔋', cat: 'Electronics' },
+  { label: 'Earbuds',     icon: '🎧', cat: 'Electronics' },
+  { label: 'Skincare',    icon: '✨', cat: 'Beauty &amp; Personal Care' },
+  { label: 'Textbooks',   icon: '📚', cat: 'Computing' },
+  { label: 'Wigs',        icon: '💇', cat: 'Beauty &amp; Personal Care' },
+  { label: 'Watches',     icon: '⌚', cat: 'Fashion' },
+  { label: 'Gaming',      icon: '🎮', cat: 'Gaming' },
+  { label: 'Food',        icon: '🍔', cat: 'Groceries / Food / Fast Food' },
+]
+
+// ── Why BataMart trust points ──────────────────────────────────────────────
+const TRUST_POINTS = [
+  { icon: '🔒', title: 'Escrow Protected',   desc: 'Money held safely until you confirm delivery' },
+  { icon: '🎓', title: 'Campus Verified',     desc: 'Only students from your university can sell' },
+  { icon: '⚡', title: 'Fast Campus Delivery', desc: 'Delivered to your hostel door' },
+  { icon: '💬', title: 'Seller Chat',         desc: 'Message sellers directly before buying' },
+  { icon: '⭐', title: 'Ratings &amp; Reviews',   desc: 'Buy from trusted, rated sellers only' },
+  { icon: '🔄', title: 'Easy Disputes',       desc: 'Raise an issue, get it resolved fast' },
+]
+
+// ── Study essentials quick links ────────────────────────────────────────────
+const STUDY_LINKS = [
+  { label: 'Past Questions', icon: '📋', query: 'past questions' },
+  { label: 'Textbooks',      icon: '📗', query: 'textbook' },
+  { label: 'Calculators',    icon: '🔢', query: 'calculator' },
+  { label: 'Drawing Tools',  icon: '📐', query: 'drawing' },
+  { label: 'Lab Coats',      icon: '🥼', query: 'lab coat' },
+  { label: 'Flash Drives',   icon: '💾', query: 'flash drive' },
+  { label: 'Extension Boxes',icon: '🔌', query: 'extension' },
+  { label: 'Stationery',     icon: '✏️', query: 'stationery' },
+]
+
+// ── Category mega grid ──────────────────────────────────────────────────────
+const MEGA_CATEGORIES = [
+  { name: 'Electronics',                  icon: '📱', bg: 'from-violet-500 to-indigo-600',   count: '450+' },
+  { name: 'Fashion',                      icon: '👔', bg: 'from-pink-500 to-rose-600',        count: '380+' },
+  { name: 'Computing',                    icon: '💻', bg: 'from-blue-500 to-cyan-600',        count: '210+' },
+  { name: 'Groceries / Food / Fast Food', icon: '🍔', bg: 'from-orange-500 to-amber-500',     count: '320+' },
+  { name: 'Beauty &amp; Personal Care',       icon: '💄', bg: 'from-fuchsia-500 to-pink-500',     count: '290+' },
+  { name: 'Gaming',                       icon: '🎮', bg: 'from-green-500 to-emerald-600',    count: '160+' },
+  { name: 'Home &amp; Kitchen',               icon: '🏠', bg: 'from-sky-500 to-blue-500',         count: '240+' },
+  { name: 'Baby Products',                icon: '👶', bg: 'from-teal-500 to-cyan-500',        count: '80+' },
+  { name: 'Automotive',                   icon: '🚗', bg: 'from-yellow-500 to-orange-500',    count: '70+' },
+  { name: 'Pets',                         icon: '🐾', bg: 'from-purple-500 to-violet-500',    count: '50+' },
 ]
 
 function PricePanelsRow({ allProducts, onCategorySelect, renderSeed }: {
@@ -7980,6 +8157,414 @@ function JustDroppedSection({ allProducts, onProductClick }: {
 // ─────────────────────────────────────────────
 // ══ MAIN PAGE ══
 // ─────────────────────────────────────────────
+// ── Stats Banner ──────────────────────────────────────────────────────────────
+function StatsBanner() {
+  return (
+    &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"&gt;
+      &lt;div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-100"&gt;
+        {CAMPUS_STATS.map((stat, i) =&gt; (
+          &lt;div
+            key={stat.label}
+            className="stat-card flex flex-col items-center justify-center p-4 text-center gap-1"
+            style={{ animationDelay: `${i * 100}ms` }}
+          &gt;
+            &lt;span className="text-2xl"&gt;{stat.icon}&lt;/span&gt;
+            &lt;p className={`text-xl font-black ${stat.color} count-up`} style={{ animationDelay: `${i * 120}ms` }}&gt;
+              {stat.value}
+            &lt;/p&gt;
+            &lt;p className="text-[11px] text-gray-400 font-medium leading-tight"&gt;{stat.label}&lt;/p&gt;
+          &lt;/div&gt;
+        ))}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Brand / Search Spotlight ──────────────────────────────────────────────────
+function BrandSpotlight({ onSearch, onCategorySelect }: {
+  onSearch: (q: string) =&gt; void
+  onCategorySelect: (cat: string) =&gt; void
+}) {
+  return (
+    &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-hidden"&gt;
+      &lt;div className="flex items-center gap-2 mb-4"&gt;
+        &lt;TrendingUp className="w-4 h-4 text-violet-500" /&gt;
+        &lt;h2 className="text-base font-black text-gray-900"&gt;Trending on Campus&lt;/h2&gt;
+        &lt;span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-red-500"&gt;
+          &lt;span className="live-ping w-1.5 h-1.5 rounded-full bg-red-500 inline-block" /&gt;
+          LIVE
+        &lt;/span&gt;
+      &lt;/div&gt;
+      &lt;div className="flex gap-2 flex-wrap"&gt;
+        {BRAND_CHIPS.map((chip, i) =&gt; (
+          &lt;button
+            key={chip.label}
+            onClick={() =&gt; onCategorySelect(chip.cat)}
+            className="brand-chip card-enter flex items-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-violet-50 border border-gray-200 hover:border-violet-200 rounded-xl text-sm font-bold text-gray-700 hover:text-violet-700 shadow-sm"
+            style={{ animationDelay: `${i * 40}ms` }}
+          &gt;
+            &lt;span&gt;{chip.icon}&lt;/span&gt; {chip.label}
+          &lt;/button&gt;
+        ))}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Study Essentials Quick Links ─────────────────────────────────────────────
+function StudyEssentials({ onSearch }: { onSearch: (q: string) =&gt; void }) {
+  return (
+    &lt;div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm"&gt;
+      &lt;div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4"&gt;
+        &lt;div className="flex items-center gap-2"&gt;
+          &lt;BookOpen className="w-5 h-5 text-white" /&gt;
+          &lt;div&gt;
+            &lt;h2 className="text-base font-black text-white"&gt;Study Essentials&lt;/h2&gt;
+            &lt;p className="text-white/70 text-[11px] mt-0.5"&gt;Everything you need for lectures &amp; exams&lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div className="bg-white px-5 py-4"&gt;
+        &lt;div className="grid grid-cols-4 sm:grid-cols-8 gap-3"&gt;
+          {STUDY_LINKS.map((link, i) =&gt; (
+            &lt;button
+              key={link.label}
+              onClick={() =&gt; onSearch(link.query)}
+              className="card-enter flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-50 hover:bg-violet-50 border border-gray-100 hover:border-violet-200 transition-all group"
+              style={{ animationDelay: `${i * 50}ms` }}
+            &gt;
+              &lt;span className="text-2xl group-hover:scale-110 transition-transform duration-200"&gt;{link.icon}&lt;/span&gt;
+              &lt;p className="text-[10px] font-bold text-gray-600 group-hover:text-violet-600 text-center leading-tight"&gt;{link.label}&lt;/p&gt;
+            &lt;/button&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Mega Category Grid ────────────────────────────────────────────────────────
+function MegaCategoryGrid({ onCategorySelect }: { onCategorySelect: (cat: string) =&gt; void }) {
+  return (
+    &lt;div&gt;
+      &lt;div className="flex items-center justify-between mb-3"&gt;
+        &lt;h2 className="text-base font-black text-gray-800 section-header-line"&gt;All Categories&lt;/h2&gt;
+        &lt;span className="text-[11px] text-gray-400 font-medium"&gt;Browse everything&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;div className="grid grid-cols-2 sm:grid-cols-5 gap-3"&gt;
+        {MEGA_CATEGORIES.map((cat, i) =&gt; (
+          &lt;button
+            key={cat.name}
+            onClick={() =&gt; onCategorySelect(cat.name)}
+            className={`card-enter relative overflow-hidden rounded-2xl bg-gradient-to-br ${cat.bg} p-4 text-left group cursor-pointer shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}
+            style={{ animationDelay: `${i * 60}ms` }}
+          &gt;
+            &lt;span className="text-3xl mb-2 block group-hover:scale-110 transition-transform duration-300"&gt;{cat.icon}&lt;/span&gt;
+            &lt;p className="text-white font-black text-sm leading-tight"&gt;{cat.name.split(' /')[0]}&lt;/p&gt;
+            &lt;p className="text-white/70 text-[10px] font-bold mt-0.5"&gt;{cat.count} items&lt;/p&gt;
+            &lt;div className="absolute -bottom-3 -right-3 w-16 h-16 rounded-full bg-white/10 group-hover:scale-150 transition-transform duration-500" /&gt;
+          &lt;/button&gt;
+        ))}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Why BataMart Trust Banner ─────────────────────────────────────────────────
+function TrustBanner() {
+  return (
+    &lt;div className="rounded-2xl overflow-hidden border border-violet-100 shadow-sm"&gt;
+      &lt;div className="trust-bar px-5 py-3"&gt;
+        &lt;div className="flex items-center gap-2"&gt;
+          &lt;Shield className="w-5 h-5 text-white" /&gt;
+          &lt;h2 className="text-base font-black text-white"&gt;Why Students Trust BataMart&lt;/h2&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div className="bg-white p-5"&gt;
+        &lt;div className="grid grid-cols-2 sm:grid-cols-3 gap-4"&gt;
+          {TRUST_POINTS.map((point, i) =&gt; (
+            &lt;div
+              key={point.title}
+              className="card-enter flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-violet-200 hover:bg-violet-50 transition-all"
+              style={{ animationDelay: `${i * 80}ms` }}
+            &gt;
+              &lt;span className="text-xl flex-shrink-0 mt-0.5"&gt;{point.icon}&lt;/span&gt;
+              &lt;div&gt;
+                &lt;p className="text-xs font-black text-gray-900"&gt;{point.title}&lt;/p&gt;
+                &lt;p className="text-[10px] text-gray-500 mt-0.5 leading-tight"&gt;{point.desc}&lt;/p&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Mosaic Row (large visual product image grid) ─────────────────────────────
+function MosaicRow({ products, onProductClick, title, subtitle, sectionClass }: {
+  products: any[]
+  onProductClick: (id: string) =&gt; void
+  title: string
+  subtitle: string
+  sectionClass: string
+}) {
+  const picks = products.slice(0, 7)
+  if (picks.length &lt; 3) return null
+
+  return (
+    &lt;div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm"&gt;
+      &lt;div className={`${sectionClass} px-5 py-4`}&gt;
+        &lt;h2 className="text-base font-black text-white"&gt;{title}&lt;/h2&gt;
+        &lt;p className="text-white/70 text-[11px] mt-0.5"&gt;{subtitle}&lt;/p&gt;
+      &lt;/div&gt;
+      &lt;div className="bg-white p-3"&gt;
+        &lt;div className="grid grid-cols-4 grid-rows-2 gap-2" style={{ height: 280 }}&gt;
+          {/* Big left tile */}
+          &lt;div
+            className="col-span-2 row-span-2 rounded-xl overflow-hidden cursor-pointer relative group"
+            onClick={() =&gt; picks[0] &amp;&amp; onProductClick(picks[0].id)}
+          &gt;
+            &lt;img
+              src={picks[0]?.images[0] || '/placeholder.png'}
+              alt={picks[0]?.name}
+              className="mosaic-img w-full h-full object-cover"
+            /&gt;
+            {picks[0] &amp;&amp; (
+              &lt;div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3"&gt;
+                &lt;div&gt;
+                  &lt;p className="text-white text-xs font-black line-clamp-1"&gt;{picks[0].name}&lt;/p&gt;
+                  &lt;p className="text-white/80 text-[10px] font-bold"&gt;₦{picks[0].price?.toLocaleString()}&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            )}
+          &lt;/div&gt;
+          {/* 4 small tiles */}
+          {picks.slice(1, 5).map((p, i) =&gt; (
+            &lt;div
+              key={p.id}
+              className="rounded-xl overflow-hidden cursor-pointer relative group"
+              onClick={() =&gt; onProductClick(p.id)}
+            &gt;
+              &lt;img
+                src={p.images[0] || '/placeholder.png'}
+                alt={p.name}
+                className="mosaic-img w-full h-full object-cover"
+              /&gt;
+              &lt;div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" /&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+        {picks[5] &amp;&amp; (
+          &lt;div className="flex gap-2 mt-2"&gt;
+            {picks.slice(5, 7).map(p =&gt; (
+              &lt;div
+                key={p.id}
+                className="flex-1 h-16 rounded-xl overflow-hidden cursor-pointer relative group"
+                onClick={() =&gt; onProductClick(p.id)}
+              &gt;
+                &lt;img src={p.images[0] || '/placeholder.png'} alt={p.name} className="mosaic-img w-full h-full object-cover" /&gt;
+                &lt;div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" /&gt;
+              &lt;/div&gt;
+            ))}
+          &lt;/div&gt;
+        )}
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Top Sellers Row ───────────────────────────────────────────────────────────
+function TopSellersRow({ products, onProductClick }: {
+  products: any[]
+  onProductClick: (id: string) =&gt; void
+}) {
+  // Group by seller, pick top 8 by product count
+  const sellerMap = new Map&lt;string, { seller: any; products: any[]; count: number }&gt;()
+  for (const p of products) {
+    if (!p.seller) continue
+    const key = p.seller.id
+    if (!sellerMap.has(key)) sellerMap.set(key, { seller: p.seller, products: [], count: 0 })
+    const entry = sellerMap.get(key)!
+    entry.products.push(p)
+    entry.count++
+  }
+  const topSellers = [...sellerMap.values()]
+    .sort((a, b) =&gt; b.count - a.count)
+    .slice(0, 8)
+
+  if (topSellers.length === 0) return null
+
+  return (
+    &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"&gt;
+      &lt;div className="flex items-end justify-between px-5 pt-5 pb-3 border-b border-gray-50"&gt;
+        &lt;div&gt;
+          &lt;h2 className="text-base font-black text-gray-900 section-header-line"&gt;🏆 Top Campus Sellers&lt;/h2&gt;
+          &lt;p className="text-xs text-gray-400 font-medium mt-1"&gt;Most active sellers on campus right now&lt;/p&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div className="px-5 py-4"&gt;
+        &lt;div className="flex gap-4 overflow-x-auto no-scrollbar pb-1"&gt;
+          {topSellers.map(({ seller, products: sellerProds, count }, i) =&gt; (
+            &lt;div
+              key={seller.id}
+              className="seller-card card-enter flex-shrink-0 w-28 cursor-pointer text-center"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() =&gt; sellerProds[0] &amp;&amp; onProductClick(sellerProds[0].id)}
+            &gt;
+              {/* Avatar */}
+              &lt;div className="relative mx-auto mb-2 w-16 h-16"&gt;
+                &lt;div className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-violet-100 to-indigo-100 border-2 border-violet-200"&gt;
+                  {seller.profilePhoto ? (
+                    &lt;img src={seller.profilePhoto} alt={seller.name} className="w-full h-full object-cover" /&gt;
+                  ) : (
+                    &lt;div className="w-full h-full flex items-center justify-center text-2xl font-black text-violet-400"&gt;
+                      {seller.name?.[0]?.toUpperCase() || '?'}
+                    &lt;/div&gt;
+                  )}
+                &lt;/div&gt;
+                {seller.trustLevel === 'GOLD' &amp;&amp; (
+                  &lt;span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-[9px]"&gt;👑&lt;/span&gt;
+                )}
+              &lt;/div&gt;
+              &lt;p className="text-xs font-black text-gray-900 line-clamp-1"&gt;{seller.name}&lt;/p&gt;
+              &lt;p className="text-[10px] text-violet-600 font-bold"&gt;{count} listing{count !== 1 ? 's' : ''}&lt;/p&gt;
+              {seller.avgRating &gt; 0 &amp;&amp; (
+                &lt;div className="flex items-center justify-center gap-0.5 mt-1"&gt;
+                  &lt;Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" /&gt;
+                  &lt;span className="text-[10px] text-gray-500 font-bold"&gt;{seller.avgRating.toFixed(1)}&lt;/span&gt;
+                &lt;/div&gt;
+              )}
+              {/* Mini product previews */}
+              &lt;div className="flex gap-1 mt-2 justify-center"&gt;
+                {sellerProds.slice(0, 2).map(p =&gt; (
+                  &lt;div key={p.id} className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100"&gt;
+                    &lt;img src={p.images[0] || '/placeholder.png'} alt="" className="w-full h-full object-cover" /&gt;
+                  &lt;/div&gt;
+                ))}
+              &lt;/div&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Flash Sale Countdown ──────────────────────────────────────────────────────
+function FlashSaleCountdown({ products, onProductClick }: {
+  products: any[]
+  onProductClick: (id: string) =&gt; void
+}) {
+  const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 })
+
+  useEffect(() =&gt; {
+    const tick = () =&gt; {
+      const now = new Date()
+      const midnight = new Date()
+      midnight.setHours(24, 0, 0, 0)
+      const diff = Math.max(0, midnight.getTime() - now.getTime())
+      const h = Math.floor(diff / 3_600_000)
+      const m = Math.floor((diff % 3_600_000) / 60_000)
+      const s = Math.floor((diff % 60_000) / 1_000)
+      setTimeLeft({ h, m, s })
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () =&gt; clearInterval(id)
+  }, [])
+
+  const picks = products.slice(0, 6)
+  if (picks.length === 0) return null
+
+  const pad = (n: number) =&gt; String(n).padStart(2, '0')
+
+  return (
+    &lt;div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm"&gt;
+      {/* Header */}
+      &lt;div className="bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 gradient-animated px-5 py-4"&gt;
+        &lt;div className="flex items-center justify-between"&gt;
+          &lt;div className="flex items-center gap-2"&gt;
+            &lt;Zap className="w-5 h-5 text-white" /&gt;
+            &lt;div&gt;
+              &lt;h2 className="text-base font-black text-white"&gt;⚡ Flash Picks Today&lt;/h2&gt;
+              &lt;p className="text-white/75 text-[11px] mt-0.5"&gt;Grab them before they&amp;apos;re gone&lt;/p&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          {/* Countdown */}
+          &lt;div className="flex items-center gap-1 bg-black/20 rounded-xl px-3 py-1.5"&gt;
+            {[pad(timeLeft.h), pad(timeLeft.m), pad(timeLeft.s)].map((val, i) =&gt; (
+              &lt;span key={i} className="flex items-center gap-0.5"&gt;
+                &lt;span className="countdown-digit text-white font-black text-sm tabular-nums"&gt;{val}&lt;/span&gt;
+                {i &lt; 2 &amp;&amp; &lt;span className="text-white/60 font-black text-sm"&gt;:&lt;/span&gt;}
+              &lt;/span&gt;
+            ))}
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      {/* Products */}
+      &lt;div className="bg-white px-5 py-4"&gt;
+        &lt;div className="flex gap-3 overflow-x-auto no-scrollbar"&gt;
+          {picks.map((p, i) =&gt; (
+            &lt;div
+              key={p.id}
+              className="flash-card card-enter flex-shrink-0 w-36 cursor-pointer"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() =&gt; onProductClick(p.id)}
+            &gt;
+              &lt;div className="aspect-square rounded-xl overflow-hidden bg-gray-50 mb-2 relative"&gt;
+                &lt;img src={p.images[0] || '/placeholder.png'} alt={p.name} className="w-full h-full object-cover" /&gt;
+                {p.discountPercent &amp;&amp; (
+                  &lt;span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg"&gt;
+                    -{p.discountPercent}%
+                  &lt;/span&gt;
+                )}
+              &lt;/div&gt;
+              &lt;p className="text-xs font-black text-gray-900 line-clamp-2 leading-tight"&gt;{p.name}&lt;/p&gt;
+              &lt;p className="text-sm font-black text-BATAMART-primary mt-1"&gt;₦{p.price?.toLocaleString()}&lt;/p&gt;
+              {p.marketPrice &amp;&amp; p.marketPrice &gt; p.price &amp;&amp; (
+                &lt;p className="text-[10px] text-gray-400 line-through"&gt;₦{Math.round(p.marketPrice).toLocaleString()}&lt;/p&gt;
+              )}
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ── Live Activity Marquee ─────────────────────────────────────────────────────
+function LiveActivityMarquee({ products }: { products: any[] }) {
+  const items = [
+    ...products.slice(0, 8).map(p =&gt; `🛒 ${p.seller?.name || 'A student'} listed "${p.name}" for ₦${p.price?.toLocaleString()}`),
+    '🔥 Hot deals updated — check the deals page',
+    '⭐ Campus marketplace is LIVE — buy safely with escrow',
+    '🚀 New listings drop every day — check back often',
+    '💬 Chat sellers directly before buying',
+  ]
+  const doubled = [...items, ...items]
+
+  return (
+    &lt;div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl overflow-hidden py-2.5 px-0"&gt;
+      &lt;div className="flex items-center gap-3 overflow-hidden"&gt;
+        &lt;div className="flex-shrink-0 flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-r-xl"&gt;
+          &lt;span className="live-ping w-2 h-2 rounded-full bg-green-400 inline-block" /&gt;
+          &lt;span className="text-white text-[11px] font-black whitespace-nowrap"&gt;LIVE&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div className="overflow-hidden flex-1"&gt;
+          &lt;div className="marquee-track flex gap-8 whitespace-nowrap"&gt;
+            {doubled.map((item, i) =&gt; (
+              &lt;span key={i} className="text-white/90 text-[11px] font-medium flex-shrink-0"&gt;
+                {item}
+              &lt;/span&gt;
+            ))}
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
 export default function MarketplacePage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
@@ -8370,18 +8955,28 @@ export default function MarketplacePage() {
 
   // ── Derived data ──
   const forYouProducts = useMemo(() =&gt; allProducts.filter(p =&gt; p.isPersonalised).slice(0, 12), [allProducts])
-  // Hot Deals: products with 12%+ discount, sorted highest % off first
-  const HOT_DEAL_MIN_PERCENT = 12
+  // Hot Deals — powered by confirmed campus sales + view signals
   const hotDeals = useMemo(() =&gt; {
     return allProducts
-      .filter(p =&gt; p.isDeal &amp;&amp; p.discountPercent &amp;&amp; p.discountPercent &gt;= HOT_DEAL_MIN_PERCENT &amp;&amp; p.marketPrice &amp;&amp; p.marketPrice &gt; p.price)
-      .sort((a, b) =&gt; (b.discountPercent || 0) - (a.discountPercent || 0))
+      .filter(p =&gt; p.isHot)
+      .sort((a, b) =&gt; {
+        const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
+        const aPri = priority[a.hotReason as keyof typeof priority] || 0
+        const bPri = priority[b.hotReason as keyof typeof priority] || 0
+        if (bPri !== aPri) return bPri - aPri
+        if (a.hotReason !== 'VIEWS' &amp;&amp; b.hotReason !== 'VIEWS') {
+          return (b.discountPercent || 0) - (a.discountPercent || 0)
+        }
+        return (b.viewCount || 0) - (a.viewCount || 0)
+      })
   }, [allProducts])
   const trendingProducts = hotDeals.slice(0, 12)
   const newListings = useMemo(() =&gt; allProducts.filter(p =&gt; p.isNew), [allProducts])
   const discoverProducts = useMemo(() =&gt; {
     const shown = new Set([...forYouProducts, ...trendingProducts, ...newListings].map(p =&gt; p.id))
-    return allProducts.filter(p =&gt; !shown.has(p.id)).slice(0, 16)
+    const remaining = allProducts.filter(p =&gt; !shown.has(p.id))
+    // Always keep an "All Listings" fallback visible even when sections above consume most products.
+    return (remaining.length &gt; 0 ? remaining : allProducts).slice(0, 16)
   }, [allProducts, forYouProducts, trendingProducts, newListings])
 
   const filteredByCategory = useMemo(() =&gt; {
@@ -8803,6 +9398,14 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
+            {/* ── Live Activity Marquee ── */}
+            {allProducts.length &gt; 0 &amp;&amp; (
+              &lt;LiveActivityMarquee products={allProducts} /&gt;
+            )}
+
+            {/* ── Campus Stats Banner ── */}
+            &lt;StatsBanner /&gt;
+
             {/* ── Shop by Category (showcase panels) ── */}
             {allProducts.length &gt; 0 &amp;&amp; (
               &lt;div&gt;
@@ -8827,6 +9430,14 @@ export default function MarketplacePage() {
               /&gt;
             )}
 
+            {/* ── Trending / Brand Spotlight ── */}
+            {allProducts.length &gt; 0 &amp;&amp; (
+              &lt;BrandSpotlight
+                onSearch={(q) =&gt; router.push(`/search?q=${encodeURIComponent(q)}`)}
+                onCategorySelect={handleCategorySelect}
+              /&gt;
+            )}
+
             {/* ── Picked for You ── */}
             {forYouProducts.length &gt; 0 &amp;&amp; (
               &lt;BestSellersRow
@@ -8837,6 +9448,22 @@ export default function MarketplacePage() {
                 subtitle="Based on what you browse, search, and order"
               /&gt;
             )}
+
+            {/* ── Flash Sale Countdown (newest products) ── */}
+            {allProducts.length &gt; 0 &amp;&amp; (
+              &lt;FlashSaleCountdown
+                products={allProducts.filter(p =&gt; p.isDeal || p.isNew).slice(0, 6).length &gt; 0
+                  ? allProducts.filter(p =&gt; p.isDeal || p.isNew).slice(0, 6)
+                  : allProducts.slice(0, 6)
+                }
+                onProductClick={handleProductClick}
+              /&gt;
+            )}
+
+            {/* ── Study Essentials ── */}
+            &lt;StudyEssentials
+              onSearch={(q) =&gt; router.push(`/search?q=${encodeURIComponent(q)}`)}
+            /&gt;
 
             {/* ── Price-range deal panels ── */}
             {allProducts.length &gt; 0 &amp;&amp; (
@@ -8884,14 +9511,41 @@ export default function MarketplacePage() {
               &lt;BestSellersRow products={productsByCategory['Electronics']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Electronics')} title="Best Sellers in Tech" subtitle="Top picks from campus techies" /&gt;
             )}
 
+            {/* ── Electronics Mosaic ── */}
+            {(productsByCategory['Electronics']?.length &gt;= 3) &amp;&amp; (
+              &lt;MosaicRow
+                products={productsByCategory['Electronics']}
+                onProductClick={handleProductClick}
+                title="📱 Tech on Campus"
+                subtitle="See what students are selling in electronics"
+                sectionClass="section-stripe"
+              /&gt;
+            )}
+
             {/* ── Best Sellers: Fashion ── */}
             {(productsByCategory['Fashion']?.length &gt; 0) &amp;&amp; (
               &lt;BestSellersRow products={productsByCategory['Fashion']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Fashion')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" /&gt;
             )}
 
+            {/* ── Fashion Mosaic ── */}
+            {(productsByCategory['Fashion']?.length &gt;= 3) &amp;&amp; (
+              &lt;MosaicRow
+                products={productsByCategory['Fashion']}
+                onProductClick={handleProductClick}
+                title="👔 Campus Style"
+                subtitle="What students are wearing this season"
+                sectionClass="section-stripe-orange"
+              /&gt;
+            )}
+
             {/* ── Best Sellers: Food ── */}
             {(productsByCategory['Groceries / Food / Fast Food']?.length &gt; 0) &amp;&amp; (
               &lt;BestSellersRow products={productsByCategory['Groceries / Food / Fast Food']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Groceries / Food / Fast Food')} title="Best Sellers in Food &amp; Snacks" subtitle="Eat well, study harder" /&gt;
+            )}
+
+            {/* ── Top Campus Sellers ── */}
+            {allProducts.length &gt; 0 &amp;&amp; (
+              &lt;TopSellersRow products={allProducts} onProductClick={handleProductClick} /&gt;
             )}
 
             {/* ── Your Interests ── */}
@@ -8925,18 +9579,35 @@ export default function MarketplacePage() {
               &lt;BestSellersRow products={productsByCategory['Beauty &amp; Personal Care']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Beauty &amp; Personal Care')} title="Best Sellers in Beauty &amp; Care" subtitle="Top-rated by campus students" /&gt;
             )}
 
+            {/* ── Trust Banner ── */}
+            &lt;TrustBanner /&gt;
+
+            {/* ── Beauty Mosaic ── */}
+            {(productsByCategory['Beauty &amp; Personal Care']?.length &gt;= 3) &amp;&amp; (
+              &lt;MosaicRow
+                products={productsByCategory['Beauty &amp; Personal Care']}
+                onProductClick={handleProductClick}
+                title="💄 Beauty &amp; Glow"
+                subtitle="Top beauty picks from campus sellers"
+                sectionClass="section-stripe-emerald"
+              /&gt;
+            )}
+
             {/* ── Best Sellers: Gaming ── */}
             {(productsByCategory['Gaming']?.length &gt; 0) &amp;&amp; (
               &lt;BestSellersRow products={productsByCategory['Gaming']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Gaming')} title="Best Sellers in Gaming" subtitle="Level up your setup" /&gt;
             )}
 
-            {/* ── Discover More ── */}
+            {/* ── Mega Category Grid ── */}
+            &lt;MegaCategoryGrid onCategorySelect={handleCategorySelect} /&gt;
+
+            {/* ── All Listings ── */}
             {discoverProducts.length &gt; 0 &amp;&amp; (
               &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"&gt;
                 &lt;div className="flex items-center justify-between mb-4"&gt;
                   &lt;div&gt;
-                    &lt;h2 className="text-base font-black text-gray-900 section-header-line"&gt;Discover More&lt;/h2&gt;
-                    &lt;p className="text-xs text-gray-400 mt-1"&gt;Explore everything on campus&lt;/p&gt;
+                    &lt;h2 className="text-base font-black text-gray-900 section-header-line"&gt;All Listings&lt;/h2&gt;
+                    &lt;p className="text-xs text-gray-400 mt-1"&gt;Everything currently live in your campus marketplace&lt;/p&gt;
                   &lt;/div&gt;
                 &lt;/div&gt;
                 &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
@@ -8950,6 +9621,22 @@ export default function MarketplacePage() {
             {/* ── Best Sellers: Home &amp; Kitchen ── */}
             {(productsByCategory['Home &amp; Kitchen']?.length &gt; 0) &amp;&amp; (
               &lt;BestSellersRow products={productsByCategory['Home &amp; Kitchen']} onProductClick={handleProductClick} onSeeAll={() =&gt; handleCategorySelect('Home &amp; Kitchen')} title="Finds for Your Room" subtitle="Make your hostel feel like home" /&gt;
+            )}
+
+            {/* ── Home Mosaic ── */}
+            {(productsByCategory['Home &amp; Kitchen']?.length &gt;= 3) &amp;&amp; (
+              &lt;MosaicRow
+                products={productsByCategory['Home &amp; Kitchen']}
+                onProductClick={handleProductClick}
+                title="🏠 Room Goals"
+                subtitle="Make your hostel feel like home"
+                sectionClass="section-stripe"
+              /&gt;
+            )}
+
+            {/* ── Second Live Marquee ── */}
+            {allProducts.length &gt; 0 &amp;&amp; (
+              &lt;LiveActivityMarquee products={allProducts.slice(8, 16)} /&gt;
             )}
 
             {/* ── Just Dropped — always last ── */}
@@ -8979,7 +9666,8 @@ export default function MarketplacePage() {
       )}
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/marketplace/deals/page.tsx</div><pre>'use client'
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
@@ -9164,8 +9852,9 @@ function SkeletonCard() {
 // Deal Card
 // ─────────────────────────────────────────────
 function DealCard({ product, onClick, delay = 0 }: { product: any; onClick: () =&gt; void; delay?: number }) {
-  const pct = product.discountPercent || 0
-  const tier = getDiscountTier(pct)
+  const discount = (product.isDeal &amp;&amp; product.discountPercent) ? product.discountPercent : 0
+  const isHot = product.isHot ?? false
+  const tier = getDiscountTier(discount)
   const originalPrice = product.marketPrice &amp;&amp; product.marketPrice &gt; product.price ? product.marketPrice : null
   const savings = originalPrice ? originalPrice - product.price : 0
 
@@ -9180,26 +9869,33 @@ function DealCard({ product, onClick, delay = 0 }: { product: any; onClick: () =
         &lt;img src={product.images?.[0] || '/placeholder.png'} alt={product.name} className="dc-img w-full h-full object-cover" /&gt;
 
         {/* Discount badge — floating animated */}
-        &lt;div className="dc-float absolute top-2.5 right-2.5"&gt;
-          &lt;div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-orange-500 shadow-lg ring-2 ring-white"&gt;
-            &lt;span className="text-white font-black text-[13px] leading-none"&gt;-{pct}%&lt;/span&gt;
-            &lt;span className="text-white/80 font-bold text-[8px] leading-none mt-0.5"&gt;OFF&lt;/span&gt;
+        {discount &gt; 0 &amp;&amp; (
+          &lt;div className="dc-float absolute top-2.5 right-2.5"&gt;
+            &lt;div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-orange-500 shadow-lg ring-2 ring-white"&gt;
+              &lt;span className="text-white font-black text-[13px] leading-none"&gt;-{discount}%&lt;/span&gt;
+              &lt;span className="text-white/80 font-bold text-[8px] leading-none mt-0.5"&gt;OFF&lt;/span&gt;
+            &lt;/div&gt;
           &lt;/div&gt;
-        &lt;/div&gt;
+        )}
 
         {/* Label badges */}
         &lt;div className="absolute top-2.5 left-2.5 flex flex-col gap-1"&gt;
-          {pct &gt;= 30 &amp;&amp; (
+          {isHot &amp;&amp; !product.isDeal &amp;&amp; (
+            &lt;span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
+              🔥 HOT
+            &lt;/span&gt;
+          )}
+          {discount &gt;= 30 &amp;&amp; (
             &lt;span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
               🔥 MEGA DEAL
             &lt;/span&gt;
           )}
-          {pct &gt;= 20 &amp;&amp; pct &lt; 30 &amp;&amp; (
+          {discount &gt;= 20 &amp;&amp; discount &lt; 30 &amp;&amp; (
             &lt;span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
               ⚡ HOT DEAL
             &lt;/span&gt;
           )}
-          {pct &gt;= 12 &amp;&amp; pct &lt; 20 &amp;&amp; (
+          {discount &gt;= 12 &amp;&amp; discount &lt; 20 &amp;&amp; (
             &lt;span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-400 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
               🏷️ DEAL
             &lt;/span&gt;
@@ -9519,9 +10215,18 @@ export default function DealsPage() {
       .then(r =&gt; r.json())
       .then(data =&gt; {
         const products: any[] = data.products || []
-        const deals = products.filter(
-          p =&gt; p.isDeal &amp;&amp; p.discountPercent &amp;&amp; p.discountPercent &gt;= HOT_DEAL_MIN_PERCENT &amp;&amp; p.marketPrice &amp;&amp; p.marketPrice &gt; p.price
-        )
+        const deals = products
+          .filter(p =&gt; p.isHot)
+          .sort((a, b) =&gt; {
+            const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
+            const aPri = priority[a.hotReason as keyof typeof priority] || 0
+            const bPri = priority[b.hotReason as keyof typeof priority] || 0
+            if (bPri !== aPri) return bPri - aPri
+            if (a.hotReason !== 'VIEWS' &amp;&amp; b.hotReason !== 'VIEWS') {
+              return (b.discountPercent || 0) - (a.discountPercent || 0)
+            }
+            return (b.viewCount || 0) - (a.viewCount || 0)
+          })
         setAllDeals(deals)
       })
       .catch(() =&gt; {})
@@ -9761,7 +10466,8 @@ export default function DealsPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/most-bought/loading.tsx</div><pre>export default function MostBoughtLoading() {
   return (
     &lt;div className="min-h-screen bg-[#f7f8fa]"&gt;
@@ -14017,14 +14723,6 @@ export default function SellPage() {
       })
       const data = await response.json()
       if (response.ok) {
-        // Product is listed immediately — fire price check in background (non-blocking)
-        if (data.product?.id) {
-          fetch('/api/price-check', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ productId: data.product.id }),
-          }).catch(() =&gt; {}) // silent fail — never blocks listing
-        }
         router.push('/my-shop')
       } else {
         setError(data.error || 'Failed to create product')
@@ -14397,7 +15095,8 @@ export default function SellPage() {
       &lt;/form&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/seller/[id]/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/sellers/[sellerId]/reviews/page.tsx</div><pre>Could not read file.</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/wallet/page.tsx</div><pre>// app/(marketplace)/wallet/page.tsx
@@ -26070,10 +26769,25 @@ export async function POST(request: NextRequest) {
   }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/orders/confirm-delivery/route.ts</div><pre>// app/api/orders/confirm-delivery/route.ts
+//
+// CHANGE vs original:
+// After marking an order COMPLETED, we now also:
+//   1. Record the confirmed sale price in MarketPrice table
+//   2. Re-evaluate hot status for ALL active listings of the same product type
+//
+// Everything else (rider payout, referral reward, escrow) is unchanged.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { processReferralReward } from '@/lib/referral/processReferralReward'
+import {
+  normaliseProductName,
+  extractVariantValues,
+  extractCondition,
+  buildVariantKeyFromDescription,
+  updateHotStatus,
+} from '@/lib/marketPrice/engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -26102,30 +26816,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order ID required' }, { status: 400 })
     }
 
-    // ── DUPLICATE PREVENTION ──────────────────────────────────
     const confirmKey = `${user.id}-${orderId}`
     const lastConfirmTime = recentConfirmations.get(confirmKey)
     const now = Date.now()
 
-    if (lastConfirmTime &amp;&amp; (now - lastConfirmTime) &lt; CONFIRMATION_COOLDOWN) {
+    if (lastConfirmTime &amp;&amp; now - lastConfirmTime &lt; CONFIRMATION_COOLDOWN) {
       const remainingTime = Math.ceil((CONFIRMATION_COOLDOWN - (now - lastConfirmTime)) / 1000)
       return NextResponse.json(
         { error: `Please wait ${remainingTime} seconds before confirming again` },
-        { status: 429 }
+        { status: 429 },
       )
     }
 
     recentConfirmations.set(confirmKey, now)
     cleanupOldEntries()
 
-    // ── Fetch order ───────────────────────────────────────────
-    // FIXED: include batchId so we can pass it to processReferralReward.
-    // Without batchId, the referral guard falls back to orderId uniqueness,
-    // meaning a referrer could receive one reward per order in a multi-order
-    // batch instead of one reward for the whole batch.
     const order = await prisma.order.findUnique({
-      where:   { id: orderId },
-      include: { rider: true },
+      where: { id: orderId },
+      include: {
+        rider: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            category: true,
+            nameKey: true,
+            variantKey: true,
+            conditionType: true,
+            hasChangedParts: true,
+          },
+        },
+      },
     })
 
     if (!order) {
@@ -26139,106 +26861,168 @@ export async function POST(request: NextRequest) {
     if (order.status === 'COMPLETED') {
       return NextResponse.json(
         {
-          error:            'Order already completed',
-          message:          'This order has already been confirmed and payment released',
+          error: 'Order already completed',
+          message: 'This order has already been confirmed and payment released',
           alreadyCompleted: true,
         },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
     if (order.status !== 'DELIVERED') {
       return NextResponse.json(
         { error: `Cannot confirm. Order status is: ${order.status}` },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // PAYOUT BREAKDOWN (per order):
-    //   subtotal        = product cost
-    //   platformFee     = subtotal * 5%          (platform keeps this fully)
-    //   riderShare      = ₦560                   (rider gets this)
-    //   referralReward  = ₦120                   (referrer gets this — 50% of delivery cut)
-    //   platformDelivery= ₦120                   (platform retains other 50% of delivery cut)
-    //   sellerShare     = subtotal - platformFee  (seller gets this)
-    //
-    //   Buyer pays: subtotal + ₦800 delivery fee
-    //   Platform earns: subtotal * 5% + ₦120 (when referral applies)
-    //                or subtotal * 5% + ₦240 (when no referral, full delivery cut kept)
-    // ═══════════════════════════════════════════════════════════════
+    const product = order.product
+    const variantValues = extractVariantValues(product.description)
+    const nameKey = product.nameKey || normaliseProductName(product.name)
+    const variantKey = product.variantKey || buildVariantKeyFromDescription(product.description, product.name)
+    const { condition, hasChangedParts } = product.conditionType
+      ? {
+          condition: product.conditionType as 'NEW' | 'USED' | 'REFURBISHED',
+          hasChangedParts: product.hasChangedParts,
+        }
+      : extractCondition(variantValues, product.description || '')
 
-    const subtotal    = order.totalAmount - (order.riderId ? 800 : 0)
-    const riderShare  = 560
-    const hasRider    = !!order.riderId
+    const confirmedPrice = order.productPrice
+    const riderShare = 560
+    const hasRider = !!order.riderId
 
-    const result = await prisma.$transaction(async (tx) =&gt; {
-      // 1. Mark order COMPLETED
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data:  { status: 'COMPLETED', completedAt: new Date() },
-      })
-
-      // 2. Keep seller funds in pending escrow for 72 hours after delivery.
-      // Auto-release happens via wallet/withdraw checks when no dispute exists.
-
-      // 3. Release rider payment (if assigned)
-      if (order.riderId) {
-        const rider        = await tx.user.findUnique({
-          where:  { id: order.riderId },
-          select: { availableBalance: true },
-        })
-        const riderBalance = Number(rider?.availableBalance ?? 0)
-
-        await tx.user.update({
-          where: { id: order.riderId },
-          data:  { availableBalance: { increment: riderShare } },
+    const result = await prisma.$transaction(
+      async tx =&gt; {
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: { status: 'COMPLETED', completedAt: new Date() },
         })
 
-        await tx.transaction.create({
-          data: {
-            userId:        order.riderId,
-            type:          'CREDIT',
-            amount:        riderShare,
-            description:   `Delivery fee for Order: ${order.orderNumber}`,
-            reference:     `${order.orderNumber}-RIDER-RELEASE`,
-            balanceBefore: riderBalance,
-            balanceAfter:  riderBalance + riderShare,
+        if (order.riderId) {
+          const rider = await tx.user.findUnique({
+            where: { id: order.riderId },
+            select: { availableBalance: true },
+          })
+          const riderBalance = Number(rider?.availableBalance ?? 0)
+
+          await tx.user.update({
+            where: { id: order.riderId },
+            data: { availableBalance: { increment: riderShare } },
+          })
+
+          await tx.transaction.create({
+            data: {
+              userId: order.riderId,
+              type: 'CREDIT',
+              amount: riderShare,
+              description: `Delivery fee for Order: ${order.orderNumber}`,
+              reference: `${order.orderNumber}-RIDER-RELEASE`,
+              balanceBefore: riderBalance,
+              balanceAfter: riderBalance + riderShare,
+            },
+          })
+        }
+
+        await processReferralReward(tx, {
+          orderId,
+          orderNumber: order.orderNumber,
+          orderAmount: order.totalAmount,
+          buyerId: order.buyerId,
+          hasRider,
+          batchId: order.batchId ?? undefined,
+        })
+
+        // Record confirmed sale price — the heart of the new hot deals system
+        await tx.marketPrice.upsert({
+          where: { orderId },
+          create: {
+            nameKey,
+            variantKey,
+            category: product.category,
+            condition,
+            hasChangedParts,
+            confirmedPrice,
+            productId: product.id,
+            orderId,
           },
+          update: { confirmedPrice, variantKey },
         })
+
+        // Save matching keys on product for faster future lookups
+        if (!product.nameKey || !product.conditionType || !product.variantKey) {
+          await tx.product.update({
+            where: { id: product.id },
+            data: {
+              nameKey,
+              variantKey,
+              conditionType: condition,
+              hasChangedParts,
+            },
+          })
+        }
+
+        return updatedOrder
+      },
+      {
+        timeout: 15000,
+        maxWait: 20000,
+      },
+    )
+
+    console.log(`✅ Order ${order.orderNumber} completed — confirmed price ₦${confirmedPrice.toLocaleString()} recorded`)
+
+    // Re-evaluate hot status for all similar active listings — non-blocking
+    setImmediate(async () =&gt; {
+      try {
+        const similarListings = await prisma.product.findMany({
+          where: {
+            nameKey,
+            ...(variantKey ? { variantKey } : {}),
+            conditionType: condition,
+            hasChangedParts,
+            isActive: true,
+            isDeleted: false,
+            quantity: { gt: 0 },
+          },
+          select: { id: true },
+          take: 50,
+        })
+
+        const nameKeylessListings = await prisma.product.findMany({
+          where: {
+            nameKey: null,
+            category: product.category,
+            isActive: true,
+            isDeleted: false,
+            quantity: { gt: 0 },
+          },
+          select: { id: true, name: true },
+          take: 100,
+        })
+
+        const toUpdate = new Set(similarListings.map(p =&gt; p.id))
+
+        for (const p of nameKeylessListings) {
+          const pKey = normaliseProductName(p.name)
+          if (pKey === nameKey || pKey.includes(nameKey) || nameKey.includes(pKey)) {
+            toUpdate.add(p.id)
+          }
+        }
+
+        for (const pid of toUpdate) {
+          await updateHotStatus(pid).catch(() =&gt; {})
+        }
+
+        console.log(`🔥 Re-evaluated hot status for ${toUpdate.size} similar listings`)
+      } catch (err) {
+        console.error('Hot status update error (non-blocking):', err)
       }
-
-      // 4. ── REFERRAL REWARD ────────────────────────────────────────
-      // Referrer earns ₦120 (50% of the ₦240 delivery platform cut) on every
-      // completed delivery order from their referral — forever.
-      // Platform keeps its full 5% product commission plus the other ₦120.
-      //
-      // FIXED: batchId is now forwarded so processReferralReward uses the
-      // DeliveryBatch.referralPaid flag as the idempotency gate instead of
-      // falling back to per-order orderId uniqueness.
-      // This ensures the referrer receives exactly ONE ₦120 reward per
-      // checkout session regardless of how many orders were in the cart.
-      await processReferralReward(tx, {
-        orderId,
-        orderNumber: order.orderNumber,
-        orderAmount: order.totalAmount,
-        buyerId:     order.buyerId,
-        hasRider,
-        batchId:     order.batchId ?? undefined,  // ← FIXED (was missing)
-      })
-
-      return updatedOrder
-    }, {
-      timeout: 15000,
-      maxWait:  20000,
     })
-
-    console.log(`✅ Order ${order.orderNumber} completed by buyer ${user.name}`)
 
     return NextResponse.json({
       success: true,
       message: '🎉 Delivery confirmed. Seller funds stay in escrow for 72 hours; rider payment released.',
-      order:   result,
+      order: result,
     })
   } catch (error) {
     console.error('Confirm delivery error:', error)
@@ -26246,18 +27030,15 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error &amp;&amp; error.message.includes('Unique constraint')) {
       return NextResponse.json(
         {
-          error:            'Order already processed',
-          message:          'This order has already been confirmed',
+          error: 'Order already processed',
+          message: 'This order has already been confirmed',
           alreadyCompleted: true,
         },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    return NextResponse.json(
-      { error: 'Failed to confirm delivery' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to confirm delivery' }, { status: 500 })
   }
 }
 </pre></div>
@@ -27521,492 +28302,6 @@ async function notifySellerOfNewOrder(
 
   await Promise.allSettled(tasks)
 }</pre></div>
-<div class='file-block'><div class='file-header'>app/api/price-check/route.ts</div><pre>// app/api/price-check/route.ts
-// Background job: checks market price for a product and updates it in DB.
-// Called AFTER product is already created — product is never blocked on this.
-//
-// Flow:
-//  1. Check cache (marketPrice + lastCheckedAt on product, TTL = 12 hours)
-//  2. Check similar products in DB and reuse their market price
-//  3. Try Jumia (NEW/REFURBISHED) or Jiji (USED) scraping
-//  4. Fallback to Serper API only if steps 1–3 all fail
-//  5. Save result to DB
-//  6. Return result
-
-export const dynamic = 'force-dynamic'
-
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { getUserFromRequest } from '@/lib/auth/auth'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000 // 12 hours
-const SIMILARITY_THRESHOLD = 0.85         // 85% keyword overlap for "similar"
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface PriceResult {
-  marketPrice: number | null
-  discountPercent: number | null
-  isDeal: boolean
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Pause execution briefly between requests */
-const delay = (ms: number) =&gt; new Promise(res =&gt; setTimeout(res, ms))
-
-/** Build a clean search query from product data */
-function buildSearchQuery(name: string, variants: string[], condition: string): string {
-  const variantStr = variants.slice(0, 3).join(' ')
-  return `${name} ${variantStr} ${condition} price Nigeria`.trim()
-}
-
-/** Detect condition from variant/tag strings */
-function detectCondition(variantValues: string[]): 'USED' | 'NEW' | 'REFURBISHED' {
-  const all = variantValues.join(' ').toLowerCase()
-  if (all.includes('used') || all.includes('fairly used') || all.includes('uk used')) return 'USED'
-  if (all.includes('refurb')) return 'REFURBISHED'
-  return 'NEW'
-}
-
-/** Parse a price string into a number, returns null if unparseable */
-function parsePrice(raw: string): number | null {
-  if (!raw) return null
-  const cleaned = raw.replace(/[₦,\s]/g, '').replace(/[^\d.]/g, '')
-  const num = parseFloat(cleaned)
-  return isFinite(num) &amp;&amp; num &gt; 0 ? num : null
-}
-
-/** Remove statistical outliers using IQR method */
-function removeOutliers(prices: number[]): number[] {
-  if (prices.length &lt; 4) return prices
-  const sorted = [...prices].sort((a, b) =&gt; a - b)
-  const q1 = sorted[Math.floor(sorted.length * 0.25)]
-  const q3 = sorted[Math.floor(sorted.length * 0.75)]
-  const iqr = q3 - q1
-  return sorted.filter(p =&gt; p &gt;= q1 - 1.5 * iqr &amp;&amp; p &lt;= q3 + 1.5 * iqr)
-}
-
-/** Calculate median of an array of numbers */
-function median(prices: number[]): number {
-  const sorted = [...prices].sort((a, b) =&gt; a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid]
-}
-
-/** Check if a result title is relevant to the product name */
-function isTitleRelevant(title: string, productName: string): boolean {
-  const titleLower = title.toLowerCase()
-  const words = productName.toLowerCase().split(/\s+/).filter(w =&gt; w.length &gt; 2)
-  const matchCount = words.filter(w =&gt; titleLower.includes(w)).length
-  return matchCount &gt;= Math.max(1, Math.floor(words.length * 0.4))
-}
-
-/**
- * Compute keyword similarity ratio between two product names.
- * Returns a value between 0 (no overlap) and 1 (identical keywords).
- */
-function nameSimilarity(a: string, b: string): number {
-  const tokenize = (s: string) =&gt;
-    s.toLowerCase().split(/\s+/).filter(w =&gt; w.length &gt; 2)
-  const aWords = new Set(tokenize(a))
-  const bWords = new Set(tokenize(b))
-  if (aWords.size === 0 || bWords.size === 0) return 0
-  let overlap = 0
-  for (const w of aWords) if (bWords.has(w)) overlap++
-  return overlap / Math.max(aWords.size, bWords.size)
-}
-
-/** Compute a discount and isDeal flag given a price and market price */
-function computeDeal(price: number, marketPrice: number): PriceResult {
-  if (price &lt; marketPrice) {
-    const discountPercent = Math.round(((marketPrice - price) / marketPrice) * 100)
-    if (discountPercent &gt;= 5) {
-      return { marketPrice, discountPercent, isDeal: true }
-    }
-  }
-  return { marketPrice, discountPercent: null, isDeal: false }
-}
-
-// ── Cache check ───────────────────────────────────────────────────────────────
-
-/**
- * Returns cached PriceResult if the product already has a fresh market price.
- * "Fresh" = lastCheckedAt is within the last 12 hours.
- */
-function getCachedResult(product: {
-  price: number
-  marketPrice: number | null
-  discountPercent: number | null
-  isDeal: boolean
-  lastCheckedAt: Date | null
-}): PriceResult | null {
-  if (
-    product.marketPrice !== null &amp;&amp;
-    product.lastCheckedAt !== null &amp;&amp;
-    Date.now() - new Date(product.lastCheckedAt).getTime() &lt; CACHE_TTL_MS
-  ) {
-    return {
-      marketPrice: product.marketPrice,
-      discountPercent: product.discountPercent,
-      isDeal: product.isDeal,
-    }
-  }
-  return null
-}
-
-// ── Similarity reuse ──────────────────────────────────────────────────────────
-
-/**
- * Looks for another product in the same university + category with a
- * fresh market price and similar name. Returns its market price if found.
- */
-async function findSimilarProductPrice(
-  productId: string,
-  name: string,
-  category: string,
-  price: number,
-  universityId: string | null,
-): Promise&lt;PriceResult | null&gt; {
-  try {
-    // Fetch recent products in same category with a valid market price
-    const candidates = await prisma.product.findMany({
-      where: {
-        id: { not: productId },
-        category,
-        universityId: universityId ?? undefined,
-        marketPrice: { not: null },
-        lastCheckedAt: { gte: new Date(Date.now() - CACHE_TTL_MS) },
-        isDeleted: false,
-      },
-      select: {
-        name: true,
-        marketPrice: true,
-        discountPercent: true,
-        isDeal: true,
-        lastCheckedAt: true,
-      },
-      take: 20,
-    })
-
-    for (const c of candidates) {
-      if (c.marketPrice === null) continue
-      const sim = nameSimilarity(name, c.name)
-      if (sim &gt;= SIMILARITY_THRESHOLD) {
-        // Reuse market price but recalculate deal against this product's price
-        return computeDeal(price, c.marketPrice)
-      }
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-// ── Scrapers ──────────────────────────────────────────────────────────────────
-
-/** Fetch prices from Jiji.ng (for USED items). */
-async function fetchJijiPrices(query: string, productName: string): Promise&lt;number[]&gt; {
-  try {
-    const encoded = encodeURIComponent(query)
-    const url = `https://jiji.ng/api_web/v1/listing?query=${encoded}&amp;init_page=true`
-
-    const controller = new AbortController()
-    const timer = setTimeout(() =&gt; controller.abort(), 8000)
-
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; BataMart/1.0)',
-        Accept: 'application/json',
-      },
-    })
-    clearTimeout(timer)
-
-    if (!res.ok) return []
-    const json = await res.json()
-
-    const adverts: any[] = json?.adverts_list?.adverts || []
-    const prices: number[] = []
-
-    for (const ad of adverts) {
-      const title = ad?.title || ''
-      const priceRaw = String(ad?.price_obj?.value || ad?.price || '')
-      if (!isTitleRelevant(title, productName)) continue
-      const price = parsePrice(priceRaw)
-      if (price &amp;&amp; price &gt; 500) prices.push(price)
-    }
-
-    return prices
-  } catch {
-    return []
-  }
-}
-
-/** Fetch prices from Jumia Nigeria (for NEW / REFURBISHED items). */
-async function fetchJumiaPrices(query: string, productName: string): Promise&lt;number[]&gt; {
-  try {
-    const encoded = encodeURIComponent(query)
-    const url = `https://www.jumia.com.ng/catalog/?q=${encoded}`
-
-    const controller = new AbortController()
-    const timer = setTimeout(() =&gt; controller.abort(), 10000)
-
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; BataMart/1.0)',
-        Accept: 'text/html',
-      },
-    })
-    clearTimeout(timer)
-
-    if (!res.ok) return []
-    const html = await res.text()
-    const prices: number[] = []
-
-    const dataPriceMatches = html.matchAll(/data-price="([\d.]+)"/g)
-    for (const m of dataPriceMatches) {
-      const price = parsePrice(m[1])
-      if (price &amp;&amp; price &gt; 500) prices.push(price)
-    }
-
-    const articleMatches = html.matchAll(/&lt;article[^&gt;]*&gt;([\s\S]*?)&lt;\/article&gt;/g)
-    for (const articleMatch of articleMatches) {
-      const block = articleMatch[1]
-      const nameMatch = block.match(/title="([^"]+)"/)
-      if (nameMatch &amp;&amp; !isTitleRelevant(nameMatch[1], productName)) continue
-      const priceMatch = block.match(/[\u20a6]([\d,]+)/)
-      if (priceMatch) {
-        const price = parsePrice(priceMatch[1])
-        if (price &amp;&amp; price &gt; 500) prices.push(price)
-      }
-    }
-
-    return prices
-  } catch {
-    return []
-  }
-}
-
-/**
- * Fallback: Serper Google Shopping API.
- * Only called when:
- *  - No cached result exists
- *  - No similar product found
- *  - Jumia/Jiji scraping returned &lt; 2 prices
- */
-async function fetchSerperPrices(query: string, productName: string): Promise&lt;number[]&gt; {
-  try {
-    const apiKey = process.env.SERPER_API_KEY
-    if (!apiKey) return []
-
-    const controller = new AbortController()
-    const timer = setTimeout(() =&gt; controller.abort(), 10000)
-
-    const res = await fetch('https://google.serper.dev/shopping', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'X-API-KEY': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ q: query, gl: 'ng', hl: 'en', num: 20 }),
-    })
-    clearTimeout(timer)
-
-    if (!res.ok) return []
-    const json = await res.json()
-
-    const results: any[] = json?.shopping || []
-    const prices: number[] = []
-
-    for (const item of results) {
-      const title = item?.title || ''
-      if (!isTitleRelevant(title, productName)) continue
-      // Serper returns price as a string like "₦45,000" or a number
-      const priceRaw = String(item?.price || '')
-      const price = parsePrice(priceRaw)
-      if (price &amp;&amp; price &gt; 500) prices.push(price)
-    }
-
-    return prices
-  } catch {
-    return []
-  }
-}
-
-// ── Core price check function ─────────────────────────────────────────────────
-
-async function checkMarketPrice(
-  name: string,
-  price: number,
-  variantValues: string[],
-  category: string,
-): Promise&lt;PriceResult&gt; {
-  const condition = detectCondition(variantValues)
-  const query = buildSearchQuery(name, variantValues, condition)
-
-  let prices: number[] = []
-
-  try {
-    // Step 1: Primary scraper based on condition
-    if (condition === 'USED') {
-      prices = await fetchJijiPrices(query, name)
-    } else {
-      prices = await fetchJumiaPrices(query, name)
-    }
-
-    await delay(300)
-
-    // Step 2: Fallback to Serper ONLY if scraping failed
-    if (prices.length &lt; 2) {
-      const serperPrices = await fetchSerperPrices(query, name)
-      prices = [...prices, ...serperPrices]
-    }
-
-    // Step 3: Not enough data
-    if (prices.length &lt; 2) {
-      return { marketPrice: null, discountPercent: null, isDeal: false }
-    }
-
-    const cleaned = removeOutliers(prices)
-    if (cleaned.length &lt; 1) {
-      return { marketPrice: null, discountPercent: null, isDeal: false }
-    }
-
-    const marketPrice = Math.round(median(cleaned))
-    return computeDeal(price, marketPrice)
-  } catch {
-    return { marketPrice: null, discountPercent: null, isDeal: false }
-  }
-}
-
-// ── Route handler ─────────────────────────────────────────────────────────────
-
-/**
- * POST /api/price-check
- * Body: { productId }
- * Called in background after product creation.
- * Updates product with marketPrice, discountPercent, isDeal, lastCheckedAt.
- */
-export async function POST(request: NextRequest) {
-  try {
-    const user = await getUserFromRequest(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { productId } = body
-
-    if (!productId) {
-      return NextResponse.json({ error: 'productId required' }, { status: 400 })
-    }
-
-    // Fetch the product — include cache fields
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        category: true,
-        subcategory: true,
-        description: true,
-        sellerId: true,
-        universityId: true,
-        marketPrice: true,
-        discountPercent: true,
-        isDeal: true,
-        lastCheckedAt: true,
-      },
-    })
-
-    if (!product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
-    }
-
-    // Security: only the seller can trigger price check for their product
-    if (product.sellerId !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    // ── Step 1: Return cached result if still fresh ───────────────────────────
-    const cached = getCachedResult(product as any)
-    if (cached) {
-      return NextResponse.json({ success: true, source: 'cache', ...cached })
-    }
-
-    // ── Extract variant values ────────────────────────────────────────────────
-    let variantValues: string[] = []
-    try {
-      if (product.description?.startsWith('VARIANTS_V2:')) {
-        const json = JSON.parse(product.description.slice('VARIANTS_V2:'.length))
-        variantValues = Object.values(json.variants || {}).flat() as string[]
-      }
-    } catch {
-      // ignore parse errors
-    }
-
-    // ── Step 2: Reuse similar product's market price ──────────────────────────
-    const similar = await findSimilarProductPrice(
-      product.id,
-      product.name,
-      product.category,
-      product.price,
-      product.universityId,
-    )
-
-    if (similar &amp;&amp; similar.marketPrice !== null) {
-      // Save the reused result so future checks hit the cache
-      await prisma.product.update({
-        where: { id: productId },
-        data: {
-          marketPrice: similar.marketPrice,
-          discountPercent: similar.discountPercent,
-          isDeal: similar.isDeal,
-          lastCheckedAt: new Date(),
-        },
-      })
-      return NextResponse.json({ success: true, source: 'similar', ...similar })
-    }
-
-    // ── Steps 3–4: Scrape Jumia/Jiji, fallback to Serper ─────────────────────
-    const result = await checkMarketPrice(
-      product.name,
-      product.price,
-      variantValues,
-      product.category,
-    )
-
-    // ── Step 5: Save result (even null, so we record the attempt time) ────────
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        marketPrice: result.marketPrice,
-        discountPercent: result.discountPercent,
-        isDeal: result.isDeal,
-        lastCheckedAt: new Date(),
-      },
-    })
-
-    return NextResponse.json({ success: true, source: 'live', ...result })
-  } catch (error) {
-    console.error('Price check error:', error)
-    // Never throw — always return a safe response
-    return NextResponse.json({
-      success: false,
-      marketPrice: null,
-      discountPercent: null,
-      isDeal: false,
-    })
-  }
-}</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/route.ts</div><pre>// app/api/products/route.ts
 export const dynamic = 'force-dynamic'
 
@@ -28180,199 +28475,200 @@ export async function POST(request: NextRequest) {
   }
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/feed/route.ts</div><pre>// app/api/products/feed/route.ts
-// Personalized product feed — TikTok-style scoring based on:
-//   1. Categories the user has ordered from (strongest signal)
-//   2. Categories the user has recently viewed (sent from client via query param)
-//   3. Categories the user has searched (sent from client via query param)
-//   4. Overall product popularity (viewCount + order count)
-//   5. Recency (newer products get a small boost)
-//   6. Seller trust level (GOLD &gt; SILVER &gt; BRONZE)
-// Products are scored, shuffled within score bands, then returned.
+//
+// PHASE 1 (no/few sales): hot = most viewed products
+// PHASE 2 (sales exist):  hot = most viewed + priced below last confirmed sale
+//
+// isHot, isDeal, hotReason, discountPercent, marketPrice are all written
+// by the engine — this route just reads them from DB.
 
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import { updateHotStatus } from '@/lib/marketPrice/engine'
 
-const PAGE_SIZE = 40
-
-// Score weights — tweak these to change feed feel
 const W = {
-  ordered:      100,  // user has ordered this category before
-  viewed:        60,  // user has viewed products in this category
-  searched:      40,  // user has searched for this category / keyword
-  popular:       20,  // high viewCount
-  orderCount:    15,  // many orders on the product
-  sellerGold:    10,  // seller trust level bonus
-  sellerSilver:   5,
-  recency:       10,  // product listed within last 7 days
-  newish:         5,  // product listed within last 30 days
+  category: 50,
+  searched: 40,
+  popular: 20,
+  orderCount: 15,
+  sellerGold: 10,
+  sellerSilver: 5,
+  recency: 8,
 }
 
-function trustScore(level: string) {
-  if (level === 'GOLD')   return W.sellerGold
-  if (level === 'SILVER') return W.sellerSilver
-  return 0
+const HOT_BACKFILL_COOLDOWN_MS = 10 * 60 * 1000
+const HOT_BACKFILL_BATCH = 120
+const hotBackfillStateByUniversity = new Map&lt;string, number&gt;()
+
+function normalisedCount(value: number, max: number, weight: number): number {
+  return max === 0 ? 0 : (value / max) * weight
 }
 
-function recencyScore(createdAt: Date) {
-  const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)
-  if (ageDays &lt;= 7)  return W.recency
-  if (ageDays &lt;= 30) return W.newish
-  return 0
+function scheduleBackground(task: () =&gt; void) {
+  if (typeof setImmediate === 'function') {
+    setImmediate(task)
+    return
+  }
+  setTimeout(task, 0)
 }
 
-// Normalise a raw count to 0-maxScore using sqrt dampening (so one product
-// with 1000 views doesn't completely bury everything else).
-function normalisedCount(count: number, maxPossible: number, maxScore: number) {
-  if (!count || !maxPossible) return 0
-  return (Math.sqrt(count) / Math.sqrt(maxPossible)) * maxScore
-}
+async function backfillExistingHotStatuses(universityId: string): Promise&lt;void&gt; {
+  const candidates = await prisma.product.findMany({
+    where: {
+      universityId,
+      isActive: true,
+      isDeleted: false,
+      quantity: { gt: 0 },
+    },
+    select: {
+      id: true,
+    },
+    orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
+    take: HOT_BACKFILL_BATCH,
+  })
 
-// Add a small random jitter so products with identical scores shuffle
-function jitter() {
-  return Math.random() * 3 - 1.5 // ±1.5 points
+  for (const product of candidates) {
+    await updateHotStatus(product.id).catch(() =&gt; {})
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     if (!user.universityId) {
       return NextResponse.json({ error: 'No university on account' }, { status: 403 })
     }
 
+    const lastBackfillAt = hotBackfillStateByUniversity.get(user.universityId) || 0
+    const nowTs = Date.now()
+    if (nowTs - lastBackfillAt &gt; HOT_BACKFILL_COOLDOWN_MS) {
+      hotBackfillStateByUniversity.set(user.universityId, nowTs)
+      scheduleBackground(() =&gt; {
+        backfillExistingHotStatuses(user.universityId as string).catch(() =&gt; {})
+      })
+    }
+
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const userCategories = (searchParams.get('categories') || '').split(',').filter(Boolean)
+    const userKeywords = (searchParams.get('keywords') || '').split(',').filter(Boolean)
 
-    // ── Signals sent from the client (localStorage data) ─────────────────────
-    // viewed: comma-separated category names from recently viewed products
-    // searched: comma-separated recent search terms
-    const viewedRaw   = searchParams.get('viewed')   || ''
-    const searchedRaw = searchParams.get('searched')  || ''
-
-    const viewedCategories  = viewedRaw.split(',').map(s =&gt; s.trim()).filter(Boolean)
-    const searchedTerms     = searchedRaw.split(',').map(s =&gt; s.trim().toLowerCase()).filter(Boolean)
-
-    // ── 1. Pull the user's order history to get their category preferences ───
-    const userOrders = await prisma.order.findMany({
-      where: { buyerId: user.id },
-      select: { product: { select: { category: true } } },
-      take: 100,
-      orderBy: { orderedAt: 'desc' },
-    })
-
-    const orderedCategories = new Set(
-      userOrders.map(o =&gt; o.product?.category).filter(Boolean) as string[]
-    )
-
-    // ── 2. Fetch all active in-stock products for this university ─────────────
     const allProducts = await prisma.product.findMany({
       where: {
-        isActive:     true,
-        quantity:     { gt: 0 },
-        isDeleted:    false,
+        isActive: true,
+        quantity: { gt: 0 },
+        isDeleted: false,
         universityId: user.universityId,
       },
       include: {
         seller: {
           select: {
-            id:              true,
-            name:            true,
-            avgRating:       true,
-            trustLevel:      true,
+            id: true,
+            name: true,
+            profilePhoto: true,
+            avgRating: true,
+            trustLevel: true,
             completedOrders: true,
           },
         },
-        _count: {
-          select: { orders: true },
-        },
+        _count: { select: { orders: true } },
       },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
     })
 
-    if (!allProducts.length) {
-      return NextResponse.json({ success: true, products: [], total: 0, page, hasMore: false })
-    }
+    const now = Date.now()
+    const maxViews = Math.max(...allProducts.map(p =&gt; p.viewCount || 0), 1)
+    const maxOrders = Math.max(...allProducts.map(p =&gt; p._count.orders || 0), 1)
 
-    // ── 3. Find max counts for normalisation ──────────────────────────────────
-    const maxViewCount  = Math.max(...allProducts.map(p =&gt; p.viewCount || 0), 1)
-    const maxOrderCount = Math.max(...allProducts.map(p =&gt; p._count.orders || 0), 1)
-
-    // ── 4. Score every product ────────────────────────────────────────────────
     const scored = allProducts.map(product =&gt; {
+      const ageDays = (now - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
       let score = 0
 
-      const cat = product.category
+      if (userCategories.includes(product.category)) score += W.category
 
-      // Order history signal (strongest)
-      if (orderedCategories.has(cat)) score += W.ordered
-
-      // Recently viewed signal
-      if (viewedCategories.includes(cat)) score += W.viewed
-
-      // Search signal — check if any search term matches category or product name
-      for (const term of searchedTerms) {
+      for (const kw of userKeywords) {
         if (
-          cat.toLowerCase().includes(term) ||
-          product.name.toLowerCase().includes(term)
+          product.name.toLowerCase().includes(kw.toLowerCase()) ||
+          product.category.toLowerCase().includes(kw.toLowerCase())
         ) {
           score += W.searched
-          break // don't double-count
+          break
         }
       }
 
-      // Popularity signals
-      score += normalisedCount(product.viewCount || 0, maxViewCount,  W.popular)
-      score += normalisedCount(product._count.orders || 0, maxOrderCount, W.orderCount)
+      score += normalisedCount(product.viewCount || 0, maxViews, W.popular)
+      score += normalisedCount(product._count.orders || 0, maxOrders, W.orderCount)
 
-      // Seller trust
-      score += trustScore(product.seller?.trustLevel || 'BRONZE')
+      if (product.seller.trustLevel === 'GOLD') score += W.sellerGold
+      else if (product.seller.trustLevel === 'SILVER') score += W.sellerSilver
 
-      // Recency
-      score += recencyScore(product.createdAt)
+      if (ageDays &lt; 3) score += W.recency
 
-      // Small jitter to keep the feed feeling fresh on each load
-      score += jitter()
-
-      return { product, score }
-    })
-
-    // ── 5. Sort by score descending ───────────────────────────────────────────
-    scored.sort((a, b) =&gt; b.score - a.score)
-
-    // ── 6. Paginate ───────────────────────────────────────────────────────────
-    const total   = scored.length
-    const skip    = (page - 1) * PAGE_SIZE
-    const pageItems = scored.slice(skip, skip + PAGE_SIZE)
-
-    // ── 7. Annotate with feed metadata (real signals, not random) ─────────────
-    const now = Date.now()
-    const products = pageItems.map(({ product, score }) =&gt; {
-      const ageDays = (now - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-      const isPersonalised = orderedCategories.has(product.category) || viewedCategories.includes(product.category)
       return {
         ...product,
-        _feedScore:       Math.round(score),
-        isNew:            ageDays &lt;= 7,
-        isTrending:       (product._count.orders &gt;= 3) || (product.viewCount &gt;= 20),
-        isPersonalised,   // used by UI to show "For You" badge
+        score,
+        isPersonalised: score &gt;= W.category,
+        isNew: ageDays &lt;= 7,
+        isHot: product.isHot ?? false,
+        hotReason: product.hotReason ?? null,
+        isDeal: product.isDeal ?? false,
+        discountPercent: product.discountPercent ?? null,
+        marketPrice: product.marketPrice ?? null,
       }
     })
 
+    // Hot deals — priority: BOTH &gt; DEAL &gt; VIEWS
+    const hotProducts = scored
+      .filter(p =&gt; p.isHot)
+      .sort((a, b) =&gt; {
+        const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
+        const aPri = priority[a.hotReason as keyof typeof priority] || 0
+        const bPri = priority[b.hotReason as keyof typeof priority] || 0
+        if (bPri !== aPri) return bPri - aPri
+        if (a.hotReason !== 'VIEWS' &amp;&amp; b.hotReason !== 'VIEWS') {
+          return (b.discountPercent || 0) - (a.discountPercent || 0)
+        }
+        return (b.viewCount || 0) - (a.viewCount || 0)
+      })
+      .slice(0, 20)
+
+    const forYouProducts = scored
+      .filter(p =&gt; p.isPersonalised)
+      .sort((a, b) =&gt; b.score - a.score)
+      .slice(0, 12)
+
+    const newListings = scored
+      .filter(p =&gt; p.isNew)
+      .sort((a, b) =&gt; new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 12)
+
+    const shownIds = new Set([...hotProducts, ...forYouProducts, ...newListings].map(p =&gt; p.id))
+    const discoverProducts = scored
+      .filter(p =&gt; !shownIds.has(p.id))
+      .sort((a, b) =&gt; b.score - a.score)
+      .slice(0, 40)
+
     return NextResponse.json({
       success: true,
-      products,
-      total,
-      page,
-      pages:   Math.ceil(total / PAGE_SIZE),
-      hasMore: skip + pageItems.length &lt; total,
+      products: scored,
+      hotProducts,
+      forYouProducts,
+      newListings,
+      discoverProducts,
     })
   } catch (error) {
     console.error('Feed error:', error)
     return NextResponse.json({ error: 'Failed to load feed' }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/my-products/route.ts</div><pre>// app/api/products/my-products/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -34575,6 +34871,295 @@ export function calculatePayout(subtotal: number, deliveryFee: number = 800) {
     platformFee: platformFeeFromProducts,
   }
 }</pre></div>
+<div class='file-block'><div class='file-header'>lib/marketPrice/engine.ts</div><pre>// lib/marketPrice/engine.ts
+//
+// Hot/deal engine:
+// - Early stage: views drive "hot"
+// - With sales: confirmed sales drive market-price comparisons
+// - Matching bucket: name + condition + changed-parts + variant fingerprint
+
+import { prisma } from '@/lib/prisma'
+import { decodeProductDataServer } from '@/lib/variants'
+
+const HOT_VIEW_THRESHOLD = 15
+const MIN_DEAL_PERCENT = 5
+const MIN_SALES_FOR_PRICE_MODE = 1
+const MAX_MARKET_PRICE_AGE_DAYS = 180
+
+const PRICE_SENSITIVE_VARIANT_KEYS = new Set([
+  'brand',
+  'model',
+  'storage',
+  'ram',
+  'processor',
+  'screen',
+  'size',
+  'year',
+  'platform',
+  'type',
+  'capacity',
+  'bundle',
+])
+
+export function normaliseProductName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(apple|samsung|xiaomi|tecno|infinix|itel|oppo|vivo|realme|oneplus|huawei|nokia|motorola|lg|sony)\b/g, '')
+    .replace(/\b(brand new|fairly used|uk used|tokunbo|refurbished|sealed|open box|complete pack)\b/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function extractCondition(variantValues: string[], description: string): {
+  condition: 'NEW' | 'USED' | 'REFURBISHED'
+  hasChangedParts: boolean
+} {
+  const text = [...variantValues, description].join(' ').toLowerCase()
+
+  const hasChangedParts =
+    text.includes('screen changed') ||
+    text.includes('screen replaced') ||
+    text.includes('battery changed') ||
+    text.includes('battery replaced') ||
+    text.includes('body changed') ||
+    text.includes('part changed') ||
+    text.includes('changed screen') ||
+    text.includes('replaced screen')
+
+  let condition: 'NEW' | 'USED' | 'REFURBISHED' = 'NEW'
+  if (
+    text.includes('fairly used') ||
+    text.includes('uk used') ||
+    text.includes('tokunbo') ||
+    (text.includes('used') &amp;&amp; !text.includes('unused'))
+  ) {
+    condition = 'USED'
+  } else if (text.includes('refurb')) {
+    condition = 'REFURBISHED'
+  }
+
+  return { condition, hasChangedParts }
+}
+
+function normaliseToken(value: string): string {
+  return value.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function extractImplicitSpecs(text: string): string[] {
+  const out: string[] = []
+  const t = text.toLowerCase()
+
+  const storageMatches = t.match(/\b(\d+)\s?(tb|gb)\b/g) || []
+  for (const m of storageMatches) out.push(`storage:${normaliseToken(m)}`)
+
+  const ramMatches = t.match(/\b(\d+)\s?gb\s?ram\b/g) || []
+  for (const m of ramMatches) out.push(`ram:${normaliseToken(m)}`)
+
+  const modelHints = t.match(/\b(iphone\s?\d{1,2}(?:\s?(?:pro|max|plus|mini))?)\b/g) || []
+  for (const m of modelHints) out.push(`model:${normaliseToken(m)}`)
+
+  return out
+}
+
+export function extractVariantValues(description: string | null): string[] {
+  if (!description) return []
+  const { variants } = decodeProductDataServer(description)
+  if (!variants || typeof variants !== 'object') return []
+  return Object.values(variants).flat().map(v =&gt; String(v))
+}
+
+export function buildVariantKeyFromDescription(description: string | null, name: string): string | null {
+  const { variants } = decodeProductDataServer(description || '')
+  const parts: string[] = []
+
+  for (const [key, values] of Object.entries(variants || {})) {
+    const k = normaliseToken(key)
+    if (!PRICE_SENSITIVE_VARIANT_KEYS.has(k)) continue
+    for (const raw of values || []) {
+      const v = normaliseToken(String(raw))
+      if (!v) continue
+      parts.push(`${k}:${v}`)
+    }
+  }
+
+  const implicit = extractImplicitSpecs(`${name} ${description || ''}`)
+  for (const p of implicit) parts.push(p)
+
+  const uniqueSorted = [...new Set(parts)].sort()
+  return uniqueSorted.length &gt; 0 ? uniqueSorted.join('|') : null
+}
+
+export interface MarketPriceLookup {
+  marketPrice: number | null
+  confirmedSales: number
+  hasEnoughData: boolean
+}
+
+export async function getMarketPrice(
+  nameKey: string,
+  condition: string,
+  hasChangedParts: boolean,
+  category: string,
+  variantKey: string | null,
+): Promise&lt;MarketPriceLookup&gt; {
+  const cutoffDate = new Date(Date.now() - MAX_MARKET_PRICE_AGE_DAYS * 24 * 60 * 60 * 1000)
+
+  if (variantKey) {
+    const exact = await prisma.marketPrice.findMany({
+      where: {
+        nameKey,
+        condition,
+        hasChangedParts,
+        variantKey,
+        recordedAt: { gte: cutoffDate },
+      },
+      orderBy: { recordedAt: 'desc' },
+      take: 10,
+    })
+
+    if (exact.length &gt; 0) {
+      return {
+        marketPrice: exact[0].confirmedPrice,
+        confirmedSales: exact.length,
+        hasEnoughData: exact.length &gt;= MIN_SALES_FOR_PRICE_MODE,
+      }
+    }
+  }
+
+  const records = await prisma.marketPrice.findMany({
+    where: {
+      nameKey,
+      condition,
+      hasChangedParts,
+      recordedAt: { gte: cutoffDate },
+    },
+    orderBy: { recordedAt: 'desc' },
+    take: 10,
+  })
+
+  if (records.length === 0) {
+    const looseRecords = await prisma.marketPrice.findMany({
+      where: {
+        nameKey,
+        category,
+        recordedAt: { gte: cutoffDate },
+      },
+      orderBy: { recordedAt: 'desc' },
+      take: 5,
+    })
+
+    return {
+      marketPrice: looseRecords.length &gt; 0 ? looseRecords[0].confirmedPrice : null,
+      confirmedSales: looseRecords.length,
+      hasEnoughData: looseRecords.length &gt;= MIN_SALES_FOR_PRICE_MODE,
+    }
+  }
+
+  return {
+    marketPrice: records[0].confirmedPrice,
+    confirmedSales: records.length,
+    hasEnoughData: records.length &gt;= MIN_SALES_FOR_PRICE_MODE,
+  }
+}
+
+export function computeDeal(price: number, marketPrice: number): {
+  isDeal: boolean
+  discountPercent: number | null
+} {
+  if (price &lt; marketPrice) {
+    const pct = Math.round(((marketPrice - price) / marketPrice) * 100)
+    if (pct &gt;= MIN_DEAL_PERCENT) {
+      return { isDeal: true, discountPercent: pct }
+    }
+  }
+  return { isDeal: false, discountPercent: null }
+}
+
+export interface HotResult {
+  isHot: boolean
+  hotReason: 'VIEWS' | 'DEAL' | 'BOTH' | null
+  isDeal: boolean
+  discountPercent: number | null
+  marketPrice: number | null
+}
+
+export async function evaluateHot(productId: string): Promise&lt;HotResult&gt; {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      category: true,
+      description: true,
+      viewCount: true,
+      nameKey: true,
+      variantKey: true,
+      conditionType: true,
+      hasChangedParts: true,
+      createdAt: true,
+    },
+  })
+
+  if (!product) {
+    return { isHot: false, hotReason: null, isDeal: false, discountPercent: null, marketPrice: null }
+  }
+
+  const variantValues = extractVariantValues(product.description)
+  const nameKey = product.nameKey || normaliseProductName(product.name)
+  const variantKey = product.variantKey || buildVariantKeyFromDescription(product.description, product.name)
+  const { condition, hasChangedParts } = product.conditionType
+    ? { condition: product.conditionType as 'NEW' | 'USED' | 'REFURBISHED', hasChangedParts: product.hasChangedParts }
+    : extractCondition(variantValues, product.description || '')
+
+  const isHotByViews = product.viewCount &gt;= HOT_VIEW_THRESHOLD
+
+  const { marketPrice, hasEnoughData } = await getMarketPrice(
+    nameKey,
+    condition,
+    hasChangedParts,
+    product.category,
+    variantKey,
+  )
+
+  let isDeal = false
+  let discountPercent: number | null = null
+
+  if (hasEnoughData &amp;&amp; marketPrice !== null) {
+    const deal = computeDeal(product.price, marketPrice)
+    isDeal = deal.isDeal
+    discountPercent = deal.discountPercent
+  }
+
+  const isHot = isHotByViews || isDeal
+  let hotReason: 'VIEWS' | 'DEAL' | 'BOTH' | null = null
+  if (isHotByViews &amp;&amp; isDeal) hotReason = 'BOTH'
+  else if (isHotByViews) hotReason = 'VIEWS'
+  else if (isDeal) hotReason = 'DEAL'
+
+  return { isHot, hotReason, isDeal, discountPercent, marketPrice }
+}
+
+export async function saveHotResult(productId: string, result: HotResult): Promise&lt;void&gt; {
+  await prisma.product.update({
+    where: { id: productId },
+    data: {
+      isHot: result.isHot,
+      hotReason: result.hotReason,
+      isDeal: result.isDeal,
+      discountPercent: result.discountPercent,
+      marketPrice: result.marketPrice,
+    },
+  })
+}
+
+export async function updateHotStatus(productId: string): Promise&lt;HotResult&gt; {
+  const result = await evaluateHot(productId)
+  await saveHotResult(productId, result)
+  return result
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>lib/push/sendPushNotification.ts</div><pre>// lib/push/sendPushNotification.ts
 import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
 import { prisma } from '@/lib/prisma'
@@ -35515,10 +36100,16 @@ model Product {
   isDeleted    Boolean         @default(false)
   universityId String?
   subcategory     String?
-  marketPrice     Float?          // Median market price found online via price-check
-  discountPercent Int?            // % cheaper than market; null = not a deal
+  marketPrice     Float?          // Last confirmed campus sale price for this product type
+  discountPercent Int?            // % cheaper than last confirmed sale price; null = not a deal
   isDeal          Boolean         @default(false)
-  lastCheckedAt   DateTime?       // When market price was last fetched
+  nameKey         String?         // normalised product name for market price matching
+  variantKey      String?         // price-sensitive variant fingerprint (model/storage/ram/etc)
+  conditionType   String?         // "NEW" | "USED" | "REFURBISHED"
+  hasChangedParts Boolean         @default(false)
+  isHot           Boolean         @default(false)
+  hotReason       String?         // "VIEWS" | "DEAL" | "BOTH"
+  hotScore        Int             @default(0)
   cartItems       CartItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
@@ -35533,6 +36124,30 @@ model Product {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([universityId])
+  @@index([nameKey])
+  @@index([variantKey])
+  @@index([isHot])
+  @@index([conditionType])
+  @@index([nameKey, conditionType, hasChangedParts, variantKey])
+  @@schema("public")
+}
+
+model MarketPrice {
+  id              String   @id @default(cuid())
+  nameKey         String
+  variantKey      String?
+  category        String
+  condition       String
+  hasChangedParts Boolean  @default(false)
+  confirmedPrice  Float
+  productId       String
+  orderId         String   @unique
+  recordedAt      DateTime @default(now())
+
+  @@index([nameKey, condition, hasChangedParts])
+  @@index([nameKey, condition, hasChangedParts, variantKey])
+  @@index([category])
+  @@index([recordedAt])
   @@schema("public")
 }
 
