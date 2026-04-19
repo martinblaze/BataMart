@@ -31,6 +31,14 @@ function normalisedCount(value: number, max: number, weight: number): number {
   return max === 0 ? 0 : (value / max) * weight
 }
 
+function scheduleBackground(task: () => void) {
+  if (typeof setImmediate === 'function') {
+    setImmediate(task)
+    return
+  }
+  setTimeout(task, 0)
+}
+
 async function backfillExistingHotStatuses(universityId: string): Promise<void> {
   const candidates = await prisma.product.findMany({
     where: {
@@ -66,7 +74,7 @@ export async function GET(request: NextRequest) {
     const nowTs = Date.now()
     if (nowTs - lastBackfillAt > HOT_BACKFILL_COOLDOWN_MS) {
       hotBackfillStateByUniversity.set(user.universityId, nowTs)
-      setImmediate(() => {
+      scheduleBackground(() => {
         backfillExistingHotStatuses(user.universityId as string).catch(() => {})
       })
     }
