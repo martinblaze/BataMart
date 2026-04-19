@@ -11,6 +11,10 @@ import {
   RefreshCw, CheckCircle, Users, Truck, ChevronLeft,
   BadgeCheck, Timer, Percent, MapPin, Bell, Menu,
   ChevronDown, Grid3X3, List, Sliders, Loader2, Copy,
+  Gift, Crown, Coffee, BookOpen, Cpu, Shirt, Home,
+  Headphones, Camera, Watch, Dumbbell, Music, Gamepad2,
+  Wifi, Battery, Monitor, Smartphone, ShoppingCart,
+  TrendingDown, BarChart3, Globe, Leaf, Sun, Moon,
 } from 'lucide-react'
 import { isSplashPending } from '@/components/SplashScreen'
 
@@ -277,6 +281,119 @@ const ANIM_CSS = `
   @supports (padding-bottom: env(safe-area-inset-bottom)) {
     .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   }
+
+  /* ── New panel animations ── */
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .count-up { animation: countUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+  @keyframes marqueeLeft {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .marquee-track { animation: marqueeLeft 20s linear infinite; }
+  .marquee-track:hover { animation-play-state: paused; }
+
+  @keyframes livePing {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.5); opacity: 0.4; }
+  }
+  .live-ping { animation: livePing 1.4s ease-in-out infinite; }
+
+  @keyframes floatY {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-5px); }
+  }
+  .float-y { animation: floatY 3s ease-in-out infinite; }
+
+  @keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .gradient-animated {
+    background-size: 200% 200%;
+    animation: gradientShift 5s ease infinite;
+  }
+
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(30px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .slide-in-right { animation: slideInRight 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+  .stat-card {
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
+  }
+  .stat-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 16px 40px rgba(99,102,241,0.15);
+  }
+
+  .brand-chip {
+    transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1),
+                box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .brand-chip:hover {
+    transform: translateY(-2px) scale(1.06);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  }
+
+  .flash-card {
+    transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.25s ease;
+  }
+  .flash-card:hover {
+    transform: translateY(-5px) scale(1.03);
+    box-shadow: 0 20px 48px rgba(0,0,0,0.14);
+  }
+
+  .trust-bar {
+    background: linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7);
+    background-size: 200% 100%;
+    animation: shimmerBg 3s linear infinite;
+  }
+
+  @keyframes ripple {
+    0%   { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  .ripple-ring {
+    animation: ripple 1.8s ease-out infinite;
+  }
+
+  .mosaic-img {
+    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .mosaic-img:hover { transform: scale(1.08); }
+
+  @keyframes borderPulse {
+    0%, 100% { border-color: rgba(99,102,241,0.3); }
+    50%       { border-color: rgba(99,102,241,0.8); }
+  }
+  .border-pulse { animation: borderPulse 2s ease-in-out infinite; }
+
+  .seller-card {
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s ease;
+  }
+  .seller-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.1);
+  }
+
+  @keyframes scanLine {
+    0%   { top: 0%; }
+    100% { top: 100%; }
+  }
+  .scan-line {
+    animation: scanLine 2.5s linear infinite;
+  }
+
+  .countdown-digit {
+    transition: transform 0.2s ease;
+  }
+  .countdown-digit:hover { transform: scale(1.1); }
 `
 
 // ─────────────────────────────────────────────
@@ -699,6 +816,66 @@ const PRICE_PANELS = [
     accent: '#f97316',
     icon: '🍔',
   },
+]
+
+// ── Campus Stats (animated numbers shown in the stats banner) ──────────────
+const CAMPUS_STATS = [
+  { label: 'Products Listed',  value: '2,400+', icon: '📦', color: 'text-violet-600' },
+  { label: 'Campus Sellers',   value: '380+',   icon: '🧑‍💼', color: 'text-emerald-600' },
+  { label: 'Orders Delivered', value: '5,100+', icon: '🚀', color: 'text-orange-500' },
+  { label: 'Happy Buyers',     value: '1,200+', icon: '⭐', color: 'text-amber-500' },
+]
+
+// ── Brand/search chips for the brand spotlight row ─────────────────────────
+const BRAND_CHIPS = [
+  { label: 'iPhone',      icon: '📱', cat: 'Electronics' },
+  { label: 'Samsung',     icon: '📺', cat: 'Electronics' },
+  { label: 'Sneakers',    icon: '👟', cat: 'Fashion' },
+  { label: 'Laptops',     icon: '💻', cat: 'Computing' },
+  { label: 'Power Banks', icon: '🔋', cat: 'Electronics' },
+  { label: 'Earbuds',     icon: '🎧', cat: 'Electronics' },
+  { label: 'Skincare',    icon: '✨', cat: 'Beauty & Personal Care' },
+  { label: 'Textbooks',   icon: '📚', cat: 'Computing' },
+  { label: 'Wigs',        icon: '💇', cat: 'Beauty & Personal Care' },
+  { label: 'Watches',     icon: '⌚', cat: 'Fashion' },
+  { label: 'Gaming',      icon: '🎮', cat: 'Gaming' },
+  { label: 'Food',        icon: '🍔', cat: 'Groceries / Food / Fast Food' },
+]
+
+// ── Why BataMart trust points ──────────────────────────────────────────────
+const TRUST_POINTS = [
+  { icon: '🔒', title: 'Escrow Protected',   desc: 'Money held safely until you confirm delivery' },
+  { icon: '🎓', title: 'Campus Verified',     desc: 'Only students from your university can sell' },
+  { icon: '⚡', title: 'Fast Campus Delivery', desc: 'Delivered to your hostel door' },
+  { icon: '💬', title: 'Seller Chat',         desc: 'Message sellers directly before buying' },
+  { icon: '⭐', title: 'Ratings & Reviews',   desc: 'Buy from trusted, rated sellers only' },
+  { icon: '🔄', title: 'Easy Disputes',       desc: 'Raise an issue, get it resolved fast' },
+]
+
+// ── Study essentials quick links ────────────────────────────────────────────
+const STUDY_LINKS = [
+  { label: 'Past Questions', icon: '📋', query: 'past questions' },
+  { label: 'Textbooks',      icon: '📗', query: 'textbook' },
+  { label: 'Calculators',    icon: '🔢', query: 'calculator' },
+  { label: 'Drawing Tools',  icon: '📐', query: 'drawing' },
+  { label: 'Lab Coats',      icon: '🥼', query: 'lab coat' },
+  { label: 'Flash Drives',   icon: '💾', query: 'flash drive' },
+  { label: 'Extension Boxes',icon: '🔌', query: 'extension' },
+  { label: 'Stationery',     icon: '✏️', query: 'stationery' },
+]
+
+// ── Category mega grid ──────────────────────────────────────────────────────
+const MEGA_CATEGORIES = [
+  { name: 'Electronics',                  icon: '📱', bg: 'from-violet-500 to-indigo-600',   count: '450+' },
+  { name: 'Fashion',                      icon: '👔', bg: 'from-pink-500 to-rose-600',        count: '380+' },
+  { name: 'Computing',                    icon: '💻', bg: 'from-blue-500 to-cyan-600',        count: '210+' },
+  { name: 'Groceries / Food / Fast Food', icon: '🍔', bg: 'from-orange-500 to-amber-500',     count: '320+' },
+  { name: 'Beauty & Personal Care',       icon: '💄', bg: 'from-fuchsia-500 to-pink-500',     count: '290+' },
+  { name: 'Gaming',                       icon: '🎮', bg: 'from-green-500 to-emerald-600',    count: '160+' },
+  { name: 'Home & Kitchen',               icon: '🏠', bg: 'from-sky-500 to-blue-500',         count: '240+' },
+  { name: 'Baby Products',                icon: '👶', bg: 'from-teal-500 to-cyan-500',        count: '80+' },
+  { name: 'Automotive',                   icon: '🚗', bg: 'from-yellow-500 to-orange-500',    count: '70+' },
+  { name: 'Pets',                         icon: '🐾', bg: 'from-purple-500 to-violet-500',    count: '50+' },
 ]
 
 function PricePanelsRow({ allProducts, onCategorySelect, renderSeed }: {
@@ -1156,6 +1333,414 @@ function JustDroppedSection({ allProducts, onProductClick }: {
 // ─────────────────────────────────────────────
 // ══ MAIN PAGE ══
 // ─────────────────────────────────────────────
+// ── Stats Banner ──────────────────────────────────────────────────────────────
+function StatsBanner() {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-100">
+        {CAMPUS_STATS.map((stat, i) => (
+          <div
+            key={stat.label}
+            className="stat-card flex flex-col items-center justify-center p-4 text-center gap-1"
+            style={{ animationDelay: `${i * 100}ms` }}
+          >
+            <span className="text-2xl">{stat.icon}</span>
+            <p className={`text-xl font-black ${stat.color} count-up`} style={{ animationDelay: `${i * 120}ms` }}>
+              {stat.value}
+            </p>
+            <p className="text-[11px] text-gray-400 font-medium leading-tight">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Brand / Search Spotlight ──────────────────────────────────────────────────
+function BrandSpotlight({ onSearch, onCategorySelect }: {
+  onSearch: (q: string) => void
+  onCategorySelect: (cat: string) => void
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-hidden">
+      <div className="flex items-center gap-2 mb-4">
+        <TrendingUp className="w-4 h-4 text-violet-500" />
+        <h2 className="text-base font-black text-gray-900">Trending on Campus</h2>
+        <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-red-500">
+          <span className="live-ping w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+          LIVE
+        </span>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        {BRAND_CHIPS.map((chip, i) => (
+          <button
+            key={chip.label}
+            onClick={() => onCategorySelect(chip.cat)}
+            className="brand-chip card-enter flex items-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-violet-50 border border-gray-200 hover:border-violet-200 rounded-xl text-sm font-bold text-gray-700 hover:text-violet-700 shadow-sm"
+            style={{ animationDelay: `${i * 40}ms` }}
+          >
+            <span>{chip.icon}</span> {chip.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Study Essentials Quick Links ─────────────────────────────────────────────
+function StudyEssentials({ onSearch }: { onSearch: (q: string) => void }) {
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+      <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-5 h-5 text-white" />
+          <div>
+            <h2 className="text-base font-black text-white">Study Essentials</h2>
+            <p className="text-white/70 text-[11px] mt-0.5">Everything you need for lectures & exams</p>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white px-5 py-4">
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+          {STUDY_LINKS.map((link, i) => (
+            <button
+              key={link.label}
+              onClick={() => onSearch(link.query)}
+              className="card-enter flex flex-col items-center gap-2 p-3 rounded-xl bg-gray-50 hover:bg-violet-50 border border-gray-100 hover:border-violet-200 transition-all group"
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <span className="text-2xl group-hover:scale-110 transition-transform duration-200">{link.icon}</span>
+              <p className="text-[10px] font-bold text-gray-600 group-hover:text-violet-600 text-center leading-tight">{link.label}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Mega Category Grid ────────────────────────────────────────────────────────
+function MegaCategoryGrid({ onCategorySelect }: { onCategorySelect: (cat: string) => void }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-black text-gray-800 section-header-line">All Categories</h2>
+        <span className="text-[11px] text-gray-400 font-medium">Browse everything</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {MEGA_CATEGORIES.map((cat, i) => (
+          <button
+            key={cat.name}
+            onClick={() => onCategorySelect(cat.name)}
+            className={`card-enter relative overflow-hidden rounded-2xl bg-gradient-to-br ${cat.bg} p-4 text-left group cursor-pointer shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <span className="text-3xl mb-2 block group-hover:scale-110 transition-transform duration-300">{cat.icon}</span>
+            <p className="text-white font-black text-sm leading-tight">{cat.name.split(' /')[0]}</p>
+            <p className="text-white/70 text-[10px] font-bold mt-0.5">{cat.count} items</p>
+            <div className="absolute -bottom-3 -right-3 w-16 h-16 rounded-full bg-white/10 group-hover:scale-150 transition-transform duration-500" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Why BataMart Trust Banner ─────────────────────────────────────────────────
+function TrustBanner() {
+  return (
+    <div className="rounded-2xl overflow-hidden border border-violet-100 shadow-sm">
+      <div className="trust-bar px-5 py-3">
+        <div className="flex items-center gap-2">
+          <Shield className="w-5 h-5 text-white" />
+          <h2 className="text-base font-black text-white">Why Students Trust BataMart</h2>
+        </div>
+      </div>
+      <div className="bg-white p-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {TRUST_POINTS.map((point, i) => (
+            <div
+              key={point.title}
+              className="card-enter flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-violet-200 hover:bg-violet-50 transition-all"
+              style={{ animationDelay: `${i * 80}ms` }}
+            >
+              <span className="text-xl flex-shrink-0 mt-0.5">{point.icon}</span>
+              <div>
+                <p className="text-xs font-black text-gray-900">{point.title}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{point.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Mosaic Row (large visual product image grid) ─────────────────────────────
+function MosaicRow({ products, onProductClick, title, subtitle, sectionClass }: {
+  products: any[]
+  onProductClick: (id: string) => void
+  title: string
+  subtitle: string
+  sectionClass: string
+}) {
+  const picks = products.slice(0, 7)
+  if (picks.length < 3) return null
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+      <div className={`${sectionClass} px-5 py-4`}>
+        <h2 className="text-base font-black text-white">{title}</h2>
+        <p className="text-white/70 text-[11px] mt-0.5">{subtitle}</p>
+      </div>
+      <div className="bg-white p-3">
+        <div className="grid grid-cols-4 grid-rows-2 gap-2" style={{ height: 280 }}>
+          {/* Big left tile */}
+          <div
+            className="col-span-2 row-span-2 rounded-xl overflow-hidden cursor-pointer relative group"
+            onClick={() => picks[0] && onProductClick(picks[0].id)}
+          >
+            <img
+              src={picks[0]?.images[0] || '/placeholder.png'}
+              alt={picks[0]?.name}
+              className="mosaic-img w-full h-full object-cover"
+            />
+            {picks[0] && (
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                <div>
+                  <p className="text-white text-xs font-black line-clamp-1">{picks[0].name}</p>
+                  <p className="text-white/80 text-[10px] font-bold">₦{picks[0].price?.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* 4 small tiles */}
+          {picks.slice(1, 5).map((p, i) => (
+            <div
+              key={p.id}
+              className="rounded-xl overflow-hidden cursor-pointer relative group"
+              onClick={() => onProductClick(p.id)}
+            >
+              <img
+                src={p.images[0] || '/placeholder.png'}
+                alt={p.name}
+                className="mosaic-img w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+            </div>
+          ))}
+        </div>
+        {picks[5] && (
+          <div className="flex gap-2 mt-2">
+            {picks.slice(5, 7).map(p => (
+              <div
+                key={p.id}
+                className="flex-1 h-16 rounded-xl overflow-hidden cursor-pointer relative group"
+                onClick={() => onProductClick(p.id)}
+              >
+                <img src={p.images[0] || '/placeholder.png'} alt={p.name} className="mosaic-img w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Top Sellers Row ───────────────────────────────────────────────────────────
+function TopSellersRow({ products, onProductClick }: {
+  products: any[]
+  onProductClick: (id: string) => void
+}) {
+  // Group by seller, pick top 8 by product count
+  const sellerMap = new Map<string, { seller: any; products: any[]; count: number }>()
+  for (const p of products) {
+    if (!p.seller) continue
+    const key = p.seller.id
+    if (!sellerMap.has(key)) sellerMap.set(key, { seller: p.seller, products: [], count: 0 })
+    const entry = sellerMap.get(key)!
+    entry.products.push(p)
+    entry.count++
+  }
+  const topSellers = [...sellerMap.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+
+  if (topSellers.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-end justify-between px-5 pt-5 pb-3 border-b border-gray-50">
+        <div>
+          <h2 className="text-base font-black text-gray-900 section-header-line">🏆 Top Campus Sellers</h2>
+          <p className="text-xs text-gray-400 font-medium mt-1">Most active sellers on campus right now</p>
+        </div>
+      </div>
+      <div className="px-5 py-4">
+        <div className="flex gap-4 overflow-x-auto no-scrollbar pb-1">
+          {topSellers.map(({ seller, products: sellerProds, count }, i) => (
+            <div
+              key={seller.id}
+              className="seller-card card-enter flex-shrink-0 w-28 cursor-pointer text-center"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => sellerProds[0] && onProductClick(sellerProds[0].id)}
+            >
+              {/* Avatar */}
+              <div className="relative mx-auto mb-2 w-16 h-16">
+                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-br from-violet-100 to-indigo-100 border-2 border-violet-200">
+                  {seller.profilePhoto ? (
+                    <img src={seller.profilePhoto} alt={seller.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-2xl font-black text-violet-400">
+                      {seller.name?.[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
+                </div>
+                {seller.trustLevel === 'GOLD' && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-[9px]">👑</span>
+                )}
+              </div>
+              <p className="text-xs font-black text-gray-900 line-clamp-1">{seller.name}</p>
+              <p className="text-[10px] text-violet-600 font-bold">{count} listing{count !== 1 ? 's' : ''}</p>
+              {seller.avgRating > 0 && (
+                <div className="flex items-center justify-center gap-0.5 mt-1">
+                  <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                  <span className="text-[10px] text-gray-500 font-bold">{seller.avgRating.toFixed(1)}</span>
+                </div>
+              )}
+              {/* Mini product previews */}
+              <div className="flex gap-1 mt-2 justify-center">
+                {sellerProds.slice(0, 2).map(p => (
+                  <div key={p.id} className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100">
+                    <img src={p.images[0] || '/placeholder.png'} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Flash Sale Countdown ──────────────────────────────────────────────────────
+function FlashSaleCountdown({ products, onProductClick }: {
+  products: any[]
+  onProductClick: (id: string) => void
+}) {
+  const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 })
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date()
+      const midnight = new Date()
+      midnight.setHours(24, 0, 0, 0)
+      const diff = Math.max(0, midnight.getTime() - now.getTime())
+      const h = Math.floor(diff / 3_600_000)
+      const m = Math.floor((diff % 3_600_000) / 60_000)
+      const s = Math.floor((diff % 60_000) / 1_000)
+      setTimeLeft({ h, m, s })
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const picks = products.slice(0, 6)
+  if (picks.length === 0) return null
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 gradient-animated px-5 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-white" />
+            <div>
+              <h2 className="text-base font-black text-white">⚡ Flash Picks Today</h2>
+              <p className="text-white/75 text-[11px] mt-0.5">Grab them before they&apos;re gone</p>
+            </div>
+          </div>
+          {/* Countdown */}
+          <div className="flex items-center gap-1 bg-black/20 rounded-xl px-3 py-1.5">
+            {[pad(timeLeft.h), pad(timeLeft.m), pad(timeLeft.s)].map((val, i) => (
+              <span key={i} className="flex items-center gap-0.5">
+                <span className="countdown-digit text-white font-black text-sm tabular-nums">{val}</span>
+                {i < 2 && <span className="text-white/60 font-black text-sm">:</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* Products */}
+      <div className="bg-white px-5 py-4">
+        <div className="flex gap-3 overflow-x-auto no-scrollbar">
+          {picks.map((p, i) => (
+            <div
+              key={p.id}
+              className="flash-card card-enter flex-shrink-0 w-36 cursor-pointer"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => onProductClick(p.id)}
+            >
+              <div className="aspect-square rounded-xl overflow-hidden bg-gray-50 mb-2 relative">
+                <img src={p.images[0] || '/placeholder.png'} alt={p.name} className="w-full h-full object-cover" />
+                {p.discountPercent && (
+                  <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg">
+                    -{p.discountPercent}%
+                  </span>
+                )}
+              </div>
+              <p className="text-xs font-black text-gray-900 line-clamp-2 leading-tight">{p.name}</p>
+              <p className="text-sm font-black text-BATAMART-primary mt-1">₦{p.price?.toLocaleString()}</p>
+              {p.marketPrice && p.marketPrice > p.price && (
+                <p className="text-[10px] text-gray-400 line-through">₦{Math.round(p.marketPrice).toLocaleString()}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Live Activity Marquee ─────────────────────────────────────────────────────
+function LiveActivityMarquee({ products }: { products: any[] }) {
+  const items = [
+    ...products.slice(0, 8).map(p => `🛒 ${p.seller?.name || 'A student'} listed "${p.name}" for ₦${p.price?.toLocaleString()}`),
+    '🔥 Hot deals updated — check the deals page',
+    '⭐ Campus marketplace is LIVE — buy safely with escrow',
+    '🚀 New listings drop every day — check back often',
+    '💬 Chat sellers directly before buying',
+  ]
+  const doubled = [...items, ...items]
+
+  return (
+    <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl overflow-hidden py-2.5 px-0">
+      <div className="flex items-center gap-3 overflow-hidden">
+        <div className="flex-shrink-0 flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-r-xl">
+          <span className="live-ping w-2 h-2 rounded-full bg-green-400 inline-block" />
+          <span className="text-white text-[11px] font-black whitespace-nowrap">LIVE</span>
+        </div>
+        <div className="overflow-hidden flex-1">
+          <div className="marquee-track flex gap-8 whitespace-nowrap">
+            {doubled.map((item, i) => (
+              <span key={i} className="text-white/90 text-[11px] font-medium flex-shrink-0">
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MarketplacePage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
@@ -1989,6 +2574,14 @@ export default function MarketplacePage() {
               </div>
             )}
 
+            {/* ── Live Activity Marquee ── */}
+            {allProducts.length > 0 && (
+              <LiveActivityMarquee products={allProducts} />
+            )}
+
+            {/* ── Campus Stats Banner ── */}
+            <StatsBanner />
+
             {/* ── Shop by Category (showcase panels) ── */}
             {allProducts.length > 0 && (
               <div>
@@ -2013,6 +2606,14 @@ export default function MarketplacePage() {
               />
             )}
 
+            {/* ── Trending / Brand Spotlight ── */}
+            {allProducts.length > 0 && (
+              <BrandSpotlight
+                onSearch={(q) => router.push(`/search?q=${encodeURIComponent(q)}`)}
+                onCategorySelect={handleCategorySelect}
+              />
+            )}
+
             {/* ── Picked for You ── */}
             {forYouProducts.length > 0 && (
               <BestSellersRow
@@ -2023,6 +2624,22 @@ export default function MarketplacePage() {
                 subtitle="Based on what you browse, search, and order"
               />
             )}
+
+            {/* ── Flash Sale Countdown (newest products) ── */}
+            {allProducts.length > 0 && (
+              <FlashSaleCountdown
+                products={allProducts.filter(p => p.isDeal || p.isNew).slice(0, 6).length > 0
+                  ? allProducts.filter(p => p.isDeal || p.isNew).slice(0, 6)
+                  : allProducts.slice(0, 6)
+                }
+                onProductClick={handleProductClick}
+              />
+            )}
+
+            {/* ── Study Essentials ── */}
+            <StudyEssentials
+              onSearch={(q) => router.push(`/search?q=${encodeURIComponent(q)}`)}
+            />
 
             {/* ── Price-range deal panels ── */}
             {allProducts.length > 0 && (
@@ -2070,14 +2687,41 @@ export default function MarketplacePage() {
               <BestSellersRow products={productsByCategory['Electronics']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Electronics')} title="Best Sellers in Tech" subtitle="Top picks from campus techies" />
             )}
 
+            {/* ── Electronics Mosaic ── */}
+            {(productsByCategory['Electronics']?.length >= 3) && (
+              <MosaicRow
+                products={productsByCategory['Electronics']}
+                onProductClick={handleProductClick}
+                title="📱 Tech on Campus"
+                subtitle="See what students are selling in electronics"
+                sectionClass="section-stripe"
+              />
+            )}
+
             {/* ── Best Sellers: Fashion ── */}
             {(productsByCategory['Fashion']?.length > 0) && (
               <BestSellersRow products={productsByCategory['Fashion']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Fashion')} title="Best Sellers in Campus Fashion" subtitle="Style up your university life" />
             )}
 
+            {/* ── Fashion Mosaic ── */}
+            {(productsByCategory['Fashion']?.length >= 3) && (
+              <MosaicRow
+                products={productsByCategory['Fashion']}
+                onProductClick={handleProductClick}
+                title="👔 Campus Style"
+                subtitle="What students are wearing this season"
+                sectionClass="section-stripe-orange"
+              />
+            )}
+
             {/* ── Best Sellers: Food ── */}
             {(productsByCategory['Groceries / Food / Fast Food']?.length > 0) && (
               <BestSellersRow products={productsByCategory['Groceries / Food / Fast Food']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Groceries / Food / Fast Food')} title="Best Sellers in Food & Snacks" subtitle="Eat well, study harder" />
+            )}
+
+            {/* ── Top Campus Sellers ── */}
+            {allProducts.length > 0 && (
+              <TopSellersRow products={allProducts} onProductClick={handleProductClick} />
             )}
 
             {/* ── Your Interests ── */}
@@ -2111,10 +2755,27 @@ export default function MarketplacePage() {
               <BestSellersRow products={productsByCategory['Beauty & Personal Care']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Beauty & Personal Care')} title="Best Sellers in Beauty & Care" subtitle="Top-rated by campus students" />
             )}
 
+            {/* ── Trust Banner ── */}
+            <TrustBanner />
+
+            {/* ── Beauty Mosaic ── */}
+            {(productsByCategory['Beauty & Personal Care']?.length >= 3) && (
+              <MosaicRow
+                products={productsByCategory['Beauty & Personal Care']}
+                onProductClick={handleProductClick}
+                title="💄 Beauty & Glow"
+                subtitle="Top beauty picks from campus sellers"
+                sectionClass="section-stripe-emerald"
+              />
+            )}
+
             {/* ── Best Sellers: Gaming ── */}
             {(productsByCategory['Gaming']?.length > 0) && (
               <BestSellersRow products={productsByCategory['Gaming']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Gaming')} title="Best Sellers in Gaming" subtitle="Level up your setup" />
             )}
+
+            {/* ── Mega Category Grid ── */}
+            <MegaCategoryGrid onCategorySelect={handleCategorySelect} />
 
             {/* ── All Listings ── */}
             {discoverProducts.length > 0 && (
@@ -2136,6 +2797,22 @@ export default function MarketplacePage() {
             {/* ── Best Sellers: Home & Kitchen ── */}
             {(productsByCategory['Home & Kitchen']?.length > 0) && (
               <BestSellersRow products={productsByCategory['Home & Kitchen']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Home & Kitchen')} title="Finds for Your Room" subtitle="Make your hostel feel like home" />
+            )}
+
+            {/* ── Home Mosaic ── */}
+            {(productsByCategory['Home & Kitchen']?.length >= 3) && (
+              <MosaicRow
+                products={productsByCategory['Home & Kitchen']}
+                onProductClick={handleProductClick}
+                title="🏠 Room Goals"
+                subtitle="Make your hostel feel like home"
+                sectionClass="section-stripe"
+              />
+            )}
+
+            {/* ── Second Live Marquee ── */}
+            {allProducts.length > 0 && (
+              <LiveActivityMarquee products={allProducts.slice(8, 16)} />
             )}
 
             {/* ── Just Dropped — always last ── */}
