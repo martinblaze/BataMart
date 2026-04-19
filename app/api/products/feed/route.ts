@@ -1,10 +1,10 @@
-// app/api/products/route.ts
-// GET  — fetch paginated products for the marketplace
-// POST — create a new product listing, then fire price-check in background
+// app/api/products/feed/route.ts
 //
-// Change vs original:
-//   The price-check fire-and-forget is now a proper helper that also
-//   gets called when an admin runs the backfill. No other logic changed.
+// PHASE 1 (no/few sales): hot = most viewed products
+// PHASE 2 (sales exist):  hot = most viewed + priced below last confirmed sale
+//
+// isHot, isDeal, hotReason, discountPercent, marketPrice are all written
+// by the engine — this route just reads them from DB.
 
 export const dynamic = 'force-dynamic'
 
@@ -12,26 +12,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 
-const DEFAULT_PAGE_SIZE = 40
-const MAX_PAGE_SIZE     = 100
-
-// ── Fire price-check in background (non-blocking) ────────────────────────────
-
-function firePriceCheck(productId: string, token: string, baseUrl: string) {
-  // We use the internal secret so the price-check route doesn't need to
-  // re-validate the seller — the product was JUST created so sellerId is fine.
-  const internalSecret = process.env.INTERNAL_API_SECRET || ''
-  fetch(`${baseUrl}/api/price-check`, {
-    method:  'POST',
-    headers: {
-      'Content-Type':     'application/json',
-      'x-internal-secret': internalSecret,
-    },
-    body: JSON.stringify({ productId }),
-  }).catch(() => {})  // always non-blocking — listing must never wait on this
+const W = {
+  category: 50,
+  searched: 40,
+  popular: 20,
+  orderCount: 15,
+  sellerGold: 10,
+  sellerSilver: 5,
+  recency: 8,
 }
 
-// ── GET /api/products ─────────────────────────────────────────────────────────
+function normalisedCount(value: number, max: number, weight: number): number {
+  return max === 0 ? 0 : (value / max) * weight
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,155 +34,119 @@ export async function GET(request: NextRequest) {
     }
 
     if (!user.universityId) {
-      return NextResponse.json(
-        { error: 'No university associated with your account. Please contact support.' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'No university on account' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
-    const category = searchParams.get('category')
-    const hostel   = searchParams.get('hostel')
-    const minPrice = searchParams.get('minPrice')
-    const maxPrice = searchParams.get('maxPrice')
-    const search   = searchParams.get('search')
+    const userCategories = (searchParams.get('categories') || '').split(',').filter(Boolean)
+    const userKeywords = (searchParams.get('keywords') || '').split(',').filter(Boolean)
 
-    const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
-    const limit = Math.min(
-      MAX_PAGE_SIZE,
-      Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE)))
-    )
-    const skip = (page - 1) * limit
-
-    const where: any = {
-      isActive:     true,
-      quantity:     { gt: 0 },
-      isDeleted:    false,
-      universityId: user.universityId,
-    }
-
-    if (category && category !== 'All') where.category = category
-    if (hostel   && hostel   !== 'All') where.hostelName = { contains: hostel, mode: 'insensitive' }
-
-    if (minPrice || maxPrice) {
-      where.price = {}
-      if (minPrice) where.price.gte = parseFloat(minPrice)
-      if (maxPrice) where.price.lte = parseFloat(maxPrice)
-    }
-
-    if (search && search.trim()) {
-      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean)
-      where.AND = tokens.map((token: string) => ({
-        OR: [
-          { name:        { contains: token, mode: 'insensitive' } },
-          { category:    { contains: token, mode: 'insensitive' } },
-          { description: { contains: token, mode: 'insensitive' } },
-        ],
-      }))
-    }
-
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        include: {
-          seller: {
-            select: {
-              id:              true,
-              name:            true,
-              avgRating:       true,
-              trustLevel:      true,
-              completedOrders: true,
-            },
+    const allProducts = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        quantity: { gt: 0 },
+        isDeleted: false,
+        universityId: user.universityId,
+      },
+      include: {
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            profilePhoto: true,
+            avgRating: true,
+            trustLevel: true,
+            completedOrders: true,
           },
         },
-        orderBy: { createdAt: 'desc' },
-        take:    limit,
-        skip,
-      }),
-      prisma.product.count({ where }),
-    ])
+        _count: { select: { orders: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    })
+
+    const now = Date.now()
+    const maxViews = Math.max(...allProducts.map(p => p.viewCount || 0), 1)
+    const maxOrders = Math.max(...allProducts.map(p => p._count.orders || 0), 1)
+
+    const scored = allProducts.map(product => {
+      const ageDays = (now - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      let score = 0
+
+      if (userCategories.includes(product.category)) score += W.category
+
+      for (const kw of userKeywords) {
+        if (
+          product.name.toLowerCase().includes(kw.toLowerCase()) ||
+          product.category.toLowerCase().includes(kw.toLowerCase())
+        ) {
+          score += W.searched
+          break
+        }
+      }
+
+      score += normalisedCount(product.viewCount || 0, maxViews, W.popular)
+      score += normalisedCount(product._count.orders || 0, maxOrders, W.orderCount)
+
+      if (product.seller.trustLevel === 'GOLD') score += W.sellerGold
+      else if (product.seller.trustLevel === 'SILVER') score += W.sellerSilver
+
+      if (ageDays < 3) score += W.recency
+
+      return {
+        ...product,
+        score,
+        isPersonalised: score >= W.category,
+        isNew: ageDays <= 7,
+        isHot: product.isHot ?? false,
+        hotReason: product.hotReason ?? null,
+        isDeal: product.isDeal ?? false,
+        discountPercent: product.discountPercent ?? null,
+        marketPrice: product.marketPrice ?? null,
+      }
+    })
+
+    // Hot deals — priority: BOTH > DEAL > VIEWS
+    const hotProducts = scored
+      .filter(p => p.isHot)
+      .sort((a, b) => {
+        const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
+        const aPri = priority[a.hotReason as keyof typeof priority] || 0
+        const bPri = priority[b.hotReason as keyof typeof priority] || 0
+        if (bPri !== aPri) return bPri - aPri
+        if (a.hotReason !== 'VIEWS' && b.hotReason !== 'VIEWS') {
+          return (b.discountPercent || 0) - (a.discountPercent || 0)
+        }
+        return (b.viewCount || 0) - (a.viewCount || 0)
+      })
+      .slice(0, 20)
+
+    const forYouProducts = scored
+      .filter(p => p.isPersonalised)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+
+    const newListings = scored
+      .filter(p => p.isNew)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 12)
+
+    const shownIds = new Set([...hotProducts, ...forYouProducts, ...newListings].map(p => p.id))
+    const discoverProducts = scored
+      .filter(p => !shownIds.has(p.id))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 40)
 
     return NextResponse.json({
       success: true,
-      products,
-      count:   products.length,
-      total,
-      page,
-      pages:   Math.ceil(total / limit),
-      hasMore: skip + products.length < total,
+      products: scored,
+      hotProducts,
+      forYouProducts,
+      newListings,
+      discoverProducts,
     })
   } catch (error) {
-    console.error('Fetch products error:', error)
-    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
-  }
-}
-
-// ── POST /api/products ────────────────────────────────────────────────────────
-
-export async function POST(request: NextRequest) {
-  try {
-    const user = await getUserFromRequest(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    if (!user.universityId) {
-      return NextResponse.json(
-        { error: 'No university associated with your account.' },
-        { status: 403 }
-      )
-    }
-
-    const body = await request.json()
-    const {
-      name,
-      description,
-      price,
-      category,
-      subcategory,
-      quantity,
-      images,
-      hostelName,
-      roomNumber,
-      landmark,
-    } = body
-
-    if (!name || !price || !category || !quantity) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
-
-    if (typeof price !== 'number' || price <= 0) {
-      return NextResponse.json({ error: 'Invalid price' }, { status: 400 })
-    }
-
-    if (typeof quantity !== 'number' || quantity < 1) {
-      return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 })
-    }
-
-    const product = await prisma.product.create({
-      data: {
-        name:        String(name).trim().substring(0, 200),
-        description: description ? String(description).trim().substring(0, 5000) : '',
-        price:       Number(price),
-        category:    String(category),
-        ...(subcategory ? { subcategory: String(subcategory) } : {}),
-        quantity:    Number(quantity),
-        images:      Array.isArray(images) ? images : [],
-        seller:      { connect: { id: user.id } },
-        hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
-        roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
-        landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
-        university:  { connect: { id: user.universityId } },
-      },
-    })
-
-    // Fire price-check immediately after creation — non-blocking
-    const origin = request.headers.get('origin') || request.nextUrl.origin
-    firePriceCheck(product.id, '', origin)
-
-    return NextResponse.json({ success: true, product }, { status: 201 })
-  } catch (error) {
-    console.error('Create product error:', error)
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+    console.error('Feed error:', error)
+    return NextResponse.json({ error: 'Failed to load feed' }, { status: 500 })
   }
 }

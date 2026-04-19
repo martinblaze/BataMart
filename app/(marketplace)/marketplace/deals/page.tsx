@@ -182,8 +182,9 @@ function SkeletonCard() {
 // Deal Card
 // ─────────────────────────────────────────────
 function DealCard({ product, onClick, delay = 0 }: { product: any; onClick: () => void; delay?: number }) {
-  const pct = product.discountPercent || 0
-  const tier = getDiscountTier(pct)
+  const discount = (product.isDeal && product.discountPercent) ? product.discountPercent : 0
+  const isHot = product.isHot ?? false
+  const tier = getDiscountTier(discount)
   const originalPrice = product.marketPrice && product.marketPrice > product.price ? product.marketPrice : null
   const savings = originalPrice ? originalPrice - product.price : 0
 
@@ -198,26 +199,33 @@ function DealCard({ product, onClick, delay = 0 }: { product: any; onClick: () =
         <img src={product.images?.[0] || '/placeholder.png'} alt={product.name} className="dc-img w-full h-full object-cover" />
 
         {/* Discount badge — floating animated */}
-        <div className="dc-float absolute top-2.5 right-2.5">
-          <div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-orange-500 shadow-lg ring-2 ring-white">
-            <span className="text-white font-black text-[13px] leading-none">-{pct}%</span>
-            <span className="text-white/80 font-bold text-[8px] leading-none mt-0.5">OFF</span>
+        {discount > 0 && (
+          <div className="dc-float absolute top-2.5 right-2.5">
+            <div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-orange-500 shadow-lg ring-2 ring-white">
+              <span className="text-white font-black text-[13px] leading-none">-{discount}%</span>
+              <span className="text-white/80 font-bold text-[8px] leading-none mt-0.5">OFF</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Label badges */}
         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
-          {pct >= 30 && (
+          {isHot && !product.isDeal && (
+            <span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md">
+              🔥 HOT
+            </span>
+          )}
+          {discount >= 30 && (
             <span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md">
               🔥 MEGA DEAL
             </span>
           )}
-          {pct >= 20 && pct < 30 && (
+          {discount >= 20 && discount < 30 && (
             <span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md">
               ⚡ HOT DEAL
             </span>
           )}
-          {pct >= 12 && pct < 20 && (
+          {discount >= 12 && discount < 20 && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-400 text-white text-[10px] font-black rounded-lg shadow-md">
               🏷️ DEAL
             </span>
@@ -537,9 +545,18 @@ export default function DealsPage() {
       .then(r => r.json())
       .then(data => {
         const products: any[] = data.products || []
-        const deals = products.filter(
-          p => p.isDeal && p.discountPercent && p.discountPercent >= HOT_DEAL_MIN_PERCENT && p.marketPrice && p.marketPrice > p.price
-        )
+        const deals = products
+          .filter(p => p.isHot)
+          .sort((a, b) => {
+            const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
+            const aPri = priority[a.hotReason as keyof typeof priority] || 0
+            const bPri = priority[b.hotReason as keyof typeof priority] || 0
+            if (bPri !== aPri) return bPri - aPri
+            if (a.hotReason !== 'VIEWS' && b.hotReason !== 'VIEWS') {
+              return (b.discountPercent || 0) - (a.discountPercent || 0)
+            }
+            return (b.viewCount || 0) - (a.viewCount || 0)
+          })
         setAllDeals(deals)
       })
       .catch(() => {})

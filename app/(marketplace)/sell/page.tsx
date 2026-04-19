@@ -534,14 +534,6 @@ export default function SellPage() {
       })
       const data = await response.json()
       if (response.ok) {
-        // Product is listed immediately — fire price check in background (non-blocking)
-        if (data.product?.id) {
-          fetch('/api/price-check', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ productId: data.product.id }),
-          }).catch(() => {}) // silent fail — never blocks listing
-        }
         router.push('/my-shop')
       } else {
         setError(data.error || 'Failed to create product')

@@ -152,10 +152,16 @@ model Product {
   isDeleted    Boolean         @default(false)
   universityId String?
   subcategory     String?
-  marketPrice     Float?          // Median market price found online via price-check
-  discountPercent Int?            // % cheaper than market; null = not a deal
+  marketPrice     Float?          // Last confirmed campus sale price for this product type
+  discountPercent Int?            // % cheaper than last confirmed sale price; null = not a deal
   isDeal          Boolean         @default(false)
-  lastCheckedAt   DateTime?       // When market price was last fetched
+  nameKey         String?         // normalised product name for market price matching
+  variantKey      String?         // price-sensitive variant fingerprint (model/storage/ram/etc)
+  conditionType   String?         // "NEW" | "USED" | "REFURBISHED"
+  hasChangedParts Boolean         @default(false)
+  isHot           Boolean         @default(false)
+  hotReason       String?         // "VIEWS" | "DEAL" | "BOTH"
+  hotScore        Int             @default(0)
   cartItems       CartItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
@@ -170,6 +176,30 @@ model Product {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([universityId])
+  @@index([nameKey])
+  @@index([variantKey])
+  @@index([isHot])
+  @@index([conditionType])
+  @@index([nameKey, conditionType, hasChangedParts, variantKey])
+  @@schema("public")
+}
+
+model MarketPrice {
+  id              String   @id @default(cuid())
+  nameKey         String
+  variantKey      String?
+  category        String
+  condition       String
+  hasChangedParts Boolean  @default(false)
+  confirmedPrice  Float
+  productId       String
+  orderId         String   @unique
+  recordedAt      DateTime @default(now())
+
+  @@index([nameKey, condition, hasChangedParts])
+  @@index([nameKey, condition, hasChangedParts, variantKey])
+  @@index([category])
+  @@index([recordedAt])
   @@schema("public")
 }
 

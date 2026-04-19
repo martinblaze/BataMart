@@ -1546,12 +1546,20 @@ export default function MarketplacePage() {
 
   // ── Derived data ──
   const forYouProducts = useMemo(() => allProducts.filter(p => p.isPersonalised).slice(0, 12), [allProducts])
-  // Hot Deals: products with 12%+ discount, sorted highest % off first
-  const HOT_DEAL_MIN_PERCENT = 12
+  // Hot Deals — powered by confirmed campus sales + view signals
   const hotDeals = useMemo(() => {
     return allProducts
-      .filter(p => p.isDeal && p.discountPercent && p.discountPercent >= HOT_DEAL_MIN_PERCENT && p.marketPrice && p.marketPrice > p.price)
-      .sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0))
+      .filter(p => p.isHot)
+      .sort((a, b) => {
+        const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
+        const aPri = priority[a.hotReason as keyof typeof priority] || 0
+        const bPri = priority[b.hotReason as keyof typeof priority] || 0
+        if (bPri !== aPri) return bPri - aPri
+        if (a.hotReason !== 'VIEWS' && b.hotReason !== 'VIEWS') {
+          return (b.discountPercent || 0) - (a.discountPercent || 0)
+        }
+        return (b.viewCount || 0) - (a.viewCount || 0)
+      })
   }, [allProducts])
   const trendingProducts = hotDeals.slice(0, 12)
   const newListings = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
