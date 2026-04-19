@@ -240,9 +240,7 @@ export async function evaluateHot(productId: string): Promise<HotResult> {
     ? { condition: product.conditionType as 'NEW' | 'USED' | 'REFURBISHED', hasChangedParts: product.hasChangedParts }
     : extractCondition(variantValues, product.description || '')
 
-  const productAgeDays = (Date.now() - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-  const viewsPerDay = product.viewCount / Math.max(productAgeDays, 1)
-  const isHotByViews = product.viewCount >= HOT_VIEW_THRESHOLD || viewsPerDay >= 3
+  const isHotByViews = product.viewCount >= HOT_VIEW_THRESHOLD
 
   const { marketPrice, hasEnoughData } = await getMarketPrice(
     nameKey,

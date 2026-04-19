@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import { updateHotStatus } from '@/lib/marketPrice/engine'
 
 const W = {
   category: 50,
@@ -22,8 +23,32 @@ const W = {
   recency: 8,
 }
 
+const HOT_BACKFILL_COOLDOWN_MS = 10 * 60 * 1000
+const HOT_BACKFILL_BATCH = 120
+const hotBackfillStateByUniversity = new Map<string, number>()
+
 function normalisedCount(value: number, max: number, weight: number): number {
   return max === 0 ? 0 : (value / max) * weight
+}
+
+async function backfillExistingHotStatuses(universityId: string): Promise<void> {
+  const candidates = await prisma.product.findMany({
+    where: {
+      universityId,
+      isActive: true,
+      isDeleted: false,
+      quantity: { gt: 0 },
+    },
+    select: {
+      id: true,
+    },
+    orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
+    take: HOT_BACKFILL_BATCH,
+  })
+
+  for (const product of candidates) {
+    await updateHotStatus(product.id).catch(() => {})
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -35,6 +60,15 @@ export async function GET(request: NextRequest) {
 
     if (!user.universityId) {
       return NextResponse.json({ error: 'No university on account' }, { status: 403 })
+    }
+
+    const lastBackfillAt = hotBackfillStateByUniversity.get(user.universityId) || 0
+    const nowTs = Date.now()
+    if (nowTs - lastBackfillAt > HOT_BACKFILL_COOLDOWN_MS) {
+      hotBackfillStateByUniversity.set(user.universityId, nowTs)
+      setImmediate(() => {
+        backfillExistingHotStatuses(user.universityId as string).catch(() => {})
+      })
     }
 
     const { searchParams } = new URL(request.url)
