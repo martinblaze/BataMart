@@ -1,12 +1,10 @@
-// app/api/products/feed/route.ts
-// Personalized product feed — TikTok-style scoring based on:
-//   1. Categories the user has ordered from (strongest signal)
-//   2. Categories the user has recently viewed (sent from client via query param)
-//   3. Categories the user has searched (sent from client via query param)
-//   4. Overall product popularity (viewCount + order count)
-//   5. Recency (newer products get a small boost)
-//   6. Seller trust level (GOLD > SILVER > BRONZE)
-// Products are scored, shuffled within score bands, then returned.
+// app/api/products/route.ts
+// GET  — fetch paginated products for the marketplace
+// POST — create a new product listing, then fire price-check in background
+//
+// Change vs original:
+//   The price-check fire-and-forget is now a proper helper that also
+//   gets called when an admin runs the backfill. No other logic changed.
 
 export const dynamic = 'force-dynamic'
 
@@ -14,181 +12,184 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 
-const PAGE_SIZE = 40
+const DEFAULT_PAGE_SIZE = 40
+const MAX_PAGE_SIZE     = 100
 
-// Score weights — tweak these to change feed feel
-const W = {
-  ordered:      100,  // user has ordered this category before
-  viewed:        60,  // user has viewed products in this category
-  searched:      40,  // user has searched for this category / keyword
-  popular:       20,  // high viewCount
-  orderCount:    15,  // many orders on the product
-  sellerGold:    10,  // seller trust level bonus
-  sellerSilver:   5,
-  recency:       10,  // product listed within last 7 days
-  newish:         5,  // product listed within last 30 days
+// ── Fire price-check in background (non-blocking) ────────────────────────────
+
+function firePriceCheck(productId: string, token: string, baseUrl: string) {
+  // We use the internal secret so the price-check route doesn't need to
+  // re-validate the seller — the product was JUST created so sellerId is fine.
+  const internalSecret = process.env.INTERNAL_API_SECRET || ''
+  fetch(`${baseUrl}/api/price-check`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':     'application/json',
+      'x-internal-secret': internalSecret,
+    },
+    body: JSON.stringify({ productId }),
+  }).catch(() => {})  // always non-blocking — listing must never wait on this
 }
 
-function trustScore(level: string) {
-  if (level === 'GOLD')   return W.sellerGold
-  if (level === 'SILVER') return W.sellerSilver
-  return 0
-}
-
-function recencyScore(createdAt: Date) {
-  const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)
-  if (ageDays <= 7)  return W.recency
-  if (ageDays <= 30) return W.newish
-  return 0
-}
-
-// Normalise a raw count to 0-maxScore using sqrt dampening (so one product
-// with 1000 views doesn't completely bury everything else).
-function normalisedCount(count: number, maxPossible: number, maxScore: number) {
-  if (!count || !maxPossible) return 0
-  return (Math.sqrt(count) / Math.sqrt(maxPossible)) * maxScore
-}
-
-// Add a small random jitter so products with identical scores shuffle
-function jitter() {
-  return Math.random() * 3 - 1.5 // ±1.5 points
-}
+// ── GET /api/products ─────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     if (!user.universityId) {
-      return NextResponse.json({ error: 'No university on account' }, { status: 403 })
+      return NextResponse.json(
+        { error: 'No university associated with your account. Please contact support.' },
+        { status: 403 }
+      )
     }
 
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const category = searchParams.get('category')
+    const hostel   = searchParams.get('hostel')
+    const minPrice = searchParams.get('minPrice')
+    const maxPrice = searchParams.get('maxPrice')
+    const search   = searchParams.get('search')
 
-    // ── Signals sent from the client (localStorage data) ─────────────────────
-    // viewed: comma-separated category names from recently viewed products
-    // searched: comma-separated recent search terms
-    const viewedRaw   = searchParams.get('viewed')   || ''
-    const searchedRaw = searchParams.get('searched')  || ''
-
-    const viewedCategories  = viewedRaw.split(',').map(s => s.trim()).filter(Boolean)
-    const searchedTerms     = searchedRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-
-    // ── 1. Pull the user's order history to get their category preferences ───
-    const userOrders = await prisma.order.findMany({
-      where: { buyerId: user.id },
-      select: { product: { select: { category: true } } },
-      take: 100,
-      orderBy: { orderedAt: 'desc' },
-    })
-
-    const orderedCategories = new Set(
-      userOrders.map(o => o.product?.category).filter(Boolean) as string[]
+    const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
+    const limit = Math.min(
+      MAX_PAGE_SIZE,
+      Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE)))
     )
+    const skip = (page - 1) * limit
 
-    // ── 2. Fetch all active in-stock products for this university ─────────────
-    const allProducts = await prisma.product.findMany({
-      where: {
-        isActive:     true,
-        quantity:     { gt: 0 },
-        isDeleted:    false,
-        universityId: user.universityId,
-      },
-      include: {
-        seller: {
-          select: {
-            id:              true,
-            name:            true,
-            avgRating:       true,
-            trustLevel:      true,
-            completedOrders: true,
-          },
-        },
-        _count: {
-          select: { orders: true },
-        },
-      },
-    })
-
-    if (!allProducts.length) {
-      return NextResponse.json({ success: true, products: [], total: 0, page, hasMore: false })
+    const where: any = {
+      isActive:     true,
+      quantity:     { gt: 0 },
+      isDeleted:    false,
+      universityId: user.universityId,
     }
 
-    // ── 3. Find max counts for normalisation ──────────────────────────────────
-    const maxViewCount  = Math.max(...allProducts.map(p => p.viewCount || 0), 1)
-    const maxOrderCount = Math.max(...allProducts.map(p => p._count.orders || 0), 1)
+    if (category && category !== 'All') where.category = category
+    if (hostel   && hostel   !== 'All') where.hostelName = { contains: hostel, mode: 'insensitive' }
 
-    // ── 4. Score every product ────────────────────────────────────────────────
-    const scored = allProducts.map(product => {
-      let score = 0
+    if (minPrice || maxPrice) {
+      where.price = {}
+      if (minPrice) where.price.gte = parseFloat(minPrice)
+      if (maxPrice) where.price.lte = parseFloat(maxPrice)
+    }
 
-      const cat = product.category
+    if (search && search.trim()) {
+      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean)
+      where.AND = tokens.map((token: string) => ({
+        OR: [
+          { name:        { contains: token, mode: 'insensitive' } },
+          { category:    { contains: token, mode: 'insensitive' } },
+          { description: { contains: token, mode: 'insensitive' } },
+        ],
+      }))
+    }
 
-      // Order history signal (strongest)
-      if (orderedCategories.has(cat)) score += W.ordered
-
-      // Recently viewed signal
-      if (viewedCategories.includes(cat)) score += W.viewed
-
-      // Search signal — check if any search term matches category or product name
-      for (const term of searchedTerms) {
-        if (
-          cat.toLowerCase().includes(term) ||
-          product.name.toLowerCase().includes(term)
-        ) {
-          score += W.searched
-          break // don't double-count
-        }
-      }
-
-      // Popularity signals
-      score += normalisedCount(product.viewCount || 0, maxViewCount,  W.popular)
-      score += normalisedCount(product._count.orders || 0, maxOrderCount, W.orderCount)
-
-      // Seller trust
-      score += trustScore(product.seller?.trustLevel || 'BRONZE')
-
-      // Recency
-      score += recencyScore(product.createdAt)
-
-      // Small jitter to keep the feed feeling fresh on each load
-      score += jitter()
-
-      return { product, score }
-    })
-
-    // ── 5. Sort by score descending ───────────────────────────────────────────
-    scored.sort((a, b) => b.score - a.score)
-
-    // ── 6. Paginate ───────────────────────────────────────────────────────────
-    const total   = scored.length
-    const skip    = (page - 1) * PAGE_SIZE
-    const pageItems = scored.slice(skip, skip + PAGE_SIZE)
-
-    // ── 7. Annotate with feed metadata (real signals, not random) ─────────────
-    const now = Date.now()
-    const products = pageItems.map(({ product, score }) => {
-      const ageDays = (now - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-      const isPersonalised = orderedCategories.has(product.category) || viewedCategories.includes(product.category)
-      return {
-        ...product,
-        _feedScore:       Math.round(score),
-        isNew:            ageDays <= 7,
-        isTrending:       (product._count.orders >= 3) || (product.viewCount >= 20),
-        isPersonalised,   // used by UI to show "For You" badge
-      }
-    })
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          seller: {
+            select: {
+              id:              true,
+              name:            true,
+              avgRating:       true,
+              trustLevel:      true,
+              completedOrders: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take:    limit,
+        skip,
+      }),
+      prisma.product.count({ where }),
+    ])
 
     return NextResponse.json({
       success: true,
       products,
+      count:   products.length,
       total,
       page,
-      pages:   Math.ceil(total / PAGE_SIZE),
-      hasMore: skip + pageItems.length < total,
+      pages:   Math.ceil(total / limit),
+      hasMore: skip + products.length < total,
     })
   } catch (error) {
-    console.error('Feed error:', error)
-    return NextResponse.json({ error: 'Failed to load feed' }, { status: 500 })
+    console.error('Fetch products error:', error)
+    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+  }
+}
+
+// ── POST /api/products ────────────────────────────────────────────────────────
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!user.universityId) {
+      return NextResponse.json(
+        { error: 'No university associated with your account.' },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const {
+      name,
+      description,
+      price,
+      category,
+      subcategory,
+      quantity,
+      images,
+      hostelName,
+      roomNumber,
+      landmark,
+    } = body
+
+    if (!name || !price || !category || !quantity) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    if (typeof price !== 'number' || price <= 0) {
+      return NextResponse.json({ error: 'Invalid price' }, { status: 400 })
+    }
+
+    if (typeof quantity !== 'number' || quantity < 1) {
+      return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 })
+    }
+
+    const product = await prisma.product.create({
+      data: {
+        name:        String(name).trim().substring(0, 200),
+        description: description ? String(description).trim().substring(0, 5000) : '',
+        price:       Number(price),
+        category:    String(category),
+        ...(subcategory ? { subcategory: String(subcategory) } : {}),
+        quantity:    Number(quantity),
+        images:      Array.isArray(images) ? images : [],
+        seller:      { connect: { id: user.id } },
+        hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
+        roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
+        landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
+        university:  { connect: { id: user.universityId } },
+      },
+    })
+
+    // Fire price-check immediately after creation — non-blocking
+    const origin = request.headers.get('origin') || request.nextUrl.origin
+    firePriceCheck(product.id, '', origin)
+
+    return NextResponse.json({ success: true, product }, { status: 201 })
+  } catch (error) {
+    console.error('Create product error:', error)
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
   }
 }

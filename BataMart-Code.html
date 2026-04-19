@@ -8370,7 +8370,14 @@ export default function MarketplacePage() {
 
   // ── Derived data ──
   const forYouProducts = useMemo(() =&gt; allProducts.filter(p =&gt; p.isPersonalised).slice(0, 12), [allProducts])
-  const trendingProducts = useMemo(() =&gt; allProducts.filter(p =&gt; p.isTrending).slice(0, 12), [allProducts])
+  // Hot Deals: products with 12%+ discount, sorted highest % off first
+  const HOT_DEAL_MIN_PERCENT = 12
+  const hotDeals = useMemo(() =&gt; {
+    return allProducts
+      .filter(p =&gt; p.isDeal &amp;&amp; p.discountPercent &amp;&amp; p.discountPercent &gt;= HOT_DEAL_MIN_PERCENT &amp;&amp; p.marketPrice &amp;&amp; p.marketPrice &gt; p.price)
+      .sort((a, b) =&gt; (b.discountPercent || 0) - (a.discountPercent || 0))
+  }, [allProducts])
+  const trendingProducts = hotDeals.slice(0, 12)
   const newListings = useMemo(() =&gt; allProducts.filter(p =&gt; p.isNew), [allProducts])
   const discoverProducts = useMemo(() =&gt; {
     const shown = new Set([...forYouProducts, ...trendingProducts, ...newListings].map(p =&gt; p.id))
@@ -8806,16 +8813,16 @@ export default function MarketplacePage() {
               &lt;/div&gt;
             )}
 
-            {/* ── Flash Deals (trending) ── */}
+            {/* ── Flash Deals (highest % off first) ── */}
             {trendingProducts.length &gt; 0 &amp;&amp; (
               &lt;DealsSection
                 products={trendingProducts}
                 onProductClick={handleProductClick}
-                onSeeAll={() =&gt; handleCategorySelect('All')}
+                onSeeAll={() =&gt; router.push('/marketplace/deals')}
                 sectionClass="section-stripe-orange"
                 icon={&lt;Flame className="w-5 h-5 text-white" /&gt;}
-                title="Flash Deals"
-                subtitle="Trending on campus right now"
+                title="Hot Deals"
+                subtitle="Biggest discounts on campus right now"
                 badge="HOT"
               /&gt;
             )}
@@ -8970,6 +8977,788 @@ export default function MarketplacePage() {
           &lt;/Link&gt;
         &lt;/div&gt;
       )}
+    &lt;/div&gt;
+  )
+}</pre></div>
+<div class='file-block'><div class='file-header'>app/(marketplace)/marketplace/deals/page.tsx</div><pre>'use client'
+
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  Flame, ChevronLeft, Percent, Star, BadgeCheck, Tag,
+  Truck, Timer, SlidersHorizontal, X, Search, Loader2,
+  CheckCircle, ShoppingBag, Sparkles, Heart, Eye, ArrowUpDown,
+  ChevronDown, Filter,
+} from 'lucide-react'
+
+// ─────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────
+const DEALS_PAGE_SIZE = 16
+const HOT_DEAL_MIN_PERCENT = 12
+
+const DEALS_CSS = `
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .dc-enter { opacity: 0; animation: fadeSlideUp 0.4s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+  @keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+  }
+  .dc-shimmer {
+    background: linear-gradient(90deg,#f3f4f6 25%,#e9eaec 50%,#f3f4f6 75%);
+    background-size: 1200px 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .dc-card {
+    transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.3s ease;
+    will-change: transform;
+  }
+  .dc-card:hover { transform: translateY(-4px) scale(1.015); box-shadow: 0 20px 48px rgba(0,0,0,0.12), 0 4px 16px rgba(239,68,68,0.08); }
+  .dc-card:active { transform: scale(0.97); transition: transform 0.1s ease; }
+  .dc-card:hover .dc-img { transform: scale(1.08); }
+  .dc-img { transition: transform 0.5s cubic-bezier(0.22,1,0.36,1); }
+
+  .dc-quick { opacity:0; transform:translateY(6px); transition: opacity 0.2s ease, transform 0.2s ease; }
+  .dc-card:hover .dc-quick { opacity:1; transform:translateY(0); }
+
+  @keyframes floatBadge {
+    0%,100% { transform: translateY(0) rotate(-2deg); }
+    50%      { transform: translateY(-2px) rotate(-2deg); }
+  }
+  .dc-float { animation: floatBadge 3s ease-in-out infinite; }
+
+  @keyframes badgePulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:0.85; transform:scale(1.04); }
+  }
+  .dc-badge-pulse { animation: badgePulse 2s ease-in-out infinite; }
+
+  @keyframes spinLoader {
+    from { transform:rotate(0deg); }
+    to   { transform:rotate(360deg); }
+  }
+  .dc-spin { animation: spinLoader 0.8s linear infinite; }
+
+  .dc-filter-panel {
+    transition: max-height 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.25s ease;
+  }
+
+  .dc-range-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ef4444;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(239,68,68,0.4);
+  }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; }
+  input[type=range] { -webkit-appearance:none; appearance:none; background:transparent; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #ef4444 var(--val, 50%), #e5e7eb var(--val, 50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #ef4444;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(239,68,68,0.4);
+    margin-top: -7px;
+  }
+
+  .no-scrollbar::-webkit-scrollbar { display:none; }
+  .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+
+  .dc-pill {
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.34,1.4,0.64,1);
+  }
+  .dc-pill:hover { transform: scale(1.04); }
+  .dc-pill:active { transform: scale(0.96); }
+
+  .dc-hero {
+    background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 40%, #f97316 100%);
+  }
+
+  @keyframes viewerCount {
+    0%,100% { color:#ef4444; }
+    50%      { color:#f97316; }
+  }
+  .dc-viewer { animation: viewerCount 2.5s ease-in-out infinite; }
+`
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+const fmt = (p: number) =&gt;
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
+
+function seededShuffle&lt;T&gt;(arr: T[], seed: number): T[] {
+  const a = [...arr]
+  let s = seed
+  for (let i = a.length - 1; i &gt; 0; i--) {
+    s = (s * 1664525 + 1013904223) &amp; 0xffffffff
+    const j = Math.abs(s) % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function getDiscountTier(pct: number): { label: string; color: string; bg: string; ring: string } {
+  if (pct &gt;= 30) return { label: `${pct}% OFF`, color: 'text-red-700', bg: 'bg-red-100', ring: 'ring-red-300' }
+  if (pct &gt;= 20) return { label: `${pct}% OFF`, color: 'text-orange-700', bg: 'bg-orange-100', ring: 'ring-orange-300' }
+  return { label: `${pct}% OFF`, color: 'text-amber-700', bg: 'bg-amber-100', ring: 'ring-amber-300' }
+}
+
+const CATEGORIES = [
+  'All', 'Electronics', 'Fashion', 'Home &amp; Kitchen', 'Beauty &amp; Personal Care',
+  'Groceries / Food / Fast Food', 'Computing', 'Gaming', 'Automotive', 'Baby Products', 'Pets',
+]
+
+const CATEGORY_ICONS: Record&lt;string, string&gt; = {
+  'All': '🛍️', 'Electronics': '📱', 'Fashion': '👔', 'Home &amp; Kitchen': '🏠',
+  'Beauty &amp; Personal Care': '💄', 'Groceries / Food / Fast Food': '🍔',
+  'Computing': '💻', 'Gaming': '🎮', 'Automotive': '🚗', 'Baby Products': '👶', 'Pets': '🐾',
+}
+
+// ─────────────────────────────────────────────
+// Atoms
+// ─────────────────────────────────────────────
+function StarRating({ rating }: { rating: number }) {
+  return (
+    &lt;div className="flex items-center gap-0.5"&gt;
+      {[1,2,3,4,5].map(i =&gt; (
+        &lt;Star key={i} className={`w-3 h-3 ${i &lt;= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-gray-200 fill-gray-200'}`} /&gt;
+      ))}
+      &lt;span className="text-xs font-semibold text-gray-400 ml-0.5"&gt;{rating.toFixed(1)}&lt;/span&gt;
+    &lt;/div&gt;
+  )
+}
+
+function SkeletonCard() {
+  return (
+    &lt;div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm"&gt;
+      &lt;div className="aspect-square dc-shimmer" /&gt;
+      &lt;div className="p-3 space-y-2"&gt;
+        &lt;div className="h-2.5 dc-shimmer rounded-full w-1/2" /&gt;
+        &lt;div className="h-3.5 dc-shimmer rounded-full w-full" /&gt;
+        &lt;div className="h-3.5 dc-shimmer rounded-full w-3/4" /&gt;
+        &lt;div className="h-5   dc-shimmer rounded-full w-1/3 mt-3" /&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────
+// Deal Card
+// ─────────────────────────────────────────────
+function DealCard({ product, onClick, delay = 0 }: { product: any; onClick: () =&gt; void; delay?: number }) {
+  const pct = product.discountPercent || 0
+  const tier = getDiscountTier(pct)
+  const originalPrice = product.marketPrice &amp;&amp; product.marketPrice &gt; product.price ? product.marketPrice : null
+  const savings = originalPrice ? originalPrice - product.price : 0
+
+  return (
+    &lt;div
+      onClick={onClick}
+      className="dc-card dc-enter bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer flex flex-col group"
+      style={{ animationDelay: `${delay}ms` }}
+    &gt;
+      {/* Image */}
+      &lt;div className="relative aspect-square bg-gray-50 overflow-hidden"&gt;
+        &lt;img src={product.images?.[0] || '/placeholder.png'} alt={product.name} className="dc-img w-full h-full object-cover" /&gt;
+
+        {/* Discount badge — floating animated */}
+        &lt;div className="dc-float absolute top-2.5 right-2.5"&gt;
+          &lt;div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-orange-500 shadow-lg ring-2 ring-white"&gt;
+            &lt;span className="text-white font-black text-[13px] leading-none"&gt;-{pct}%&lt;/span&gt;
+            &lt;span className="text-white/80 font-bold text-[8px] leading-none mt-0.5"&gt;OFF&lt;/span&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        {/* Label badges */}
+        &lt;div className="absolute top-2.5 left-2.5 flex flex-col gap-1"&gt;
+          {pct &gt;= 30 &amp;&amp; (
+            &lt;span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
+              🔥 MEGA DEAL
+            &lt;/span&gt;
+          )}
+          {pct &gt;= 20 &amp;&amp; pct &lt; 30 &amp;&amp; (
+            &lt;span className="dc-badge-pulse inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
+              ⚡ HOT DEAL
+            &lt;/span&gt;
+          )}
+          {pct &gt;= 12 &amp;&amp; pct &lt; 20 &amp;&amp; (
+            &lt;span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-400 text-white text-[10px] font-black rounded-lg shadow-md"&gt;
+              🏷️ DEAL
+            &lt;/span&gt;
+          )}
+        &lt;/div&gt;
+
+        {product.images?.length &gt; 1 &amp;&amp; (
+          &lt;div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-black/50 text-white text-[10px] font-bold backdrop-blur-sm"&gt;
+            {product.images.length} photos
+          &lt;/div&gt;
+        )}
+
+        {/* Quick actions */}
+        &lt;div className="dc-quick absolute bottom-2 left-2 flex gap-1.5"&gt;
+          &lt;button onClick={e =&gt; e.stopPropagation()} className="w-7 h-7 bg-white/95 hover:bg-red-50 rounded-lg flex items-center justify-center shadow-sm transition-colors"&gt;
+            &lt;Heart className="w-3.5 h-3.5 text-gray-500 hover:text-red-500" /&gt;
+          &lt;/button&gt;
+          &lt;button onClick={e =&gt; { e.stopPropagation(); onClick() }} className="w-7 h-7 bg-white/95 rounded-lg flex items-center justify-center shadow-sm transition-colors"&gt;
+            &lt;Eye className="w-3.5 h-3.5 text-gray-500" /&gt;
+          &lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      {/* Info */}
+      &lt;div className="p-3 flex flex-col flex-1"&gt;
+        &lt;p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5"&gt;
+          {product.subcategory ? `${product.category} · ${product.subcategory}` : product.category}
+        &lt;/p&gt;
+        &lt;h3 className="font-bold text-gray-900 line-clamp-2 text-xs sm:text-sm leading-snug flex-1"&gt;{product.name}&lt;/h3&gt;
+
+        {/* Savings pill */}
+        {savings &gt; 0 &amp;&amp; (
+          &lt;div className={`mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ${tier.bg} ${tier.color} ${tier.ring} text-[10px] font-black self-start`}&gt;
+            &lt;Tag className="w-2.5 h-2.5" /&gt; Save {fmt(savings)}
+          &lt;/div&gt;
+        )}
+
+        {/* Price row */}
+        &lt;div className="mt-2 flex items-baseline gap-2 flex-wrap"&gt;
+          &lt;span className="text-red-600 font-black text-sm sm:text-base tracking-tight"&gt;{fmt(product.price)}&lt;/span&gt;
+          {originalPrice &amp;&amp; (
+            &lt;span className="text-gray-400 font-medium text-[11px] line-through"&gt;{fmt(originalPrice)}&lt;/span&gt;
+          )}
+        &lt;/div&gt;
+
+        &lt;StarRating rating={product.seller?.avgRating || 0} /&gt;
+
+        {/* Seller row */}
+        &lt;div className="flex items-center justify-between pt-2 mt-1.5 border-t border-gray-50"&gt;
+          &lt;div className="flex items-center gap-1 min-w-0"&gt;
+            &lt;span className="text-[10px] font-semibold text-gray-500 truncate"&gt;{product.seller?.name}&lt;/span&gt;
+            &lt;span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold ring-1 ring-blue-100 flex-shrink-0"&gt;
+              &lt;BadgeCheck className="w-2.5 h-2.5" /&gt; Verified
+            &lt;/span&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────
+// Filter Panel
+// ─────────────────────────────────────────────
+interface Filters {
+  category: string
+  minPrice: number
+  maxPrice: number
+  minDiscount: number
+  maxDiscount: number
+}
+
+const DEFAULT_FILTERS: Filters = {
+  category: 'All',
+  minPrice: 0,
+  maxPrice: 500000,
+  minDiscount: HOT_DEAL_MIN_PERCENT,
+  maxDiscount: 100,
+}
+
+function FilterPanel({
+  filters, onChange, allDeals, onClose
+}: {
+  filters: Filters
+  onChange: (f: Filters) =&gt; void
+  allDeals: any[]
+  onClose: () =&gt; void
+}) {
+  const maxPossiblePrice = useMemo(() =&gt; {
+    const prices = allDeals.map(p =&gt; p.price)
+    return prices.length ? Math.ceil(Math.max(...prices) / 10000) * 10000 : 500000
+  }, [allDeals])
+
+  const maxPossibleDiscount = useMemo(() =&gt; {
+    const discs = allDeals.map(p =&gt; p.discountPercent || 0)
+    return discs.length ? Math.max(...discs) : 100
+  }, [allDeals])
+
+  const set = (key: keyof Filters, val: string | number) =&gt; onChange({ ...filters, [key]: val })
+
+  return (
+    &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5"&gt;
+      &lt;div className="flex items-center justify-between"&gt;
+        &lt;div className="flex items-center gap-2"&gt;
+          &lt;SlidersHorizontal className="w-4 h-4 text-red-500" /&gt;
+          &lt;span className="font-black text-gray-900 text-sm"&gt;Filter Deals&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div className="flex items-center gap-2"&gt;
+          &lt;button
+            onClick={() =&gt; onChange(DEFAULT_FILTERS)}
+            className="text-[11px] font-bold text-gray-400 hover:text-red-500 transition-colors"
+          &gt;
+            Reset all
+          &lt;/button&gt;
+          &lt;button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"&gt;
+            &lt;X className="w-3.5 h-3.5 text-gray-500" /&gt;
+          &lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      {/* Category */}
+      &lt;div&gt;
+        &lt;p className="text-xs font-black text-gray-700 mb-2"&gt;Category&lt;/p&gt;
+        &lt;div className="flex flex-wrap gap-1.5"&gt;
+          {CATEGORIES.map(cat =&gt; (
+            &lt;button
+              key={cat}
+              onClick={() =&gt; set('category', cat)}
+              className={`dc-pill flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all ${
+                filters.category === cat
+                  ? 'bg-red-500 text-white border-red-500 shadow-sm'
+                  : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-red-300 hover:text-red-600'
+              }`}
+            &gt;
+              &lt;span&gt;{CATEGORY_ICONS[cat] || '🛍️'}&lt;/span&gt;
+              &lt;span className="hidden sm:inline"&gt;{cat}&lt;/span&gt;
+              &lt;span className="sm:hidden"&gt;{cat.split(' ')[0]}&lt;/span&gt;
+            &lt;/button&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      {/* Price range */}
+      &lt;div&gt;
+        &lt;div className="flex items-center justify-between mb-2"&gt;
+          &lt;p className="text-xs font-black text-gray-700"&gt;Price Range&lt;/p&gt;
+          &lt;span className="text-[11px] font-bold text-red-500"&gt;
+            {fmt(filters.minPrice)} — {filters.maxPrice &gt;= maxPossiblePrice ? 'Any' : fmt(filters.maxPrice)}
+          &lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div className="space-y-3"&gt;
+          &lt;div&gt;
+            &lt;label className="text-[10px] font-semibold text-gray-400 mb-1 block"&gt;Min price&lt;/label&gt;
+            &lt;input
+              type="range"
+              min={0}
+              max={maxPossiblePrice}
+              step={1000}
+              value={filters.minPrice}
+              onChange={e =&gt; set('minPrice', Number(e.target.value))}
+              style={{ '--val': `${(filters.minPrice / maxPossiblePrice) * 100}%` } as React.CSSProperties}
+              className="w-full h-1 accent-red-500"
+            /&gt;
+          &lt;/div&gt;
+          &lt;div&gt;
+            &lt;label className="text-[10px] font-semibold text-gray-400 mb-1 block"&gt;Max price&lt;/label&gt;
+            &lt;input
+              type="range"
+              min={0}
+              max={maxPossiblePrice}
+              step={1000}
+              value={filters.maxPrice}
+              onChange={e =&gt; set('maxPrice', Number(e.target.value))}
+              style={{ '--val': `${(filters.maxPrice / maxPossiblePrice) * 100}%` } as React.CSSProperties}
+              className="w-full h-1 accent-red-500"
+            /&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        {/* Quick price presets */}
+        &lt;div className="flex gap-1.5 mt-2 flex-wrap"&gt;
+          {[5000, 10000, 20000, 50000, 100000].map(v =&gt; (
+            &lt;button
+              key={v}
+              onClick={() =&gt; onChange({ ...filters, minPrice: 0, maxPrice: v })}
+              className={`dc-pill px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                filters.maxPrice === v &amp;&amp; filters.minPrice === 0
+                  ? 'bg-red-500 text-white border-red-500'
+                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-red-300'
+              }`}
+            &gt;
+              Under {fmt(v)}
+            &lt;/button&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      {/* Discount range */}
+      &lt;div&gt;
+        &lt;div className="flex items-center justify-between mb-2"&gt;
+          &lt;p className="text-xs font-black text-gray-700"&gt;Discount Range&lt;/p&gt;
+          &lt;span className="text-[11px] font-bold text-red-500"&gt;
+            {filters.minDiscount}% — {filters.maxDiscount &gt;= maxPossibleDiscount ? 'Max' : `${filters.maxDiscount}%`} OFF
+          &lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div className="space-y-3"&gt;
+          &lt;div&gt;
+            &lt;label className="text-[10px] font-semibold text-gray-400 mb-1 block"&gt;Min discount&lt;/label&gt;
+            &lt;input
+              type="range"
+              min={HOT_DEAL_MIN_PERCENT}
+              max={maxPossibleDiscount}
+              step={1}
+              value={filters.minDiscount}
+              onChange={e =&gt; set('minDiscount', Number(e.target.value))}
+              style={{ '--val': `${((filters.minDiscount - HOT_DEAL_MIN_PERCENT) / (maxPossibleDiscount - HOT_DEAL_MIN_PERCENT)) * 100}%` } as React.CSSProperties}
+              className="w-full h-1 accent-red-500"
+            /&gt;
+          &lt;/div&gt;
+          &lt;div&gt;
+            &lt;label className="text-[10px] font-semibold text-gray-400 mb-1 block"&gt;Max discount&lt;/label&gt;
+            &lt;input
+              type="range"
+              min={HOT_DEAL_MIN_PERCENT}
+              max={maxPossibleDiscount}
+              step={1}
+              value={filters.maxDiscount}
+              onChange={e =&gt; set('maxDiscount', Number(e.target.value))}
+              style={{ '--val': `${((filters.maxDiscount - HOT_DEAL_MIN_PERCENT) / (maxPossibleDiscount - HOT_DEAL_MIN_PERCENT)) * 100}%` } as React.CSSProperties}
+              className="w-full h-1 accent-red-500"
+            /&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        {/* Quick discount presets */}
+        &lt;div className="flex gap-1.5 mt-2 flex-wrap"&gt;
+          {[
+            { label: '12%+',  min: 12, max: 100 },
+            { label: '20%+',  min: 20, max: 100 },
+            { label: '30%+',  min: 30, max: 100 },
+            { label: '50%+',  min: 50, max: 100 },
+          ].map(p =&gt; (
+            &lt;button
+              key={p.label}
+              onClick={() =&gt; onChange({ ...filters, minDiscount: p.min, maxDiscount: p.max })}
+              className={`dc-pill px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                filters.minDiscount === p.min &amp;&amp; filters.maxDiscount === p.max
+                  ? 'bg-red-500 text-white border-red-500'
+                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-red-300'
+              }`}
+            &gt;
+              {p.label}
+            &lt;/button&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────
+// Stats strip
+// ─────────────────────────────────────────────
+function DealsStatsStrip({ deals }: { deals: any[] }) {
+  const avgDiscount = deals.length
+    ? Math.round(deals.reduce((s, p) =&gt; s + (p.discountPercent || 0), 0) / deals.length)
+    : 0
+  const maxDiscount = deals.length ? Math.max(...deals.map(p =&gt; p.discountPercent || 0)) : 0
+  const totalSavings = deals.reduce((s, p) =&gt; s + (p.marketPrice &gt; p.price ? p.marketPrice - p.price : 0), 0)
+
+  return (
+    &lt;div className="grid grid-cols-3 gap-2"&gt;
+      {[
+        { label: 'Deals Live', value: deals.length.toString(), sub: 'active right now', icon: '🔥' },
+        { label: 'Avg Discount', value: `${avgDiscount}%`, sub: 'off market price', icon: '📉' },
+        { label: 'Max Deal',  value: `${maxDiscount}%`, sub: 'biggest saving', icon: '🏆' },
+      ].map(s =&gt; (
+        &lt;div key={s.label} className="bg-white/15 border border-white/20 rounded-2xl p-3 text-center"&gt;
+          &lt;p className="text-lg font-black text-white"&gt;{s.icon} {s.value}&lt;/p&gt;
+          &lt;p className="text-[10px] font-bold text-white/70 mt-0.5"&gt;{s.sub}&lt;/p&gt;
+        &lt;/div&gt;
+      ))}
+    &lt;/div&gt;
+  )
+}
+
+// ─────────────────────────────────────────────
+// Main Page
+// ─────────────────────────────────────────────
+export default function DealsPage() {
+  const router = useRouter()
+
+  const [allDeals, setAllDeals]             = useState&lt;any[]&gt;([])
+  const [loading, setLoading]               = useState(true)
+  const [filters, setFilters]               = useState&lt;Filters&gt;(DEFAULT_FILTERS)
+  const [showFilters, setShowFilters]       = useState(false)
+  const [searchInput, setSearchInput]       = useState('')
+  const [visibleCount, setVisibleCount]     = useState(DEALS_PAGE_SIZE)
+  const [loadingMore, setLoadingMore]       = useState(false)
+  const [renderSeed]                        = useState(() =&gt; Date.now())
+  const loaderRef                           = useRef&lt;HTMLDivElement&gt;(null)
+
+  // ── Inject CSS ──
+  useEffect(() =&gt; {
+    if (document.getElementById('batamart-deals-css')) return
+    const s = document.createElement('style')
+    s.id = 'batamart-deals-css'
+    s.textContent = DEALS_CSS
+    document.head.appendChild(s)
+  }, [])
+
+  // ── Fetch deals ──
+  useEffect(() =&gt; {
+    const token = localStorage.getItem('token')
+    if (!token) { router.push('/login'); return }
+
+    setLoading(true)
+    fetch('/api/products/feed', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r =&gt; r.json())
+      .then(data =&gt; {
+        const products: any[] = data.products || []
+        const deals = products.filter(
+          p =&gt; p.isDeal &amp;&amp; p.discountPercent &amp;&amp; p.discountPercent &gt;= HOT_DEAL_MIN_PERCENT &amp;&amp; p.marketPrice &amp;&amp; p.marketPrice &gt; p.price
+        )
+        setAllDeals(deals)
+      })
+      .catch(() =&gt; {})
+      .finally(() =&gt; setLoading(false))
+  }, [router])
+
+  // ── Product click ──
+  const handleProductClick = (id: string) =&gt; {
+    const token = localStorage.getItem('token')
+    if (!token) { router.push('/login'); return }
+    fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() =&gt; {})
+    window.location.href = `/product/${id}`
+  }
+
+  // ── Filtered + shuffled deals ──
+  const filteredDeals = useMemo(() =&gt; {
+    const q = searchInput.trim().toLowerCase()
+    let list = allDeals.filter(p =&gt; {
+      if (filters.category !== 'All' &amp;&amp; p.category !== filters.category) return false
+      if (p.price &lt; filters.minPrice || p.price &gt; filters.maxPrice) return false
+      const pct = p.discountPercent || 0
+      if (pct &lt; filters.minDiscount || pct &gt; filters.maxDiscount) return false
+      if (q) {
+        return (
+          p.name.toLowerCase().includes(q) ||
+          p.category?.toLowerCase().includes(q) ||
+          (p.subcategory?.toLowerCase() || '').includes(q) ||
+          p.seller?.name?.toLowerCase().includes(q)
+        )
+      }
+      return true
+    })
+    // Shuffle randomly (seed changes only on page load, not on filter change)
+    return seededShuffle(list, renderSeed)
+  }, [allDeals, filters, searchInput, renderSeed])
+
+  const visible = filteredDeals.slice(0, visibleCount)
+  const hasMore = visibleCount &lt; filteredDeals.length
+
+  // Reset pagination on filter change
+  useEffect(() =&gt; { setVisibleCount(DEALS_PAGE_SIZE) }, [filters, searchInput])
+
+  // Infinite scroll
+  useEffect(() =&gt; {
+    if (!loaderRef.current) return
+    const obs = new IntersectionObserver(entries =&gt; {
+      if (entries[0].isIntersecting &amp;&amp; hasMore &amp;&amp; !loadingMore) {
+        setLoadingMore(true)
+        setTimeout(() =&gt; { setVisibleCount(c =&gt; c + DEALS_PAGE_SIZE); setLoadingMore(false) }, 500)
+      }
+    }, { threshold: 0.1 })
+    obs.observe(loaderRef.current)
+    return () =&gt; obs.disconnect()
+  }, [hasMore, loadingMore])
+
+  // Active filter count
+  const activeFilterCount = [
+    filters.category !== 'All',
+    filters.minPrice &gt; 0,
+    filters.maxPrice &lt; 500000,
+    filters.minDiscount &gt; HOT_DEAL_MIN_PERCENT,
+    filters.maxDiscount &lt; 100,
+  ].filter(Boolean).length
+
+  return (
+    &lt;div className="min-h-screen bg-[#f0f2f5]"&gt;
+      {/* ── Hero ── */}
+      &lt;div className="dc-hero"&gt;
+        {/* Back nav */}
+        &lt;div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4"&gt;
+          &lt;button
+            onClick={() =&gt; router.back()}
+            className="flex items-center gap-2 text-white/80 hover:text-white transition-colors font-bold text-sm"
+          &gt;
+            &lt;ChevronLeft className="w-4 h-4" /&gt; Back to Marketplace
+          &lt;/button&gt;
+        &lt;/div&gt;
+
+        &lt;div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-6 space-y-4"&gt;
+          {/* Title */}
+          &lt;div className="flex items-center gap-3"&gt;
+            &lt;div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center ring-2 ring-white/30"&gt;
+              &lt;Flame className="w-5 h-5 text-white" /&gt;
+            &lt;/div&gt;
+            &lt;div&gt;
+              &lt;h1 className="text-2xl font-black text-white tracking-tight"&gt;Hot Deals&lt;/h1&gt;
+              &lt;p className="text-white/70 text-sm font-medium"&gt;Campus discounts — 12% to 50%+ off&lt;/p&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          {/* Stats */}
+          {!loading &amp;&amp; allDeals.length &gt; 0 &amp;&amp; &lt;DealsStatsStrip deals={allDeals} /&gt;}
+
+          {/* Search */}
+          &lt;div className="flex items-center gap-2 bg-white/15 hover:bg-white/20 rounded-xl px-4 py-2.5 transition-colors ring-1 ring-white/20 focus-within:ring-white/40 focus-within:bg-white/25"&gt;
+            &lt;Search className="w-4 h-4 text-white/70 flex-shrink-0" /&gt;
+            &lt;input
+              type="text"
+              value={searchInput}
+              onChange={e =&gt; setSearchInput(e.target.value)}
+              placeholder="Search deals by name, category, seller…"
+              className="flex-1 bg-transparent outline-none text-sm text-white placeholder-white/50 min-w-0"
+            /&gt;
+            {searchInput &amp;&amp; (
+              &lt;button onClick={() =&gt; setSearchInput('')} className="text-white/60 hover:text-white"&gt;
+                &lt;X className="w-3.5 h-3.5" /&gt;
+              &lt;/button&gt;
+            )}
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      {/* ── Body ── */}
+      &lt;div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 pb-28 space-y-4"&gt;
+
+        {/* Filter toolbar */}
+        &lt;div className="flex items-center gap-2 flex-wrap"&gt;
+          &lt;button
+            onClick={() =&gt; setShowFilters(v =&gt; !v)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm border transition-all ${
+              showFilters || activeFilterCount &gt; 0
+                ? 'bg-red-500 text-white border-red-500 shadow-sm'
+                : 'bg-white text-gray-700 border-gray-200 hover:border-red-300 hover:text-red-600'
+            }`}
+          &gt;
+            &lt;Filter className="w-4 h-4" /&gt;
+            Filters
+            {activeFilterCount &gt; 0 &amp;&amp; (
+              &lt;span className="w-5 h-5 rounded-full bg-white text-red-500 text-[10px] font-black flex items-center justify-center"&gt;
+                {activeFilterCount}
+              &lt;/span&gt;
+            )}
+          &lt;/button&gt;
+
+          {/* Active filter chips */}
+          {filters.category !== 'All' &amp;&amp; (
+            &lt;span className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl border border-gray-200 text-[11px] font-bold text-gray-700 shadow-sm"&gt;
+              {CATEGORY_ICONS[filters.category]} {filters.category}
+              &lt;button onClick={() =&gt; setFilters(f =&gt; ({ ...f, category: 'All' }))} className="text-gray-400 hover:text-red-500 ml-0.5"&gt;
+                &lt;X className="w-3 h-3" /&gt;
+              &lt;/button&gt;
+            &lt;/span&gt;
+          )}
+          {(filters.minPrice &gt; 0 || filters.maxPrice &lt; 500000) &amp;&amp; (
+            &lt;span className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl border border-gray-200 text-[11px] font-bold text-gray-700 shadow-sm"&gt;
+              💰 {fmt(filters.minPrice)} — {fmt(filters.maxPrice)}
+              &lt;button onClick={() =&gt; setFilters(f =&gt; ({ ...f, minPrice: 0, maxPrice: 500000 }))} className="text-gray-400 hover:text-red-500 ml-0.5"&gt;
+                &lt;X className="w-3 h-3" /&gt;
+              &lt;/button&gt;
+            &lt;/span&gt;
+          )}
+          {(filters.minDiscount &gt; HOT_DEAL_MIN_PERCENT || filters.maxDiscount &lt; 100) &amp;&amp; (
+            &lt;span className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl border border-gray-200 text-[11px] font-bold text-gray-700 shadow-sm"&gt;
+              &lt;Percent className="w-3 h-3 text-red-500" /&gt; {filters.minDiscount}% — {filters.maxDiscount}% OFF
+              &lt;button onClick={() =&gt; setFilters(f =&gt; ({ ...f, minDiscount: HOT_DEAL_MIN_PERCENT, maxDiscount: 100 }))} className="text-gray-400 hover:text-red-500 ml-0.5"&gt;
+                &lt;X className="w-3 h-3" /&gt;
+              &lt;/button&gt;
+            &lt;/span&gt;
+          )}
+
+          &lt;div className="ml-auto text-[11px] text-gray-400 font-medium"&gt;
+            {loading ? 'Loading…' : `${filteredDeals.length} deal${filteredDeals.length !== 1 ? 's' : ''}`}
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        {/* Filter panel */}
+        {showFilters &amp;&amp; (
+          &lt;FilterPanel
+            filters={filters}
+            onChange={setFilters}
+            allDeals={allDeals}
+            onClose={() =&gt; setShowFilters(false)}
+          /&gt;
+        )}
+
+        {/* Content */}
+        {loading ? (
+          &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
+            {Array.from({ length: 10 }).map((_, i) =&gt; &lt;SkeletonCard key={i} /&gt;)}
+          &lt;/div&gt;
+        ) : filteredDeals.length === 0 ? (
+          &lt;div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm"&gt;
+            &lt;div className="text-5xl mb-4"&gt;🏷️&lt;/div&gt;
+            &lt;p className="text-gray-700 font-black text-lg mb-1"&gt;No deals match your filters&lt;/p&gt;
+            &lt;p className="text-gray-400 text-sm mb-5"&gt;Try adjusting the category, price or discount range&lt;/p&gt;
+            &lt;button
+              onClick={() =&gt; { setFilters(DEFAULT_FILTERS); setSearchInput('') }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-xl font-bold text-sm shadow-md hover:bg-red-600 transition-colors"
+            &gt;
+              &lt;X className="w-4 h-4" /&gt; Clear all filters
+            &lt;/button&gt;
+          &lt;/div&gt;
+        ) : (
+          &lt;&gt;
+            {/* Discount tier legend */}
+            &lt;div className="flex gap-2 flex-wrap text-[10px] font-bold"&gt;
+              &lt;span className="flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full ring-1 ring-red-300"&gt;🔥 MEGA DEAL = 30%+ off&lt;/span&gt;
+              &lt;span className="flex items-center gap-1 px-2.5 py-1 bg-orange-100 text-orange-700 rounded-full ring-1 ring-orange-300"&gt;⚡ HOT DEAL = 20–29% off&lt;/span&gt;
+              &lt;span className="flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full ring-1 ring-amber-300"&gt;🏷️ DEAL = 12–19% off&lt;/span&gt;
+            &lt;/div&gt;
+
+            &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
+              {visible.map((p, i) =&gt; (
+                &lt;DealCard
+                  key={p.id}
+                  product={p}
+                  onClick={() =&gt; handleProductClick(p.id)}
+                  delay={i * 30}
+                /&gt;
+              ))}
+              {loadingMore &amp;&amp; Array.from({ length: 4 }).map((_, i) =&gt; &lt;SkeletonCard key={`skel-${i}`} /&gt;)}
+            &lt;/div&gt;
+
+            {/* Infinite scroll sentinel */}
+            &lt;div ref={loaderRef} className="flex justify-center items-center py-8"&gt;
+              {loadingMore ? (
+                &lt;div className="flex items-center gap-2 text-gray-400 text-sm font-medium"&gt;
+                  &lt;Loader2 className="w-4 h-4 dc-spin" /&gt; Loading more deals…
+                &lt;/div&gt;
+              ) : hasMore ? (
+                &lt;div className="w-full h-4" /&gt;
+              ) : (
+                &lt;div className="flex flex-col items-center gap-1 text-gray-300"&gt;
+                  &lt;CheckCircle className="w-5 h-5" /&gt;
+                  &lt;p className="text-xs font-semibold"&gt;You&amp;apos;ve seen all the deals!&lt;/p&gt;
+                  &lt;button
+                    onClick={() =&gt; router.back()}
+                    className="mt-2 text-xs font-bold text-red-500 hover:underline flex items-center gap-1"
+                  &gt;
+                    &lt;ChevronLeft className="w-3 h-3" /&gt; Back to Marketplace
+                  &lt;/button&gt;
+                &lt;/div&gt;
+              )}
+            &lt;/div&gt;
+          &lt;/&gt;
+        )}
+      &lt;/div&gt;
     &lt;/div&gt;
   )
 }</pre></div>
@@ -13768,10 +14557,10 @@ function PinDots({ value }: { value: string }) {
 // ── Modal Shell ───────────────────────────────────────────────────────────────
 function ModalShell({ onClose, children }: { onClose: () =&gt; void; children: React.ReactNode }) {
   return (
-    &lt;div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"&gt;
+    &lt;div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"&gt;
       &lt;div className="absolute inset-0" onClick={onClose} /&gt;
-      &lt;div className="scale-in relative bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto"&gt;
-        &lt;div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1 sm:hidden" /&gt;
+      &lt;div className="scale-in relative bg-white rounded-3xl w-full max-w-md shadow-2xl max-h-[88vh] overflow-y-auto"&gt;
+        &lt;div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" /&gt;
         {children}
       &lt;/div&gt;
     &lt;/div&gt;
@@ -14513,7 +15302,8 @@ export default function WalletPage() {
       )}
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/about/page.tsx</div><pre>import Link from 'next/link'
 import {
   ShoppingBag,
@@ -15355,38 +16145,40 @@ export default function MyProfilePage() {
       {showIOSInstallModal &amp;&amp; (
         &lt;&gt;
           &lt;div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() =&gt; setShowIOSInstallModal(false)} /&gt;
-          &lt;div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl p-6 shadow-2xl"&gt;
-            &lt;div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" /&gt;
-            &lt;div className="flex items-center gap-3 mb-5"&gt;
-              &lt;div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}&gt;
-                &lt;span className="text-2xl"&gt;🛍️&lt;/span&gt;
-              &lt;/div&gt;
-              &lt;div&gt;
-                &lt;p className="font-black text-gray-900"&gt;Add BataMart to Home Screen&lt;/p&gt;
-                &lt;p className="text-sm text-gray-500"&gt;Get the full app experience 🚀&lt;/p&gt;
-              &lt;/div&gt;
-            &lt;/div&gt;
-            &lt;div className="space-y-3 mb-6"&gt;
-              {[
-                { icon: '⎋', bg: 'bg-blue-50', title: 'Tap the Share button', sub: 'At the bottom of your Safari browser' },
-                { icon: '➕', bg: 'bg-indigo-50', title: 'Tap "Add to Home Screen"', sub: 'Scroll down in the share sheet' },
-                { icon: '✅', bg: 'bg-emerald-50', title: 'Tap "Add" to confirm', sub: 'BataMart appears on your home screen' },
-              ].map(({ icon, bg, title, sub }) =&gt; (
-                &lt;div key={title} className={`flex items-center gap-3 ${bg} rounded-2xl px-4 py-3.5`}&gt;
-                  &lt;span className="text-xl"&gt;{icon}&lt;/span&gt;
-                  &lt;div&gt;
-                    &lt;p className="font-black text-sm text-gray-800"&gt;{title}&lt;/p&gt;
-                    &lt;p className="text-xs text-gray-500 mt-0.5"&gt;{sub}&lt;/p&gt;
-                  &lt;/div&gt;
+          &lt;div className="fixed inset-0 z-50 flex items-center justify-center p-4"&gt;
+            &lt;div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl max-h-[88vh] overflow-y-auto"&gt;
+              &lt;div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" /&gt;
+              &lt;div className="flex items-center gap-3 mb-5"&gt;
+                &lt;div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}&gt;
+                  &lt;span className="text-2xl"&gt;🛍️&lt;/span&gt;
                 &lt;/div&gt;
-              ))}
+                &lt;div&gt;
+                  &lt;p className="font-black text-gray-900"&gt;Add BataMart to Home Screen&lt;/p&gt;
+                  &lt;p className="text-sm text-gray-500"&gt;Get the full app experience 🚀&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;div className="space-y-3 mb-6"&gt;
+                {[
+                  { icon: '⎋', bg: 'bg-blue-50', title: 'Tap the Share button', sub: 'At the bottom of your Safari browser' },
+                  { icon: '➕', bg: 'bg-indigo-50', title: 'Tap "Add to Home Screen"', sub: 'Scroll down in the share sheet' },
+                  { icon: '✅', bg: 'bg-emerald-50', title: 'Tap "Add" to confirm', sub: 'BataMart appears on your home screen' },
+                ].map(({ icon, bg, title, sub }) =&gt; (
+                  &lt;div key={title} className={`flex items-center gap-3 ${bg} rounded-2xl px-4 py-3.5`}&gt;
+                    &lt;span className="text-xl"&gt;{icon}&lt;/span&gt;
+                    &lt;div&gt;
+                      &lt;p className="font-black text-sm text-gray-800"&gt;{title}&lt;/p&gt;
+                      &lt;p className="text-xs text-gray-500 mt-0.5"&gt;{sub}&lt;/p&gt;
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+                ))}
+              &lt;/div&gt;
+              &lt;button onClick={() =&gt; setShowIOSInstallModal(false)}
+                className="w-full text-white font-black py-4 rounded-2xl text-sm mb-3"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}&gt;
+                Got it!
+              &lt;/button&gt;
+              &lt;button onClick={() =&gt; setShowIOSInstallModal(false)} className="w-full text-gray-400 text-sm font-medium"&gt;Maybe later&lt;/button&gt;
             &lt;/div&gt;
-            &lt;button onClick={() =&gt; setShowIOSInstallModal(false)}
-              className="w-full text-white font-black py-4 rounded-2xl text-sm mb-3"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)' }}&gt;
-              Got it!
-            &lt;/button&gt;
-            &lt;button onClick={() =&gt; setShowIOSInstallModal(false)} className="w-full text-gray-400 text-sm font-medium"&gt;Maybe later&lt;/button&gt;
           &lt;/div&gt;
         &lt;/&gt;
       )}
@@ -15846,7 +16638,8 @@ function SearchHistory() {
       ))}
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/privacy/page.tsx</div><pre>import Link from 'next/link'
 import { Shield, Eye, Lock, Database, UserCheck, Bell } from 'lucide-react'
 
@@ -24629,16 +25422,23 @@ setInterval(() =&gt; {
 // proves "this email/phone passed OTP". The signup-with-password route verifies
 // this token before creating the account — so you can't sign up with an email
 // you never verified.
-const OTP_SESSION_SECRET  = process.env.JWT_SECRET! // reuse the same secret
 const OTP_SESSION_EXPIRES = '15m' // must complete signup within 15 minutes
 
+function getOtpSessionSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('Server misconfiguration: JWT_SECRET is not set.')
+  }
+  return secret
+}
+
 function issueOtpSessionToken(identifier: string): string {
-  return jwt.sign({ verified: identifier }, OTP_SESSION_SECRET, { expiresIn: OTP_SESSION_EXPIRES })
+  return jwt.sign({ verified: identifier }, getOtpSessionSecret(), { expiresIn: OTP_SESSION_EXPIRES })
 }
 
 export function verifyOtpSessionToken(token: string): string | null {
   try {
-    const payload = jwt.verify(token, OTP_SESSION_SECRET) as { verified: string }
+    const payload = jwt.verify(token, getOtpSessionSecret()) as { verified: string }
     return payload.verified ?? null
   } catch {
     return null
@@ -24728,7 +25528,8 @@ export async function POST(request: NextRequest) {
     console.error('Verify OTP error:', error)
     return NextResponse.json({ error: 'Verification failed. Please try again.' }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/disputes/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/disputes/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
@@ -33232,19 +34033,22 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set.')
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('Server misconfiguration: JWT_SECRET is not set.')
+  }
+  return secret
 }
 
 // ── FIXED: added optional `role` param so rider tokens carry the role claim ──
 export function generateToken(userId: string, phone: string | null, role?: string): string {
-  return jwt.sign({ userId, phone, ...(role ? { role } : {}) }, JWT_SECRET!, { expiresIn: '30d' })
+  return jwt.sign({ userId, phone, ...(role ? { role } : {}) }, getJwtSecret(), { expiresIn: '30d' })
 }
 
 export function verifyToken(token: string): { userId: string; phone: string; role?: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET!) as { userId: string; phone: string; role?: string }
+    return jwt.verify(token, getJwtSecret()) as { userId: string; phone: string; role?: string }
   } catch {
     return null
   }
@@ -33420,15 +34224,19 @@ export const getUserFromRequest = async (request: Request) =&gt; {
   })
 
   return user
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>lib/auth/index.ts</div><pre>import { cookies } from 'next/headers'
 import jwt from 'jsonwebtoken'
 
 // ─── Same JWT_SECRET as lib/auth/auth.ts ─────────────────────────────────────
 // Both files must use the SAME secret. Never hardcode a fallback string.
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set.')
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('Server misconfiguration: JWT_SECRET is not set.')
+  }
+  return secret
 }
 
 export interface AuthSession {
@@ -33447,7 +34255,7 @@ export async function getAuthSession(): Promise&lt;AuthSession | null&gt; {
 
     if (!token) return null
 
-    const decoded = jwt.verify(token, JWT_SECRET!) as {
+    const decoded = jwt.verify(token, getJwtSecret()) as {
       userId: string
       email: string
       name: string | null
@@ -33472,7 +34280,8 @@ export async function requireAuth(): Promise&lt;AuthSession&gt; {
   const session = await getAuthSession()
   if (!session) throw new Error('Unauthorized')
   return session
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>lib/auth/utils.ts</div><pre>import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -33783,11 +34592,29 @@ import {
   newReviewEmail,
 } from '@/lib/email/emailTemplates'
 
-webpush.setVapidDetails(
-  `mailto:${process.env.VAPID_EMAIL}`,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
+let vapidConfigured = false
+
+function ensureVapidConfigured(): boolean {
+  if (vapidConfigured) return true
+
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  const vapidEmail = process.env.VAPID_EMAIL
+
+  if (!publicKey || !privateKey || !vapidEmail) {
+    console.warn('[Push] VAPID env vars are missing. Push notifications are disabled.')
+    return false
+  }
+
+  try {
+    webpush.setVapidDetails(`mailto:${vapidEmail}`, publicKey, privateKey)
+    vapidConfigured = true
+    return true
+  } catch (error) {
+    console.error('[Push] Failed to initialize VAPID config:', error)
+    return false
+  }
+}
 
 interface PushPayload {
   title: string
@@ -33803,6 +34630,8 @@ interface PushPayload {
 // Stale/expired subscriptions (410/404) are auto-deleted.
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise&lt;boolean&gt; {
   try {
+    if (!ensureVapidConfigured()) return false
+
     const subscriptions = await prisma.pushSubscription.findMany({ where: { userId } })
     if (subscriptions.length === 0) return false
 
@@ -34075,7 +34904,8 @@ export async function notifyAvailableRiders(orderNumber: string): Promise&lt;voi
   } catch (error) {
     console.error(`[Push] notifyAvailableRiders failed for order #${orderNumber}:`, error)
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>lib/referral/generateReferralCode.ts</div><pre>// lib/referral/generateReferralCode.ts
 // Utility to generate unique BATAMART-XXXXXX referral codes
 
