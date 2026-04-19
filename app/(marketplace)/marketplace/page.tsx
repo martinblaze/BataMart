@@ -1565,7 +1565,9 @@ export default function MarketplacePage() {
   const newListings = useMemo(() => allProducts.filter(p => p.isNew), [allProducts])
   const discoverProducts = useMemo(() => {
     const shown = new Set([...forYouProducts, ...trendingProducts, ...newListings].map(p => p.id))
-    return allProducts.filter(p => !shown.has(p.id)).slice(0, 16)
+    const remaining = allProducts.filter(p => !shown.has(p.id))
+    // Always keep an "All Listings" fallback visible even when sections above consume most products.
+    return (remaining.length > 0 ? remaining : allProducts).slice(0, 16)
   }, [allProducts, forYouProducts, trendingProducts, newListings])
 
   const filteredByCategory = useMemo(() => {
@@ -2114,13 +2116,13 @@ export default function MarketplacePage() {
               <BestSellersRow products={productsByCategory['Gaming']} onProductClick={handleProductClick} onSeeAll={() => handleCategorySelect('Gaming')} title="Best Sellers in Gaming" subtitle="Level up your setup" />
             )}
 
-            {/* ── Discover More ── */}
+            {/* ── All Listings ── */}
             {discoverProducts.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-black text-gray-900 section-header-line">Discover More</h2>
-                    <p className="text-xs text-gray-400 mt-1">Explore everything on campus</p>
+                    <h2 className="text-base font-black text-gray-900 section-header-line">All Listings</h2>
+                    <p className="text-xs text-gray-400 mt-1">Everything currently live in your campus marketplace</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
