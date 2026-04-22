@@ -415,6 +415,18 @@ html.app-mode .marketplace-shell {
     linear-gradient(180deg, #edf2f8 0%, #e7ebf2 42%, #e3e9f1 100%) !important;
 }
 
+html.dark.app-mode .marketplace-shell {
+  background:
+    radial-gradient(140% 80% at 50% -15%, rgba(99, 102, 241, 0.22), transparent 54%),
+    linear-gradient(180deg, #0b1325 0%, #060d1d 45%, #040a16 100%) !important;
+}
+
+.dark .marketplace-shell {
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(99, 102, 241, 0.2), transparent 55%),
+    linear-gradient(180deg, #0b1325 0%, #060d1d 50%, #040a16 100%) !important;
+}
+
 html.app-mode .marketplace-header {
   backdrop-filter: saturate(150%) blur(8px);
   -webkit-backdrop-filter: saturate(150%) blur(8px);
@@ -449,6 +461,10 @@ html.app-mode .marketplace-categories .cat-btn.cat-active {
 
 html.app-mode .marketplace-feed {
   padding-top: 0.8rem !important;
+}
+
+html.dark.app-mode .marketplace-feed {
+  background: transparent !important;
 }
 
 html.app-mode .marketplace-feed > div {
