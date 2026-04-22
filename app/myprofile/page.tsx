@@ -7,10 +7,11 @@ import {
   User, ShoppingBag, Store, PlusCircle, Wallet, Package,
   AlertTriangle, LogOut, ChevronRight, MapPin, Phone,
   Home, Mail, Edit2, Check, X, Loader2, Menu, Gift,
-  Sparkles, Bell, BellOff, Shield, Star, Search,
+  Sparkles, Bell, BellOff, Shield, Star, Search, Sun, Moon,
 } from 'lucide-react'
 import { ReferralCard } from '@/components/ui/ReferralCard'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
+import { useTheme } from '@/components/layout/ThemeProvider'
 
 const PROFILE_CSS = `
   @keyframes fadeUp {
@@ -84,6 +85,70 @@ const PROFILE_CSS = `
     transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
   }
   .slide-menu-open { transform: translateX(0); }
+
+  .theme-toggle {
+    transition: all 0.2s ease;
+  }
+  .theme-toggle:hover {
+    transform: translateY(-1px);
+  }
+
+  .dark .profile-page { background: #050b16 !important; }
+  .dark .profile-page .bg-white { background-color: #0f172a !important; }
+  .dark .profile-page .bg-gray-50 { background-color: #1f2937 !important; }
+  .dark .profile-page .bg-gray-100 { background-color: #243244 !important; }
+  .dark .profile-page .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.2) !important; }
+  .dark .profile-page .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.18) !important; }
+  .dark .profile-page .bg-violet-50 { background-color: rgba(139, 92, 246, 0.2) !important; }
+  .dark .profile-page .bg-blue-50 { background-color: rgba(59, 130, 246, 0.18) !important; }
+  .dark .profile-page .bg-amber-50 { background-color: rgba(245, 158, 11, 0.18) !important; }
+  .dark .profile-page .border-gray-50,
+  .dark .profile-page .border-gray-100,
+  .dark .profile-page .border-gray-200 { border-color: #273449 !important; }
+  .dark .profile-page .text-gray-900 { color: #f8fafc !important; }
+  .dark .profile-page .text-gray-800 { color: #e2e8f0 !important; }
+  .dark .profile-page .text-gray-700 { color: #cbd5e1 !important; }
+  .dark .profile-page .text-gray-600 { color: #94a3b8 !important; }
+  .dark .profile-page .text-gray-500 { color: #94a3b8 !important; }
+  .dark .profile-page .text-gray-400 { color: #64748b !important; }
+  .dark .profile-page .text-indigo-600 { color: #a5b4fc !important; }
+  .dark .profile-page .text-indigo-700 { color: #c7d2fe !important; }
+  .dark .profile-page .text-emerald-700 { color: #6ee7b7 !important; }
+  .dark .profile-page .text-red-700 { color: #fca5a5 !important; }
+  .dark .profile-page .text-red-600 { color: #fca5a5 !important; }
+  .dark .profile-page .text-red-500 { color: #f87171 !important; }
+  .dark .profile-page .text-blue-600 { color: #93c5fd !important; }
+  .dark .profile-page .text-amber-500 { color: #fcd34d !important; }
+  .dark .profile-page .nav-item:hover {
+    background: #1e293b;
+    color: #a5b4fc;
+  }
+  .dark .profile-page .section-card:hover { box-shadow: 0 6px 24px rgba(2, 6, 23, 0.45); }
+  .dark .profile-page .input-field {
+    background: #111827 !important;
+    border-color: #374151 !important;
+    color: #f8fafc !important;
+  }
+  .dark .profile-page .input-field::placeholder { color: #64748b; }
+  .dark .profile-page .input-field:focus {
+    border-color: #818cf8 !important;
+    background: #0f172a !important;
+    box-shadow: 0 0 0 3px rgba(129,140,248,0.18);
+  }
+  .dark .profile-page .shimmer {
+    background: linear-gradient(90deg, #1f2937 25%, #263244 50%, #1f2937 75%);
+    background-size: 1200px 100%;
+  }
+  .dark .profile-page .tag-chip {
+    background: #1f2937 !important;
+    color: #cbd5e1 !important;
+    border-color: #334155 !important;
+  }
+  .dark .profile-page .tag-chip:hover {
+    background: #6366f1 !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+  }
 `
 
 interface UserProfile {
@@ -95,6 +160,7 @@ interface WalletData { availableBalance: number }
 
 export default function MyProfilePage() {
   const router = useRouter()
+  const { theme, mounted, toggleTheme } = useTheme()
   const [user, setUser]             = useState<UserProfile | null>(null)
   const [wallet, setWallet]         = useState<WalletData | null>(null)
   const [loading, setLoading]       = useState(true)
@@ -177,7 +243,7 @@ export default function MyProfilePage() {
   const handleLogout = () => { localStorage.clear(); window.dispatchEvent(new Event('auth-change')); router.push('/') }
 
   if (loading || !user) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f0f2f5]">
+    <div className="profile-page min-h-screen flex items-center justify-center bg-[#f0f2f5] dark:bg-slate-950">
       <div className="text-center">
         <div className="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center mx-auto mb-4">
           <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
@@ -200,9 +266,10 @@ export default function MyProfilePage() {
 
   const roleLabel = user.role === 'SELLER' ? 'Seller' : user.role === 'RIDER' ? 'Rider' : user.role === 'ADMIN' ? 'Admin' : 'Buyer'
   const roleGradient = user.role === 'SELLER' ? 'from-violet-500 to-indigo-600' : user.role === 'RIDER' ? 'from-emerald-500 to-teal-600' : user.role === 'ADMIN' ? 'from-red-500 to-rose-600' : 'from-blue-500 to-indigo-600'
+  const activeTheme = mounted ? theme : 'light'
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5]">
+    <div className="profile-page min-h-screen bg-[#f0f2f5] dark:bg-slate-950">
 
       {/* ── iOS Install Modal ── */}
       {showIOSInstallModal && (
@@ -263,7 +330,7 @@ export default function MyProfilePage() {
       {isMobileMenuOpen && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
-          <div className={`slide-menu ${isMobileMenuOpen ? 'slide-menu-open' : ''} fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-white z-50 lg:hidden shadow-2xl`}>
+          <div className={`slide-menu ${isMobileMenuOpen ? 'slide-menu-open' : ''} fixed inset-y-0 left-0 w-80 max-w-[85vw] bg-white dark:bg-slate-900 z-50 lg:hidden shadow-2xl`}>
             <div className="flex flex-col h-full">
               {/* Menu header */}
               <div className="header-gradient px-5 py-6">
@@ -584,6 +651,40 @@ export default function MyProfilePage() {
                     {permission === 'denied' && <span className="text-xs text-red-500 font-black bg-red-50 px-2.5 py-1 rounded-full">Blocked</span>}
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Appearance */}
+            <div className="fade-up section-card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
+                <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  {activeTheme === 'dark'
+                    ? <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                    : <Sun className="w-3.5 h-3.5 text-indigo-600" />}
+                </div>
+                <h2 className="font-black text-gray-900 text-sm">Appearance</h2>
+              </div>
+              <div className="p-5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-black text-sm text-gray-900">
+                    {activeTheme === 'dark' ? 'Dark Mode On' : 'Light Mode On'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {activeTheme === 'dark'
+                      ? 'Optimized for low-light viewing.'
+                      : 'Switch to dark mode for a softer night look.'}
+                  </p>
+                </div>
+                <button
+                  onClick={toggleTheme}
+                  className="theme-toggle flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black text-white shadow-md"
+                  style={{ background: activeTheme === 'dark'
+                    ? 'linear-gradient(135deg, #4f46e5, #312e81)'
+                    : 'linear-gradient(135deg, #6366f1, #4c1d95)' }}
+                >
+                  {activeTheme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                  {activeTheme === 'dark' ? 'Use Light' : 'Use Dark'}
+                </button>
               </div>
             </div>
 

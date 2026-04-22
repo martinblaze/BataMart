@@ -372,6 +372,35 @@ export default function HomePage() {
         .section-white  { background: rgba(255,255,255,0.90); }
         .section-soft   { background: rgba(248,250,255,0.90); }
         .section-blue   { background: linear-gradient(135deg, rgba(239,246,255,0.92), rgba(224,242,254,0.92)); }
+
+        .dark .bm-page {
+          background: #050b16 !important;
+        }
+        .dark .grid-bg {
+          background-image:
+            linear-gradient(rgba(99,102,241,0.08) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(99,102,241,0.08) 1px, transparent 1px);
+        }
+        .dark .hero-bg {
+          background: linear-gradient(160deg, rgba(15,23,42,0.96) 0%, rgba(9,14,28,0.96) 45%, rgba(30,41,59,0.94) 100%);
+        }
+        .dark .section-white {
+          background: rgba(8,13,26,0.9);
+        }
+        .dark .section-soft {
+          background: rgba(13,22,40,0.88);
+        }
+        .dark .section-blue {
+          background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.94));
+        }
+        .dark .pill-hover:hover {
+          background: #1e293b;
+          border-color: #475569;
+          color: #c7d2fe;
+        }
+        .dark .section-rule {
+          background: linear-gradient(90deg, transparent, #334155, transparent);
+        }
       `}</style>
 
       <div className="bm-page min-h-screen text-gray-900 relative overflow-x-hidden" style={{ background: '#f0f6ff' }}>
