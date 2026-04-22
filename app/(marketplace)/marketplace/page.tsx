@@ -66,6 +66,10 @@ const ANIM_CSS = `
     background-size: 1200px 100%;
     animation: shimmer 1.5s ease-in-out infinite;
   }
+  .dark .marketplace-shell .shimmer {
+    background: linear-gradient(90deg, #1f2937 25%, #273449 50%, #1f2937 75%);
+    background-size: 1200px 100%;
+  }
 
   @keyframes pulse-badge {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -129,6 +133,10 @@ const ANIM_CSS = `
   .search-input:focus-within {
     box-shadow: 0 0 0 3px rgba(99,102,241,0.25), 0 2px 8px rgba(0,0,0,0.06) !important;
     background: white !important;
+  }
+  .dark .marketplace-shell .search-input:focus-within {
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.35), 0 6px 16px rgba(2,6,23,0.45) !important;
+    background: #0f172a !important;
   }
 
   @keyframes dropIn {
@@ -276,6 +284,13 @@ const ANIM_CSS = `
   .just-dropped-card:hover  { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,0.1); }
   .just-dropped-card:active { transform: scale(0.97); }
   .just-dropped-card:hover .product-img { transform: scale(1.06); }
+  .dark .marketplace-shell .product-card:hover,
+  .dark .marketplace-shell .deal-card:hover,
+  .dark .marketplace-shell .just-dropped-card:hover,
+  .dark .marketplace-shell .mini-card:hover,
+  .dark .marketplace-shell .stat-card:hover {
+    box-shadow: 0 16px 36px rgba(2, 6, 23, 0.5);
+  }
 
   /* ── iOS rubber-band safe area ── */
   @supports (padding-bottom: env(safe-area-inset-bottom)) {
