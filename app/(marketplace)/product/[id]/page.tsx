@@ -617,6 +617,7 @@ export default function ProductDetailPage() {
   const minStructuredPrice = structuredPriceValues.length ? Math.min(...structuredPriceValues) : 0
   const maxStructuredPrice = structuredPriceValues.length ? Math.max(...structuredPriceValues) : 0
   const isStructuredVariantProduct = structuredVariants.length > 0
+  const selectedColorEntry = Object.entries(selected).find(([k, v]) => /colou?r/i.test(k) && v)
 
   const isOptionAvailable = (variantKey: string, value: string) => {
     if (!isStructuredVariantProduct) return true
@@ -648,6 +649,24 @@ export default function ProductDetailPage() {
       return changed ? next : prev
     })
   }, [variantKeys.join('|'), JSON.stringify(variants)])
+
+  // Swatch preview sync: when color/variant image changes, move gallery to matching image.
+  useEffect(() => {
+    if (!product?.images?.length) return
+
+    const variantImage = matchedVariant?.imageUrl?.trim()
+    if (variantImage) {
+      const variantIdx = product.images.findIndex((img) => img === variantImage)
+      if (variantIdx >= 0 && variantIdx !== activeImg) switchImg(variantIdx)
+      return
+    }
+
+    const selectedColor = selectedColorEntry?.[1]
+    if (!selectedColor) return
+    const needle = selectedColor.toLowerCase().replace(/\s+/g, '')
+    const colorIdx = product.images.findIndex((img) => img.toLowerCase().replace(/\s+/g, '').includes(needle))
+    if (colorIdx >= 0 && colorIdx !== activeImg) switchImg(colorIdx)
+  }, [selectedColorEntry?.[1], matchedVariant?.imageUrl, product?.images?.join('|')])
 
   const handleAddToCart = async () => {
     if (!product) return
@@ -1062,6 +1081,17 @@ export default function ProductDetailPage() {
                     )}
                   </div>
                 )}
+
+                {variantSummary && (
+                  <div className="bg-white rounded-xl px-3 py-3 border border-gray-200">
+                    <p className="text-[11px] font-black text-gray-500 uppercase tracking-wide">What You Selected</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1 line-clamp-2">{variantSummary}</p>
+                    <p className="text-xs text-indigo-700 font-extrabold mt-1.5">{fmt(effectivePrice)}</p>
+                    {selectedColorEntry?.[1] && (
+                      <p className="text-[11px] text-gray-500 mt-1">Color preview synced to images</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1125,19 +1155,23 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Delivery info */}
+            {/* Delivery + return promise */}
             <div className="bg-white rounded-2xl p-3 space-y-2 ring-1 ring-gray-100">
               <div className="flex items-center gap-2.5">
                 <Truck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                <p className="text-xs text-gray-600">Campus delivery available via BataMart riders</p>
+                <p className="text-xs text-gray-600"><span className="font-bold text-gray-800">Delivery:</span> Campus delivery via BataMart riders</p>
               </div>
               <div className="flex items-center gap-2.5">
-                <MessageCircle className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                <p className="text-xs text-gray-600">Contact the seller to arrange pickup or delivery details</p>
+                <RefreshCw className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                <p className="text-xs text-gray-600"><span className="font-bold text-gray-800">Returns:</span> Eligible issues can be disputed and reviewed by admin</p>
               </div>
               <div className="flex items-center gap-2.5">
                 <Shield className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                <p className="text-xs text-gray-600">Protected by BataMart buyer guarantee</p>
+                <p className="text-xs text-gray-600"><span className="font-bold text-gray-800">Protected:</span> Buyer guarantee and secure checkout protection</p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <MessageCircle className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                <p className="text-xs text-gray-600">Seller chat available for quick pickup coordination</p>
               </div>
             </div>
 
