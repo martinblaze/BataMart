@@ -63,6 +63,9 @@ export async function GET(request: NextRequest) {
         OR: [
           { name:        { contains: token, mode: 'insensitive' } },
           { category:    { contains: token, mode: 'insensitive' } },
+          { categoryKey: { contains: token, mode: 'insensitive' } },
+          { subcategory: { contains: token, mode: 'insensitive' } },
+          { subcategoryKey: { contains: token, mode: 'insensitive' } },
           { description: { contains: token, mode: 'insensitive' } },
         ],
       }))
@@ -81,6 +84,7 @@ export async function GET(request: NextRequest) {
               completedOrders: true,
             },
           },
+          variants: true,
         },
         orderBy: { createdAt: 'desc' },
         take:    limit,
@@ -124,9 +128,12 @@ export async function POST(request: NextRequest) {
       description,
       price,
       category,
+      categoryKey,
       subcategory,
+      subcategoryKey,
       quantity,
       images,
+      variants,
       hostelName,
       roomNumber,
       landmark,
@@ -144,24 +151,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 })
     }
 
+    const normalizedVariants = Array.isArray(variants)
+      ? variants
+          .map((v: any) => ({
+            combination: v?.combination && typeof v.combination === 'object' ? v.combination : null,
+            price: Number(v?.price),
+            stock: Number(v?.stock),
+            sku: v?.sku ? String(v.sku) : null,
+            imageUrl: v?.imageUrl ? String(v.imageUrl) : null,
+          }))
+          .filter((v: any) => v.combination && Number.isFinite(v.price) && v.price > 0 && Number.isFinite(v.stock) && v.stock >= 0)
+      : []
+
+    const hasStructuredVariants = normalizedVariants.length > 0
+    const basePrice = Number(price)
+    const minVariantPrice = hasStructuredVariants
+      ? Math.min(...normalizedVariants.map((v: any) => v.price))
+      : basePrice
+    const totalVariantStock = hasStructuredVariants
+      ? normalizedVariants.reduce((sum: number, v: any) => sum + v.stock, 0)
+      : Number(quantity)
+
     const product = await prisma.product.create({
       data: {
         name:        String(name).trim().substring(0, 200),
         description: description ? String(description).trim().substring(0, 5000) : '',
-        price:       Number(price),
+        price:       minVariantPrice,
+        basePrice,
         category:    String(category),
-        // subcategory is stored as a JSON field if it exists in schema,
-        // otherwise appended to category string for backward compat
-        // NOTE: Add `subcategory String?` to schema if not present
+        ...(categoryKey ? { categoryKey: String(categoryKey) } : {}),
         ...(subcategory ? { subcategory: String(subcategory) } : {}),
-        quantity:    Number(quantity),
+        ...(subcategoryKey ? { subcategoryKey: String(subcategoryKey) } : {}),
+        variantsEnabled: hasStructuredVariants,
+        quantity:    totalVariantStock,
         images:      Array.isArray(images) ? images : [],
         seller:      { connect: { id: user.id } },
         hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
         roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
         landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
         university:  { connect: { id: user.universityId } },
+        ...(hasStructuredVariants
+          ? {
+              variants: {
+                create: normalizedVariants.map((v: any) => ({
+                  combination: v.combination,
+                  price: v.price,
+                  stock: v.stock,
+                  ...(v.sku ? { sku: v.sku } : {}),
+                  ...(v.imageUrl ? { imageUrl: v.imageUrl } : {}),
+                })),
+              },
+            }
+          : {}),
       },
+      include: { variants: true },
     })
 
     return NextResponse.json({ success: true, product }, { status: 201 })

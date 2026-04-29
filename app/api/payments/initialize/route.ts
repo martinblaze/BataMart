@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
 
     type CartItem = {
       productId:  string
+      variantId?: string | null
+      variantData?: Record<string, string> | null
       name:       string
       price:      number
       quantity:   number
@@ -73,12 +75,24 @@ export async function POST(request: NextRequest) {
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
           where:   { id: item.productId },
-          include: { seller: true },
+          include: { seller: true, variants: true },
         })
         if (!product) {
           return NextResponse.json({ error: `Product not found: ${item.name}` }, { status: 404 })
         }
-        if (!product.isActive || product.quantity < item.quantity) {
+        let resolvedPrice = product.price
+        let resolvedStock = product.quantity
+
+        if (item.variantId) {
+          const variant = product.variants.find(v => v.id === item.variantId)
+          if (!variant) {
+            return NextResponse.json({ error: `Variant not found for product: ${product.name}` }, { status: 400 })
+          }
+          resolvedPrice = variant.price
+          resolvedStock = variant.stock
+        }
+
+        if (!product.isActive || resolvedStock < item.quantity) {
           return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 })
         }
         if (item.orderNote && String(item.orderNote).length > 300) {
@@ -86,8 +100,10 @@ export async function POST(request: NextRequest) {
         }
         items.push({
           productId:  product.id,
+          variantId:  item.variantId || null,
+          variantData: item.variantData || null,
           name:       product.name,
-          price:      product.price, // ← always from DB, never from client
+          price:      resolvedPrice, // ← always from DB, never from client
           quantity:   item.quantity,
           category:   product.category,
           sellerId:   product.sellerId,
@@ -98,7 +114,7 @@ export async function POST(request: NextRequest) {
     } else if (productId) {
       const product = await prisma.product.findUnique({
         where:   { id: productId },
-        include: { seller: true },
+        include: { seller: true, variants: true },
       })
       if (!product) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
@@ -108,6 +124,8 @@ export async function POST(request: NextRequest) {
       }
       items = [{
         productId:  product.id,
+        variantId:  body.variantId || null,
+        variantData: body.variantData || null,
         name:       product.name,
         price:      product.price,
         quantity:   1,
@@ -209,6 +227,8 @@ export async function POST(request: NextRequest) {
 export async function createOrders(
   items: {
     productId:  string
+    variantId?: string | null
+    variantData?: Record<string, string> | null
     name:       string
     price:      number
     quantity:   number
@@ -312,6 +332,15 @@ export async function createOrders(
             isPaid:             true,
             status:             'PENDING' as const,
             orderNote,
+            items: {
+              create: sellerItems.map(item => ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                variantData: item.variantData || null,
+                quantity: Number(item.quantity),
+                price: Number(item.price),
+              })),
+            },
             payment: {
               create: {
                 amount:        Number(orderFees.totalAmount),
@@ -326,33 +355,59 @@ export async function createOrders(
 
         // TOCTOU-safe stock decrement
         for (const item of sellerItems) {
-          const updated = await tx.product.updateMany({
-            where: {
-              id:       item.productId,
-              quantity: { gte: Number(item.quantity) },
-            },
-            data: { quantity: { decrement: Number(item.quantity) } },
-          })
-
-          if (updated.count === 0) {
-            throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
-          }
-
-          const afterUpdate = await tx.product.findUnique({
-            where:  { id: item.productId },
-            select: { id: true, name: true, quantity: true },
-          })
-
-          if (afterUpdate && afterUpdate.quantity <= 0) {
+          if (item.variantId) {
+            const updatedVariant = await tx.productVariant.updateMany({
+              where: {
+                id: item.variantId,
+                productId: item.productId,
+                stock: { gte: Number(item.quantity) },
+              },
+              data: { stock: { decrement: Number(item.quantity) } },
+            })
+            if (updatedVariant.count === 0) {
+              throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
+            }
+            const remainingVariants = await tx.productVariant.findMany({
+              where: { productId: item.productId },
+              select: { stock: true },
+            })
+            const totalStock = remainingVariants.reduce((sum, v) => sum + v.stock, 0)
             await tx.product.update({
               where: { id: item.productId },
-              data:  { isActive: false },
+              data: {
+                quantity: totalStock,
+                isActive: totalStock > 0,
+              },
             })
-            outOfStockAlerts.push({
-              sellerId,
-              productId:   afterUpdate.id,
-              productName: afterUpdate.name,
+          } else {
+            const updated = await tx.product.updateMany({
+              where: {
+                id:       item.productId,
+                quantity: { gte: Number(item.quantity) },
+              },
+              data: { quantity: { decrement: Number(item.quantity) } },
             })
+
+            if (updated.count === 0) {
+              throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
+            }
+
+            const afterUpdate = await tx.product.findUnique({
+              where:  { id: item.productId },
+              select: { id: true, name: true, quantity: true },
+            })
+
+            if (afterUpdate && afterUpdate.quantity <= 0) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data:  { isActive: false },
+              })
+              outOfStockAlerts.push({
+                sellerId,
+                productId:   afterUpdate.id,
+                productName: afterUpdate.name,
+              })
+            }
           }
         }
 

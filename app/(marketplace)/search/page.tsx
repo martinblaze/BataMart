@@ -68,12 +68,18 @@ function StarRating({ rating }: { rating: number }) {
 function buildSearchBlob(p: any): string {
   const { variants, tags } = decodeProductData(p.description || '')
   const variantValues = Object.values(variants).flat()
+  const structuredVariantValues = Array.isArray(p.variants)
+    ? p.variants.flatMap((v: any) => Object.values(v?.combination || {}))
+    : []
   return [
     p.name,
     p.category,
+    p.categoryKey ?? '',
     p.subcategory ?? '',
+    p.subcategoryKey ?? '',
     ...tags,
     ...variantValues,
+    ...structuredVariantValues,
   ].join(' ').toLowerCase()
 }
 
@@ -155,7 +161,10 @@ function SearchPage() {
         const variantOk = Object.entries(variantFilters).every(([key, val]) => {
           if (!val) return true
           const productVals = variants[key] ?? []
-          return productVals.some((v: string) => v.toLowerCase().includes(val.toLowerCase()))
+          const structuredVals = Array.isArray(p.variants)
+            ? p.variants.map((sv: any) => String((sv?.combination || {})[key] || '')).filter(Boolean)
+            : []
+          return [...productVals, ...structuredVals].some((v: string) => v.toLowerCase().includes(val.toLowerCase()))
         })
 
         return matchesTokens && priceOk && catOk && variantOk
@@ -169,14 +178,22 @@ function SearchPage() {
 
   // Compute available variant keys + values from the result set (for smart filters)
   const availableVariantKeys = useMemo(() => {
-    const keyMap: Record<string, Set<string>> = {}
-    filtered.forEach(p => {
-      const { variants } = decodeProductData(p.description || '')
-      Object.entries(variants).forEach(([k, vals]) => {
-        if (!keyMap[k]) keyMap[k] = new Set()
-        ;(vals as string[]).forEach(v => keyMap[k].add(v))
+      const keyMap: Record<string, Set<string>> = {}
+      filtered.forEach(p => {
+        const { variants } = decodeProductData(p.description || '')
+        Object.entries(variants).forEach(([k, vals]) => {
+          if (!keyMap[k]) keyMap[k] = new Set()
+          ;(vals as string[]).forEach(v => keyMap[k].add(v))
+        })
+        if (Array.isArray(p.variants)) {
+          p.variants.forEach((sv: any) => {
+            Object.entries(sv?.combination || {}).forEach(([k, val]) => {
+              if (!keyMap[k]) keyMap[k] = new Set()
+              if (val) keyMap[k].add(String(val))
+            })
+          })
+        }
       })
-    })
     return Object.fromEntries(Object.entries(keyMap).map(([k, s]) => [k, Array.from(s)]))
   }, [filtered])
 

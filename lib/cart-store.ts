@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware'
 export interface CartItem {
   id: string
   productId: string
+  variantId?: string
   name: string
   price: number
   quantity: number
@@ -38,14 +39,14 @@ export const useCartStore = create<CartState>()(
 
       addItem: (item) => {
         const { items } = get()
-        const existingItem = items.find((i) => i.productId === item.productId)
+        const existingItem = items.find((i) => i.productId === item.productId && (i.variantId || '') === (item.variantId || ''))
 
         if (existingItem) {
           const newQuantity = existingItem.quantity + (item.quantity || 1)
           if (newQuantity <= item.maxQuantity) {
             set({
               items: items.map((i) =>
-                i.productId === item.productId
+                i.productId === item.productId && (i.variantId || '') === (item.variantId || '')
                   ? { ...i, quantity: newQuantity, selectedVariants: item.selectedVariants ?? i.selectedVariants }
                   : i
               ),

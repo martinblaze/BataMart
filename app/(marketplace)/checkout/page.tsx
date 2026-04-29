@@ -99,7 +99,7 @@ export default function CheckoutPage() {
     const variantNote = formatVariantSelection(item.selectedVariants || {})
     const extra = orderNotes[item.productId]?.trim() || ''
     const parts = []
-    if (variantNote) parts.push(`[Order: ${variantNote}]`)
+    if (!item.variantId && variantNote) parts.push(`[Order: ${variantNote}]`)
     if (extra) parts.push(extra)
     return parts.join(' — ')
   }
@@ -118,6 +118,8 @@ export default function CheckoutPage() {
         // ── FIX #5: We send productId and quantity only.
         // The server MUST re-fetch the price from the DB.
         productId: item.productId,
+        variantId: item.variantId || null,
+        variantData: item.selectedVariants || null,
         quantity: item.quantity,
         orderNote: buildOrderNote(item),
         // We include name/image for display in emails only — NOT for pricing

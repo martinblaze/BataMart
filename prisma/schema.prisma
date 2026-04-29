@@ -135,8 +135,10 @@ model Product {
   name         String
   description  String
   price        Float
+  basePrice    Float?
   images       String[]
   category     String
+  categoryKey  String?
   quantity     Int             @default(1)
   hostelName   String
   roomNumber   String
@@ -152,6 +154,8 @@ model Product {
   isDeleted    Boolean         @default(false)
   universityId String?
   subcategory     String?
+  subcategoryKey  String?
+  variantsEnabled Boolean       @default(false)
   marketPrice     Float?          // Last confirmed campus sale price for this product type
   discountPercent Int?            // % cheaper than last confirmed sale price; null = not a deal
   isDeal          Boolean         @default(false)
@@ -163,6 +167,8 @@ model Product {
   hotReason       String?         // "VIEWS" | "DEAL" | "BOTH"
   hotScore        Int             @default(0)
   cartItems       CartItem[]
+  variants        ProductVariant[]
+  orderItems      OrderItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   university   University?     @relation(fields: [universityId], references: [id])
@@ -172,6 +178,9 @@ model Product {
   @@index([sellerId])
   @@index([category])
   @@index([subcategory])
+  @@index([categoryKey])
+  @@index([subcategoryKey])
+  @@index([variantsEnabled])
   @@index([isActive])
   @@index([isDeleted])
   @@index([createdAt])
@@ -181,6 +190,23 @@ model Product {
   @@index([isHot])
   @@index([conditionType])
   @@index([nameKey, conditionType, hasChangedParts, variantKey])
+  @@schema("public")
+}
+
+model ProductVariant {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  combination Json
+  price       Float
+  stock       Int      @default(0)
+  sku         String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  orderItems  OrderItem[]
+
+  @@index([productId])
+  @@index([stock])
   @@schema("public")
 }
 
@@ -243,6 +269,7 @@ model Order {
   referralReward     ReferralReward?
   reports            Report[]
   reviews            Review[]
+  items              OrderItem[]
 
   @@index([buyerId])
   @@index([sellerId])
@@ -253,6 +280,25 @@ model Order {
   @@index([orderedAt])
   @@index([sellerId, status])
   @@index([riderId, status])
+  @@schema("public")
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  variantData Json?
+  quantity    Int
+  price       Float
+  createdAt   DateTime        @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
   @@schema("public")
 }
 

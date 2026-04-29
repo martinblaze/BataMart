@@ -85,6 +85,8 @@ export async function GET(request: NextRequest) {
 
     type CartItem = {
       productId:  string
+      variantId?: string | null
+      variantData?: Record<string, string> | null
       name:       string
       price:      number
       quantity:   number
@@ -138,7 +140,7 @@ export async function GET(request: NextRequest) {
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
         where:  { id: item.productId },
-        select: { id: true, name: true, quantity: true, isActive: true },
+        include: { variants: true },
       })
 
       if (!product) {
@@ -147,10 +149,17 @@ export async function GET(request: NextRequest) {
       if (!product.isActive) {
         return appRedirect(`/checkout?error=product_inactive&product=${encodeURIComponent(item.name)}`)
       }
-      if (product.quantity < item.quantity) {
+      const variant = item.variantId
+        ? product.variants.find(v => v.id === item.variantId)
+        : null
+      if (item.variantId && !variant) {
+        return appRedirect(`/checkout?error=product_inactive&product=${encodeURIComponent(item.name)}`)
+      }
+      const availableStock = variant ? variant.stock : product.quantity
+      if (availableStock < item.quantity) {
         return appRedirect(`/checkout?error=out_of_stock&product=${encodeURIComponent(item.name)}`)
       }
-      console.log(`✅ ${item.name}: OK (stock: ${product.quantity})`)
+      console.log(`✅ ${item.name}: OK (stock: ${availableStock})`)
     }
 
     // STEP 6: Create orders + DeliveryBatch

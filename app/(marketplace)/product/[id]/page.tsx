@@ -25,6 +25,18 @@ interface Product {
   price: number
   category: string
   subcategory?: string
+  categoryKey?: string
+  subcategoryKey?: string
+  variantsEnabled?: boolean
+  basePrice?: number | null
+  variants?: Array<{
+    id: string
+    combination: Record<string, string>
+    price: number
+    stock: number
+    sku?: string | null
+    imageUrl?: string | null
+  }>
   quantity: number
   images: string[]
   viewCount: number
@@ -341,6 +353,14 @@ export default function ProductDetailPage() {
 
   // ── NEW: Variant state ──────────────────────────────────
   const [variants, setVariants] = useState<Record<string, string[]>>({})
+  const [structuredVariants, setStructuredVariants] = useState<Array<{
+    id: string
+    combination: Record<string, string>
+    price: number
+    stock: number
+    sku?: string | null
+    imageUrl?: string | null
+  }>>([])
   const [tags, setTags] = useState<string[]>([])
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [variantError, setVariantError] = useState('')
@@ -408,10 +428,25 @@ export default function ProductDetailPage() {
       const p = data.product || data
       setProduct(p)
 
-      // ── NEW: Decode variant/tag data from description ──
-      const decoded = decodeProductData(p.description || '')
-      setVariants(decoded.variants)
-      setTags(decoded.tags)
+      if (p.variantsEnabled && Array.isArray(p.variants) && p.variants.length > 0) {
+        setStructuredVariants(p.variants)
+        const map: Record<string, Set<string>> = {}
+        for (const v of p.variants) {
+          const combo = (v.combination || {}) as Record<string, string>
+          for (const [k, val] of Object.entries(combo)) {
+            if (!val) continue
+            if (!map[k]) map[k] = new Set()
+            map[k].add(String(val))
+          }
+        }
+        setVariants(Object.fromEntries(Object.entries(map).map(([k, vals]) => [k, Array.from(vals)])))
+        setTags([])
+      } else {
+        setStructuredVariants([])
+        const decoded = decodeProductData(p.description || '')
+        setVariants(decoded.variants)
+        setTags(decoded.tags)
+      }
 
       try {
         fetch(`/api/products/${productId}/view`, {
@@ -573,6 +608,11 @@ export default function ProductDetailPage() {
   const requiredVariants = variantKeys.filter(k => variants[k].length > 0)
   const allVariantsSelected = requiredVariants.length === 0 || requiredVariants.every(k => selected[k])
   const variantSummary = Object.entries(selected).filter(([, v]) => v).map(([, v]) => v).join(' · ')
+  const matchedVariant = structuredVariants.find(v =>
+    requiredVariants.every(k => (v.combination || {})[k] === selected[k])
+  )
+  const effectivePrice = matchedVariant?.price ?? product?.price ?? 0
+  const effectiveStock = matchedVariant?.stock ?? product?.quantity ?? 0
 
   const handleAddToCart = async () => {
     if (!product) return
@@ -582,17 +622,22 @@ export default function ProductDetailPage() {
       document.getElementById('variant-selector')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+    if (product.variantsEnabled && requiredVariants.length > 0 && !matchedVariant) {
+      setVariantError('Selected combination is unavailable')
+      return
+    }
     setVariantError('')
     setAddingToCart(true)
     try {
       addItem({
         productId: product.id,
+        variantId: matchedVariant?.id,
         name: product.name,
-        price: product.price,
+        price: effectivePrice,
         image: product.images?.[0] || '',
         sellerId: product.seller.id,
         sellerName: product.seller.name,
-        maxQuantity: product.quantity,
+        maxQuantity: effectiveStock,
         quantity: qty,
         selectedVariants: selected,
         category: product.category,
@@ -614,8 +659,14 @@ export default function ProductDetailPage() {
       document.getElementById('variant-selector')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+    if (product.variantsEnabled && requiredVariants.length > 0 && !matchedVariant) {
+      setVariantError('Selected combination is unavailable')
+      return
+    }
     sessionStorage.setItem('checkout_product', JSON.stringify({
       ...product,
+      variantId: matchedVariant?.id,
+      price: effectivePrice,
       selectedVariants: selected,
     }))
     router.push('/checkout')
@@ -868,7 +919,7 @@ export default function ProductDetailPage() {
 
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-3 sm:p-4">
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl sm:text-3xl font-extrabold text-indigo-700">{fmt(product.price)}</span>
+                <span className="text-2xl sm:text-3xl font-extrabold text-indigo-700">{fmt(effectivePrice)}</span>
               </div>
               <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
                 <Shield className="w-3 h-3 text-emerald-500" />
@@ -876,11 +927,11 @@ export default function ProductDetailPage() {
               </p>
             </div>
 
-            {product.quantity > 0 && (
+            {effectiveStock > 0 && (
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${product.quantity <= 5 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-                <span className={`text-sm font-medium ${product.quantity <= 5 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                  {product.quantity <= 5 ? `Only ${product.quantity} left` : `${product.quantity} in stock`}
+                <div className={`w-2 h-2 rounded-full ${effectiveStock <= 5 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                <span className={`text-sm font-medium ${effectiveStock <= 5 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {effectiveStock <= 5 ? `Only ${effectiveStock} left` : `${effectiveStock} in stock`}
                 </span>
               </div>
             )}
@@ -941,7 +992,7 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {product.quantity > 0 && (
+            {effectiveStock > 0 && (
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-gray-700">Qty:</span>
                 <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-1 ring-1 ring-gray-200">
@@ -954,28 +1005,28 @@ export default function ProductDetailPage() {
                   </button>
                   <span className="w-8 text-center text-sm font-bold text-gray-800">{qty}</span>
                   <button
-                    onClick={() => setQty(q => Math.min(product.quantity, q + 1))}
-                    disabled={qty >= product.quantity}
+                    onClick={() => setQty(q => Math.min(effectiveStock, q + 1))}
+                    disabled={qty >= effectiveStock}
                     className="qty-btn w-8 h-8 rounded-lg bg-white ring-1 ring-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-40"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <span className="text-xs text-gray-400">({product.quantity} available)</span>
+                <span className="text-xs text-gray-400">({effectiveStock} available)</span>
               </div>
             )}
 
             <div className="flex gap-2.5">
               <button
                 onClick={handleAddToCart}
-                disabled={product.quantity === 0 || addingToCart}
+                disabled={effectiveStock === 0 || addingToCart}
                 className="add-btn flex-1 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm sm:text-base"
               >
                 {addingToCart
                   ? <RefreshCw className="w-4 h-4 animate-spin" />
                   : <ShoppingCart className="w-4 h-4" />
                 }
-                {product.quantity === 0
+                {effectiveStock === 0
                   ? 'Out of Stock'
                   : addingToCart
                   ? 'Adding…'
@@ -983,7 +1034,7 @@ export default function ProductDetailPage() {
                   ? 'Select Options First'
                   : 'Add to Cart'}
               </button>
-              {product.quantity > 0 && (
+              {effectiveStock > 0 && (
                 <button
                   onClick={handleBuyNow}
                   className="buy-btn flex-1 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm sm:text-base"

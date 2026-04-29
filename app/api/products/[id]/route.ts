@@ -27,6 +27,7 @@ export async function GET(
     const product = await prisma.product.findUnique({
       where: { id: params.id },
       include: {
+        variants: true,
         seller: {
           select: {
             id: true,
@@ -128,6 +129,11 @@ export async function PUT(
     if (body.price !== undefined) updateData.price = parseFloat(body.price)
     if (body.description !== undefined) updateData.description = body.description
     if (body.category !== undefined) updateData.category = body.category
+    if (body.categoryKey !== undefined) updateData.categoryKey = body.categoryKey
+    if (body.subcategory !== undefined) updateData.subcategory = body.subcategory
+    if (body.subcategoryKey !== undefined) updateData.subcategoryKey = body.subcategoryKey
+    if (body.basePrice !== undefined) updateData.basePrice = parseFloat(body.basePrice)
+    if (body.variantsEnabled !== undefined) updateData.variantsEnabled = Boolean(body.variantsEnabled)
     if (body.images !== undefined) updateData.images = body.images
     if (body.hostelName !== undefined) updateData.hostelName = body.hostelName
     if (body.roomNumber !== undefined) updateData.roomNumber = body.roomNumber

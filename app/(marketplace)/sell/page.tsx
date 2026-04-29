@@ -335,6 +335,7 @@ export default function SellPage() {
   const [categoryKey, setCategoryKey]       = useState('')
   const [subcategoryKey, setSubcategoryKey] = useState('')
   const [variantValues, setVariantValues]   = useState<Record<string, string[]>>({})
+  const [variantPricing, setVariantPricing] = useState<Record<string, { price: string; stock: string }>>({})
 
   // Images — same structure as original: preview + url + uploading flag
   const [images, setImages] = useState<{ preview: string; url: string; uploading: boolean }[]>([])
@@ -401,7 +402,7 @@ export default function SellPage() {
 
   // Reset subcategory + variants when category changes
   useEffect(() => { setSubcategoryKey(''); setVariantValues({}) }, [categoryKey])
-  useEffect(() => { setVariantValues({}) }, [subcategoryKey])
+  useEffect(() => { setVariantValues({}); setVariantPricing({}) }, [subcategoryKey])
 
   // Auto-generate tags from name + category + variant values
   useEffect(() => {
@@ -498,6 +499,25 @@ export default function SellPage() {
     setVariantValues(prev => ({ ...prev, [key]: vals }))
   }
 
+  const variantKeysForMatrix = Object.keys(variantValues).filter(k => (variantValues[k] || []).length > 0)
+  const variantCombinations = variantKeysForMatrix.reduce<Record<string, string>[]>(
+    (acc, key) => {
+      const values = variantValues[key] || []
+      if (acc.length === 0) return values.map(v => ({ [key]: v }))
+      const out: Record<string, string>[] = []
+      for (const row of acc) {
+        for (const v of values) out.push({ ...row, [key]: v })
+      }
+      return out
+    },
+    []
+  )
+
+  const comboKey = (combo: Record<string, string>) =>
+    variantKeysForMatrix.map(k => `${k}:${combo[k]}`).join('|')
+
+  const hasStructuredVariants = variantCombinations.length > 0
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.name.trim()) { setError('Product name is required'); return }
@@ -506,6 +526,16 @@ export default function SellPage() {
     if (!subcategoryKey) { setError('Please select a subcategory'); return }
     if (images.length < 1) { setError('Please add at least 1 product image'); return }
     if (!allUploaded) { setError('Please wait for all images to finish uploading'); return }
+    if (hasStructuredVariants) {
+      for (const combo of variantCombinations) {
+        const key = comboKey(combo)
+        const row = variantPricing[key]
+        const rowPrice = Number(row?.price || formData.price)
+        const rowStock = Number(row?.stock || 0)
+        if (!Number.isFinite(rowPrice) || rowPrice <= 0) { setError('Each variant must have a valid price'); return }
+        if (!Number.isFinite(rowStock) || rowStock < 0) { setError('Each variant must have valid stock'); return }
+      }
+    }
     setError(''); setShowConfirmModal(true)
   }
 
@@ -516,7 +546,18 @@ export default function SellPage() {
       const catLabel = CATEGORY_TREE[categoryKey]?.label ?? categoryKey
       const subLabel = CATEGORY_TREE[categoryKey]?.subcategories[subcategoryKey]?.label ?? subcategoryKey
 
-      const description = encodeProductData(variantValues, tags)
+      const description = hasStructuredVariants ? (formData.name.trim() || '') : encodeProductData(variantValues, tags)
+      const variantsPayload = hasStructuredVariants
+        ? variantCombinations.map(combo => {
+            const key = comboKey(combo)
+            const row = variantPricing[key]
+            return {
+              combination: combo,
+              price: Number(row?.price || formData.price),
+              stock: Number(row?.stock || 0),
+            }
+          })
+        : []
 
       const response = await fetch('/api/products', {
         method: 'POST',
@@ -528,7 +569,10 @@ export default function SellPage() {
           price:       parseFloat(formData.price),
           quantity:    parseInt(formData.quantity) || 1,
           category:    catLabel,
+          categoryKey,
           subcategory: subLabel,
+          subcategoryKey,
+          variants: variantsPayload,
           images:      images.map(img => img.url),
         }),
       })
@@ -703,6 +747,59 @@ export default function SellPage() {
                 />
               ))}
             </div>
+            {variantCombinations.length > 0 && (
+              <div className="mt-5 border border-gray-100 rounded-2xl overflow-hidden">
+                <div className="px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                  <p className="text-xs font-bold text-gray-600">Variant Inventory</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-white border-b border-gray-100">
+                        {variantKeysForMatrix.map(key => (
+                          <th key={key} className="text-left px-3 py-2 font-bold text-gray-500 capitalize">{key.replace(/_/g, ' ')}</th>
+                        ))}
+                        <th className="text-left px-3 py-2 font-bold text-gray-500">Price</th>
+                        <th className="text-left px-3 py-2 font-bold text-gray-500">Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variantCombinations.map((combo) => {
+                        const key = comboKey(combo)
+                        const row = variantPricing[key] || { price: formData.price, stock: '0' }
+                        return (
+                          <tr key={key} className="border-b border-gray-50 last:border-0">
+                            {variantKeysForMatrix.map(k => (
+                              <td key={`${key}-${k}`} className="px-3 py-2 font-semibold text-gray-700">{combo[k]}</td>
+                            ))}
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.price}
+                                onChange={e => setVariantPricing(prev => ({ ...prev, [key]: { ...row, price: e.target.value } }))}
+                                className="w-24 px-2 py-1 rounded-lg border border-gray-200 focus:outline-none focus:border-indigo-400"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={row.stock}
+                                onChange={e => setVariantPricing(prev => ({ ...prev, [key]: { ...row, stock: e.target.value } }))}
+                                className="w-20 px-2 py-1 rounded-lg border border-gray-200 focus:outline-none focus:border-indigo-400"
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
