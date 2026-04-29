@@ -318,11 +318,13 @@ function VariantRow({
 export default function SellPage() {
   const router = useRouter()
   const tagInputRef = useRef<HTMLInputElement>(null)
+  const SELL_DRAFT_KEY = 'BATAMART_SELL_DRAFT_V1'
 
   // Auth state
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [isBuyer, setIsBuyer]           = useState(false)
   const [appMode, setAppMode]           = useState(false)
+  const [hostels, setHostels]           = useState<string[]>([])
   const [deliveryAreas, setDeliveryAreas] = useState<string[]>([])
 
   // Form state
@@ -353,6 +355,43 @@ export default function SellPage() {
   const subcategories = categoryKey ? getSubcategoryList(categoryKey) : []
   const variantFields = (categoryKey && subcategoryKey) ? getVariantFields(categoryKey, subcategoryKey) : []
 
+  // Restore draft after refresh/network issues
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SELL_DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (draft?.formData) setFormData(draft.formData)
+      if (draft?.categoryKey) setCategoryKey(draft.categoryKey)
+      if (draft?.subcategoryKey) setSubcategoryKey(draft.subcategoryKey)
+      if (draft?.variantValues) setVariantValues(draft.variantValues)
+      if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
+      if (Array.isArray(draft?.tags)) setTags(draft.tags)
+      if (Array.isArray(draft?.images)) setImages(draft.images)
+    } catch {}
+  }, [])
+
+  // Persist draft continuously
+  useEffect(() => {
+    try {
+      const safeImages = images
+        .filter(img => !img.uploading && !!img.url)
+        .map(img => ({ preview: img.url, url: img.url, uploading: false }))
+      localStorage.setItem(
+        SELL_DRAFT_KEY,
+        JSON.stringify({
+          formData,
+          categoryKey,
+          subcategoryKey,
+          variantValues,
+          variantPricing,
+          tags,
+          images: safeImages,
+        })
+      )
+    } catch {}
+  }, [formData, categoryKey, subcategoryKey, variantValues, variantPricing, tags, images])
+
   useEffect(() => {
     if (document.getElementById('sell-anim')) return
     const s = document.createElement('style'); s.id = 'sell-anim'; s.textContent = SELL_CSS
@@ -371,8 +410,10 @@ export default function SellPage() {
         const cached = localStorage.getItem('user')
         if (cached) {
           const u = JSON.parse(cached)
+          const hostelsList = parseJsonArray(u?.university?.hostels)
           const areas = parseJsonArray(u?.university?.deliveryAreas)
-          if (areas.length > 0) {
+          if (hostelsList.length > 0 || areas.length > 0) {
+            setHostels(hostelsList)
             setDeliveryAreas(areas)
             if (u.hostelName) setFormData(f => ({ ...f, hostelName: u.hostelName || '' }))
             if (u.roomNumber) setFormData(f => ({ ...f, roomNumber: u.roomNumber || '' }))
@@ -384,6 +425,7 @@ export default function SellPage() {
         const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         if (res.ok) {
           const data = await res.json()
+          setHostels(parseJsonArray(data?.user?.university?.hostels))
           setDeliveryAreas(parseJsonArray(data?.user?.university?.deliveryAreas))
           if (data.user) {
             setFormData(f => ({
@@ -531,7 +573,7 @@ export default function SellPage() {
         const key = comboKey(combo)
         const row = variantPricing[key]
         const rowPrice = Number(row?.price || formData.price)
-        const rowStock = Number(row?.stock || 0)
+        const rowStock = Number(row?.stock || formData.quantity || 0)
         if (!Number.isFinite(rowPrice) || rowPrice <= 0) { setError('Each variant must have a valid price'); return }
         if (!Number.isFinite(rowStock) || rowStock < 0) { setError('Each variant must have valid stock'); return }
       }
@@ -554,7 +596,7 @@ export default function SellPage() {
             return {
               combination: combo,
               price: Number(row?.price || formData.price),
-              stock: Number(row?.stock || 0),
+              stock: Number(row?.stock || formData.quantity || 0),
             }
           })
         : []
@@ -578,6 +620,7 @@ export default function SellPage() {
       })
       const data = await response.json()
       if (response.ok) {
+        localStorage.removeItem(SELL_DRAFT_KEY)
         router.push('/my-shop')
       } else {
         setError(data.error || 'Failed to create product')
@@ -665,7 +708,9 @@ export default function SellPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Price (₦) *</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  {hasStructuredVariants ? 'Base Price (Fallback) (₦) *' : 'Price (₦) *'}
+                </label>
                 <input
                   type="number"
                   value={formData.price}
@@ -674,6 +719,11 @@ export default function SellPage() {
                   className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
                   placeholder="50000"
                 />
+                {hasStructuredVariants && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Variant row prices are used at checkout. This is only fallback/base.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Qty in Stock *</label>
@@ -766,7 +816,7 @@ export default function SellPage() {
                     <tbody>
                       {variantCombinations.map((combo) => {
                         const key = comboKey(combo)
-                        const row = variantPricing[key] || { price: formData.price, stock: '0' }
+                        const row = variantPricing[key] || { price: formData.price, stock: formData.quantity || '1' }
                         return (
                           <tr key={key} className="border-b border-gray-50 last:border-0">
                             {variantKeysForMatrix.map(k => (
@@ -917,14 +967,26 @@ export default function SellPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Hostel / Lodge *</label>
-              <input
-                type="text"
-                value={formData.hostelName}
-                onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
-                required
-                className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
-                placeholder="e.g., Python Hall, Aroma Lodge, Block C"
-              />
+              {hostels.length > 0 ? (
+                <select
+                  value={formData.hostelName}
+                  onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium appearance-none"
+                >
+                  <option value="">Select hostel / lodge</option>
+                  {hostels.map(hostel => <option key={hostel} value={hostel}>{hostel}</option>)}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={formData.hostelName}
+                  onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
+                  placeholder="e.g., Python Hall, Aroma Lodge, Block C"
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Room Number *</label>
