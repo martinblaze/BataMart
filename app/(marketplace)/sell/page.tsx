@@ -318,6 +318,8 @@ function VariantRow({
 export default function SellPage() {
   const router = useRouter()
   const tagInputRef = useRef<HTMLInputElement>(null)
+  const skipNextCategoryResetRef = useRef(true)
+  const skipNextSubcategoryResetRef = useRef(true)
   const SELL_DRAFT_KEY = 'BATAMART_SELL_DRAFT_V1'
 
   // Auth state
@@ -350,6 +352,7 @@ export default function SellPage() {
   const [loading, setLoading]               = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [error, setError]                   = useState('')
+  const [draftHydrated, setDraftHydrated]   = useState(false)
 
   const categories    = getCategoryList()
   const subcategories = categoryKey ? getSubcategoryList(categoryKey) : []
@@ -359,20 +362,23 @@ export default function SellPage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SELL_DRAFT_KEY)
-      if (!raw) return
-      const draft = JSON.parse(raw)
-      if (draft?.formData) setFormData(draft.formData)
-      if (draft?.categoryKey) setCategoryKey(draft.categoryKey)
-      if (draft?.subcategoryKey) setSubcategoryKey(draft.subcategoryKey)
-      if (draft?.variantValues) setVariantValues(draft.variantValues)
-      if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
-      if (Array.isArray(draft?.tags)) setTags(draft.tags)
-      if (Array.isArray(draft?.images)) setImages(draft.images)
+      if (raw) {
+        const draft = JSON.parse(raw)
+        if (draft?.formData) setFormData(draft.formData)
+        if (draft?.categoryKey) setCategoryKey(draft.categoryKey)
+        if (draft?.subcategoryKey) setSubcategoryKey(draft.subcategoryKey)
+        if (draft?.variantValues) setVariantValues(draft.variantValues)
+        if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
+        if (Array.isArray(draft?.tags)) setTags(draft.tags)
+        if (Array.isArray(draft?.images)) setImages(draft.images)
+      }
     } catch {}
+    finally { setDraftHydrated(true) }
   }, [])
 
   // Persist draft continuously
   useEffect(() => {
+    if (!draftHydrated) return
     try {
       const safeImages = images
         .filter(img => !img.uploading && !!img.url)
@@ -390,7 +396,7 @@ export default function SellPage() {
         })
       )
     } catch {}
-  }, [formData, categoryKey, subcategoryKey, variantValues, variantPricing, tags, images])
+  }, [draftHydrated, formData, categoryKey, subcategoryKey, variantValues, variantPricing, tags, images])
 
   useEffect(() => {
     if (document.getElementById('sell-anim')) return
@@ -443,8 +449,18 @@ export default function SellPage() {
   }, [router])
 
   // Reset subcategory + variants when category changes
-  useEffect(() => { setSubcategoryKey(''); setVariantValues({}) }, [categoryKey])
-  useEffect(() => { setVariantValues({}); setVariantPricing({}) }, [subcategoryKey])
+  useEffect(() => {
+    if (!draftHydrated) return
+    if (skipNextCategoryResetRef.current) { skipNextCategoryResetRef.current = false; return }
+    setSubcategoryKey('')
+    setVariantValues({})
+  }, [categoryKey])
+  useEffect(() => {
+    if (!draftHydrated) return
+    if (skipNextSubcategoryResetRef.current) { skipNextSubcategoryResetRef.current = false; return }
+    setVariantValues({})
+    setVariantPricing({})
+  }, [subcategoryKey])
 
   // Auto-generate tags from name + category + variant values
   useEffect(() => {
