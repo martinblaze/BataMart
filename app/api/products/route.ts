@@ -8,6 +8,24 @@ import { buildAttributeFiltersFromQuery, normalizeAttributeValue } from '@/lib/c
 
 const DEFAULT_PAGE_SIZE = 40
 const MAX_PAGE_SIZE     = 100
+const AUTO_PROMOTE_THRESHOLD = 10
+
+function normalizeLearnedKey(input: string) {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function isSafePromotableKey(key: string) {
+  if (!key || key.length > 30) return false
+  if (!/^[a-z][a-z0-9_]*$/.test(key)) return false
+  const blocked = ['description', 'note', 'details', 'comment', 'message']
+  return !blocked.includes(key)
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -298,6 +316,101 @@ export async function POST(request: NextRequest) {
       },
       include: { variants: true, attributeValues: true },
     })
+
+    const learnCategoryKey = categoryKey ? String(categoryKey) : null
+    const learnSubcategoryKey = subcategoryKey ? String(subcategoryKey) : null
+
+    if (normalizedAttributes.length > 0 && learnCategoryKey) {
+      for (const attr of normalizedAttributes) {
+        const normalizedKey = normalizeLearnedKey(attr.key)
+        if (!normalizedKey) continue
+
+        const existingCategoryAttribute = await prisma.categoryAttribute.findFirst({
+          where: {
+            categoryKey: learnCategoryKey,
+            key: normalizedKey,
+            OR: [{ subcategoryKey: learnSubcategoryKey }, { subcategoryKey: null }],
+          },
+          select: { id: true },
+        })
+
+        if (!existingCategoryAttribute) {
+          const suggestion = await prisma.attributeSuggestion.upsert({
+            where: {
+              categoryKey_subcategoryKey_key: {
+                categoryKey: learnCategoryKey,
+                subcategoryKey: learnSubcategoryKey,
+                key: normalizedKey,
+              },
+            },
+            update: {
+              occurrences: { increment: 1 },
+              label: attr.label || normalizedKey,
+            },
+            create: {
+              categoryKey: learnCategoryKey,
+              subcategoryKey: learnSubcategoryKey,
+              key: normalizedKey,
+              label: attr.label || normalizedKey,
+              occurrences: 1,
+            },
+          })
+
+          if (suggestion.occurrences >= AUTO_PROMOTE_THRESHOLD && isSafePromotableKey(normalizedKey)) {
+            const alreadyPromoted = await prisma.categoryAttribute.findFirst({
+              where: {
+                categoryKey: learnCategoryKey,
+                subcategoryKey: learnSubcategoryKey,
+                key: normalizedKey,
+              },
+              select: { id: true },
+            })
+
+            if (!alreadyPromoted) {
+              await prisma.categoryAttribute.create({
+                data: {
+                  categoryKey: learnCategoryKey,
+                  subcategoryKey: learnSubcategoryKey,
+                  key: normalizedKey,
+                  label: suggestion.label || attr.label || normalizedKey,
+                  type: typeof attr.value === 'number' ? 'number' : typeof attr.value === 'boolean' ? 'boolean' : Array.isArray(attr.value) ? 'multi_select' : 'text',
+                  required: false,
+                  filterable: true,
+                  searchable: true,
+                  sortOrder: 999,
+                },
+              })
+              await prisma.attributeSuggestion.update({
+                where: { id: suggestion.id },
+                data: { autoPromoted: true, approved: true },
+              })
+            }
+          }
+        }
+
+        const values = Array.isArray(attr.value) ? attr.value : [attr.value]
+        for (const rawValue of values) {
+          const value = String(rawValue).trim()
+          if (!value || value.length > 100) continue
+          await prisma.attributeValueStats.upsert({
+            where: {
+                categoryKey_key_value: {
+                categoryKey: learnCategoryKey,
+                key: normalizedKey,
+                value,
+              },
+            },
+            update: { count: { increment: 1 } },
+            create: {
+              categoryKey: learnCategoryKey,
+              key: normalizedKey,
+              value,
+              count: 1,
+            },
+          })
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, product }, { status: 201 })
   } catch (error) {

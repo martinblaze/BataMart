@@ -232,6 +232,48 @@ model ProductAttributeValue {
   @@schema("public")
 }
 
+model AttributeSuggestion {
+  id             String   @id @default(cuid())
+  categoryKey    String
+  subcategoryKey String?
+  key            String
+  label          String
+  occurrences    Int      @default(1)
+  approved       Boolean  @default(false)
+  autoPromoted   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([categoryKey, subcategoryKey, key])
+  @@index([categoryKey])
+  @@index([subcategoryKey])
+  @@schema("public")
+}
+
+model AttributeValueStats {
+  id          String   @id @default(cuid())
+  categoryKey String
+  key         String
+  value       String
+  count       Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([categoryKey, key, value])
+  @@index([categoryKey])
+  @@index([key])
+  @@schema("public")
+}
+
+model ProductParseCache {
+  id         String   @id @default(cuid())
+  rawText    String   @unique
+  parsedData Json
+  createdAt  DateTime @default(now())
+
+  @@schema("public")
+}
+
 model ProductVariant {
   id          String   @id @default(cuid())
   productId   String

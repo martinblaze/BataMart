@@ -396,6 +396,7 @@ export default function SellPage() {
   const [variantPricing, setVariantPricing] = useState<Record<string, { price: string; stock: string }>>({})
   const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttributeDef[]>([])
   const [attributeValues, setAttributeValues] = useState<Record<string, any>>({})
+  const [manuallyTouchedAttributes, setManuallyTouchedAttributes] = useState<Record<string, boolean>>({})
 
   // Images — same structure as original: preview + url + uploading flag
   const [images, setImages] = useState<{ preview: string; url: string; uploading: boolean }[]>([])
@@ -426,6 +427,7 @@ export default function SellPage() {
         if (draft?.variantValues) setVariantValues(draft.variantValues)
         if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
         if (draft?.attributeValues) setAttributeValues(draft.attributeValues)
+        if (draft?.manuallyTouchedAttributes) setManuallyTouchedAttributes(draft.manuallyTouchedAttributes)
         if (Array.isArray(draft?.tags)) setTags(draft.tags)
         if (Array.isArray(draft?.images)) setImages(draft.images)
       }
@@ -449,12 +451,13 @@ export default function SellPage() {
           variantValues,
           variantPricing,
           attributeValues,
+          manuallyTouchedAttributes,
           tags,
           images: safeImages,
         })
       )
     } catch {}
-  }, [draftHydrated, formData, categoryKey, subcategoryKey, variantValues, variantPricing, attributeValues, tags, images])
+  }, [draftHydrated, formData, categoryKey, subcategoryKey, variantValues, variantPricing, attributeValues, manuallyTouchedAttributes, tags, images])
 
   useEffect(() => {
     if (document.getElementById('sell-anim')) return
@@ -520,6 +523,7 @@ export default function SellPage() {
     setVariantValues({})
     setCategoryAttributes([])
     setAttributeValues({})
+    setManuallyTouchedAttributes({})
   }, [categoryKey])
   useEffect(() => {
     if (!draftHydrated) return
@@ -527,6 +531,7 @@ export default function SellPage() {
     setVariantValues({})
     setVariantPricing({})
     setAttributeValues({})
+    setManuallyTouchedAttributes({})
   }, [subcategoryKey])
 
   useEffect(() => {
@@ -563,6 +568,38 @@ export default function SellPage() {
       return [...generated, ...manual].slice(0, 30)
     })
   }, [formData.name, categoryKey, subcategoryKey, variantValues])
+
+  // AI-lite parse auto-fill from product title (without overriding manual inputs)
+  useEffect(() => {
+    const text = formData.name.trim()
+    if (!text || text.length < 4 || categoryAttributes.length === 0) return
+
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        const res = await fetch('/api/parse-product', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ text }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data?.parsed || typeof data.parsed !== 'object') return
+
+        const attrKeys = new Set(categoryAttributes.map((a) => a.key))
+        for (const [k, v] of Object.entries(data.parsed as Record<string, string>)) {
+          if (!attrKeys.has(k)) continue
+          const current = attributeValues[k]
+          const isEmpty = current === undefined || current === null || (typeof current === 'string' && !current.trim()) || (Array.isArray(current) && current.length === 0)
+          if (!isEmpty) continue
+          if (manuallyTouchedAttributes[k]) continue
+          setAttributeValue(k, v, false)
+        }
+      } catch {}
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [formData.name, categoryAttributes, attributeValues, manuallyTouchedAttributes])
 
   function parseJsonArray(val: unknown): string[] {
     if (Array.isArray(val)) return val.filter((v): v is string => typeof v === 'string')
@@ -680,8 +717,11 @@ export default function SellPage() {
     setVariantValues(prev => ({ ...prev, [key]: vals }))
   }
 
-  const setAttributeValue = (key: string, value: any) => {
+  const setAttributeValue = (key: string, value: any, markTouched = true) => {
     setAttributeValues((prev) => ({ ...prev, [key]: value }))
+    if (markTouched) {
+      setManuallyTouchedAttributes((prev) => ({ ...prev, [key]: true }))
+    }
   }
 
   const toggleMultiSelectAttribute = (key: string, value: string) => {
@@ -690,6 +730,7 @@ export default function SellPage() {
       const next = current.includes(value) ? current.filter((v: string) => v !== value) : [...current, value]
       return { ...prev, [key]: next }
     })
+    setManuallyTouchedAttributes((prev) => ({ ...prev, [key]: true }))
   }
 
   const variantKeysForMatrix = Object.keys(variantValues).filter(k => (variantValues[k] || []).length > 0)

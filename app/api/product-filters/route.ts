@@ -64,13 +64,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const statRows = categoryKey
+      ? await prisma.attributeValueStats.findMany({
+          where: { categoryKey },
+          select: { key: true, value: true, count: true },
+          take: 5000,
+        })
+      : []
+    const statMap = new Map(statRows.map((r) => [`${r.key}::${r.value}`, r.count]))
+
     const filters = Object.entries(optionCount).map(([key, counts]) => ({
       key,
       label: labelByKey.get(key) || key,
       type: typeByKey.get(key) || 'select',
       options: Array.from(counts.entries())
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => b.count - a.count),
+        .map(([value, count]) => ({ value, count, learnedCount: statMap.get(`${key}::${value}`) || 0 }))
+        .sort((a, b) => (b.learnedCount - a.learnedCount) || (b.count - a.count))
+        .map(({ value, count }) => ({ value, count })),
     }))
 
     return NextResponse.json({
