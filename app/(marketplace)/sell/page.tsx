@@ -396,6 +396,7 @@ export default function SellPage() {
   const [variantPricing, setVariantPricing] = useState<Record<string, { price: string; stock: string }>>({})
   const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttributeDef[]>([])
   const [attributeValues, setAttributeValues] = useState<Record<string, any>>({})
+  const [attributeCustomInput, setAttributeCustomInput] = useState<Record<string, string>>({})
   const [manuallyTouchedAttributes, setManuallyTouchedAttributes] = useState<Record<string, boolean>>({})
 
   // Images — same structure as original: preview + url + uploading flag
@@ -523,6 +524,7 @@ export default function SellPage() {
     setVariantValues({})
     setCategoryAttributes([])
     setAttributeValues({})
+    setAttributeCustomInput({})
     setManuallyTouchedAttributes({})
   }, [categoryKey])
   useEffect(() => {
@@ -531,6 +533,7 @@ export default function SellPage() {
     setVariantValues({})
     setVariantPricing({})
     setAttributeValues({})
+    setAttributeCustomInput({})
     setManuallyTouchedAttributes({})
   }, [subcategoryKey])
 
@@ -731,6 +734,18 @@ export default function SellPage() {
       return { ...prev, [key]: next }
     })
     setManuallyTouchedAttributes((prev) => ({ ...prev, [key]: true }))
+  }
+
+  const toggleSelectAttributeOption = (key: string, option: string) => {
+    setAttributeValues((prev) => ({ ...prev, [key]: prev[key] === option ? '' : option }))
+    setManuallyTouchedAttributes((prev) => ({ ...prev, [key]: true }))
+  }
+
+  const addCustomSelectAttribute = (key: string) => {
+    const raw = (attributeCustomInput[key] || '').trim()
+    if (!raw) return
+    setAttributeValue(key, raw)
+    setAttributeCustomInput((prev) => ({ ...prev, [key]: '' }))
   }
 
   const variantKeysForMatrix = Object.keys(variantValues).filter(k => (variantValues[k] || []).length > 0)
@@ -1042,14 +1057,52 @@ export default function SellPage() {
                       {attr.label} {attr.required ? '*' : ''}
                     </label>
                     {attr.type === 'select' && (
-                      <select
-                        value={value ?? ''}
-                        onChange={(e) => setAttributeValue(attr.key, e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
-                      >
-                        <option value="">Select {attr.label}</option>
-                        {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
+                      <div className="space-y-2.5">
+                        {options.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {options.map((opt) => {
+                              const active = value === opt
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => toggleSelectAttributeOption(attr.key, opt)}
+                                  className={`text-xs px-3 py-1.5 rounded-xl border font-semibold transition-all ${
+                                    active
+                                      ? 'bg-indigo-600 text-white border-transparent'
+                                      : 'bg-white text-gray-600 border-gray-200'
+                                  }`}
+                                >
+                                  {active ? '✓ ' : '+ '}{opt}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={attributeCustomInput[attr.key] ?? ''}
+                            onChange={(e) => setAttributeCustomInput((prev) => ({ ...prev, [attr.key]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                addCustomSelectAttribute(attr.key)
+                              }
+                            }}
+                            className="flex-1 px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
+                            placeholder={`Add custom ${attr.label.toLowerCase()}...`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => addCustomSelectAttribute(attr.key)}
+                            disabled={!(attributeCustomInput[attr.key] || '').trim()}
+                            className="w-12 rounded-xl bg-indigo-300 text-white font-black disabled:opacity-50 hover:bg-indigo-500 transition-colors"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {attr.type === 'multi_select' && (
                       <div className="flex flex-wrap gap-2">
