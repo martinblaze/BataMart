@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const categoryKey = searchParams.get('categoryKey')
     const subcategoryKey = searchParams.get('subcategoryKey')
+    const search = searchParams.get('search')
+    const q = searchParams.get('q')
+    const queryText = (q || search || '').trim()
 
     const productWhere: any = {
       isActive: true,
@@ -23,6 +26,29 @@ export async function GET(request: NextRequest) {
     }
     if (categoryKey) productWhere.categoryKey = categoryKey
     if (subcategoryKey) productWhere.subcategoryKey = subcategoryKey
+    if (queryText) {
+      const tokens = queryText.substring(0, 100).split(/\s+/).filter(Boolean)
+      productWhere.AND = tokens.map((token) => ({
+        OR: [
+          { name: { contains: token, mode: 'insensitive' } },
+          { description: { contains: token, mode: 'insensitive' } },
+          { category: { contains: token, mode: 'insensitive' } },
+          { subcategory: { contains: token, mode: 'insensitive' } },
+          { categoryKey: { contains: token, mode: 'insensitive' } },
+          { subcategoryKey: { contains: token, mode: 'insensitive' } },
+          {
+            attributeValues: {
+              some: {
+                OR: [
+                  { key: { contains: token, mode: 'insensitive' } },
+                  { label: { contains: token, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
+      }))
+    }
 
     const products = await prisma.product.findMany({
       where: productWhere,

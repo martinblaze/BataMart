@@ -57,7 +57,8 @@ function SearchPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [filterCache, setFilterCache] = useState<Record<string, { filters: FilterDef[]; price: { min: number; max: number } }>>({})
 
-  const cacheKey = `${categoryKey}::${subcategoryKey || ''}`
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const cacheKey = `${categoryKey}::${subcategoryKey || ''}::${normalizedQuery}`
   const subcategories = useMemo(() => {
     if (categoryKey === 'all') return []
     return Object.entries(CATEGORY_TREE[categoryKey]?.subcategories || {}).map(([key, sub]) => ({ key, label: sub.label }))
@@ -87,6 +88,7 @@ function SearchPage() {
         const params = new URLSearchParams()
         if (categoryKey !== 'all') params.append('categoryKey', categoryKey)
         if (subcategoryKey) params.append('subcategoryKey', subcategoryKey)
+        if (searchQuery.trim()) params.append('q', searchQuery.trim())
         const res = await fetch(`/api/product-filters?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
         const data = await res.json()
         const nextFilters: FilterDef[] = data.filters || []
@@ -97,7 +99,7 @@ function SearchPage() {
       } catch {}
     }
     fetchFilters()
-  }, [categoryKey, subcategoryKey, cacheKey, filterCache])
+  }, [categoryKey, subcategoryKey, searchQuery, cacheKey, filterCache])
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -317,4 +319,3 @@ export default function SearchPageWrapper() {
     </Suspense>
   )
 }
-
