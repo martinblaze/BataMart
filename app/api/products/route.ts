@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
     const search   = searchParams.get('search')
     const q        = searchParams.get('q')
     const queryText = q || search
+    const sortBy = searchParams.get('sortBy') || 'relevance'
 
     const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
     const limit = Math.min(
@@ -130,18 +131,37 @@ export async function GET(request: NextRequest) {
           continue
         }
         where.AND.push({
-          attributeValues: {
-            some: {
-              key,
-              OR: [
-                { value: { equals: filterValue } },
-                { value: { array_contains: [filterValue] } },
-              ],
+          OR: [
+            {
+              attributeValues: {
+                some: {
+                  key,
+                  OR: [
+                    { value: { equals: filterValue } },
+                    { value: { array_contains: [filterValue] } },
+                  ],
+                },
+              },
             },
-          },
+            {
+              variants: {
+                some: {
+                  combination: {
+                    path: [key],
+                    equals: filterValue,
+                  },
+                },
+              },
+            },
+          ],
         })
       }
     }
+
+    let orderBy: any = { createdAt: 'desc' }
+    if (sortBy === 'newest') orderBy = { createdAt: 'desc' }
+    else if (sortBy === 'priceLow') orderBy = { price: 'asc' }
+    else if (sortBy === 'priceHigh') orderBy = { price: 'desc' }
 
     const [products, total] = await Promise.all([
       prisma.product.findMany({
@@ -159,7 +179,7 @@ export async function GET(request: NextRequest) {
           variants: true,
           attributeValues: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         take:    limit,
         skip,
       }),

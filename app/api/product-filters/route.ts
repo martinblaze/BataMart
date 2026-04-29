@@ -29,6 +29,10 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         price: true,
+        variantsEnabled: true,
+        variants: {
+          select: { combination: true },
+        },
         attributeValues: {
           where: { filterable: true },
           select: { key: true, value: true },
@@ -41,6 +45,7 @@ export async function GET(request: NextRequest) {
     const typeByKey = new Map(defs.map((d) => [d.key, d.type]))
 
     const optionCount: Record<string, Map<string, number>> = {}
+    const sourceByKey = new Map<string, 'attribute' | 'variant' | 'merged'>()
     let min = Number.POSITIVE_INFINITY
     let max = 0
 
@@ -51,6 +56,7 @@ export async function GET(request: NextRequest) {
       }
       for (const attr of p.attributeValues) {
         if (!optionCount[attr.key]) optionCount[attr.key] = new Map()
+        if (!sourceByKey.has(attr.key)) sourceByKey.set(attr.key, 'attribute')
         const push = (val: string) => {
           const key = val.trim()
           if (!key) return
@@ -60,6 +66,19 @@ export async function GET(request: NextRequest) {
           for (const v of attr.value as unknown[]) push(String(v))
         } else {
           push(String(attr.value))
+        }
+      }
+      for (const variant of p.variants || []) {
+        const combo = (variant.combination || {}) as Record<string, unknown>
+        for (const [rawKey, rawVal] of Object.entries(combo)) {
+          const key = String(rawKey || '').trim()
+          const value = String(rawVal || '').trim()
+          if (!key || !value) continue
+          if (!optionCount[key]) optionCount[key] = new Map()
+          optionCount[key].set(value, (optionCount[key].get(value) || 0) + 1)
+          const prev = sourceByKey.get(key)
+          if (!prev) sourceByKey.set(key, 'variant')
+          else if (prev !== 'variant') sourceByKey.set(key, 'merged')
         }
       }
     }
@@ -77,6 +96,7 @@ export async function GET(request: NextRequest) {
       key,
       label: labelByKey.get(key) || key,
       type: typeByKey.get(key) || 'select',
+      source: sourceByKey.get(key) || 'attribute',
       options: Array.from(counts.entries())
         .map(([value, count]) => ({ value, count, learnedCount: statMap.get(`${key}::${value}`) || 0 }))
         .sort((a, b) => (b.learnedCount - a.learnedCount) || (b.count - a.count))
