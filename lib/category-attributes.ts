@@ -16,6 +16,7 @@ const RESERVED_QUERY_KEYS = new Set([
   'maxPrice',
   'attributes',
   'sort',
+  'sortBy',
 ])
 
 export async function getCategoryAttributes(categoryKey?: string | null, subcategoryKey?: string | null) {
