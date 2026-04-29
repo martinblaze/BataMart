@@ -952,9 +952,12 @@ export default function ProductDetailPage() {
               )}
             </div>
 
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-3 sm:p-4">
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-3 sm:p-4 border border-indigo-100">
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl sm:text-3xl font-extrabold text-indigo-700">{fmt(effectivePrice)}</span>
+                {product.basePrice && product.basePrice > effectivePrice && (
+                  <span className="text-xs sm:text-sm text-gray-400 line-through font-semibold">{fmt(product.basePrice)}</span>
+                )}
               </div>
               {structuredVariants.length > 0 && minStructuredPrice > 0 && (
                 <p className="text-[11px] sm:text-xs text-indigo-500 font-semibold mt-1">
@@ -978,11 +981,14 @@ export default function ProductDetailPage() {
 
             {/* ── NEW: Variant Selector ──────────────────── */}
             {variantKeys.length > 0 && (
-              <div id="variant-selector" className="bg-white rounded-2xl p-4 ring-1 ring-gray-100 space-y-4">
+              <div id="variant-selector" className="bg-white rounded-2xl p-4 ring-1 ring-gray-200 space-y-4">
                 <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-500" />
                   Select Options
                 </h3>
+                <p className="text-[11px] text-gray-500 -mt-2">
+                  Pick all required options to unlock exact stock and pricing.
+                </p>
 
                 {variantError && (
                   <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
@@ -997,9 +1003,12 @@ export default function ProductDetailPage() {
                   const isSingleLocked = vals.length === 1
                   const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
                   return (
-                    <div key={key}>
-                      <p className="text-xs font-black text-gray-700 mb-2">
-                        {label}: {selected[key] ? <span className="text-indigo-700">{selected[key]}</span> : <span className="text-gray-400">Select</span>}
+                    <div key={key} className="rounded-xl border border-gray-200 p-3 bg-gray-50/40">
+                      <p className="text-xs font-black text-gray-700 mb-2 flex items-center justify-between">
+                        <span>
+                          {label}: {selected[key] ? <span className="text-indigo-700">{selected[key]}</span> : <span className="text-gray-400">Select</span>}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-semibold">{vals.length} option{vals.length > 1 ? 's' : ''}</span>
                       </p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {vals.map(v => (
@@ -1015,12 +1024,12 @@ export default function ProductDetailPage() {
                               setSelected(prev => ({ ...prev, [key]: prev[key] === v ? prev[key] : v }))
                               setVariantError('')
                             }}
-                            className={`variant-chip text-left px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                            className={`variant-chip text-left px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
                               chosen
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm ring-2 ring-indigo-200'
                                 : available
-                                ? 'border-gray-200 bg-white text-gray-800 hover:border-indigo-300'
-                                : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                ? 'border-gray-300 bg-white text-gray-800 hover:border-indigo-400 hover:shadow-sm'
+                                : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'
                             }`}
                             disabled={isSingleLocked || !available}
                           >
@@ -1038,10 +1047,10 @@ export default function ProductDetailPage() {
                 })}
 
                 {variantSummary && (
-                  <div className="bg-indigo-50 rounded-xl px-3 py-2">
-                    <p className="text-xs text-indigo-600 font-bold">Selected: {variantSummary}</p>
+                  <div className="bg-indigo-50 rounded-xl px-3 py-2 border border-indigo-100">
+                    <p className="text-xs text-indigo-700 font-bold">Selected: {variantSummary}</p>
                     {matchedVariant && (
-                      <p className="text-xs text-indigo-700 font-extrabold mt-1">
+                      <p className="text-xs text-indigo-800 font-extrabold mt-1">
                         Selected price: {fmt(matchedVariant.price)}
                       </p>
                     )}

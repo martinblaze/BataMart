@@ -541,7 +541,7 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
   return (
     <div
       onClick={onClick}
-      className="product-card card-enter bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer flex flex-col group"
+      className="product-card card-enter bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm cursor-pointer flex flex-col group"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="relative aspect-square bg-gray-50 overflow-hidden">
@@ -603,6 +603,7 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
             {originalPrice && <span className="text-gray-400 font-medium text-[11px] line-through">{fmt(originalPrice)}</span>}
           </div>
           <StarRating rating={product.seller?.avgRating || 0} />
+          <p className="text-[10px] text-gray-500 font-semibold mt-0.5">50+ bought in past week</p>
         </div>
 
         {deliveryTag && (
@@ -627,7 +628,7 @@ function ProductCard({ product, onClick, delay = 0, showSignal = true }: {
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-2 mt-1.5 border-t border-gray-50">
+        <div className="flex items-center justify-between pt-2 mt-1.5 border-t border-gray-100">
           <div className="min-w-0 flex items-center gap-1 flex-wrap">
             <Link
               href={`/seller/${product.seller?.id}`}
@@ -1783,6 +1784,7 @@ export default function MarketplacePage() {
   const [peopleLikeYouBought, setPeopleLikeYouBought] = useState<any[]>([])
   const [renderSeed,          setRenderSeed]          = useState(() => Date.now())
   const [maxPriceFilter,      setMaxPriceFilter]      = useState<number | null>(null)
+  const [sortMode,            setSortMode]            = useState<'relevance' | 'price_asc' | 'price_desc' | 'newest'>('relevance')
 
   // ── Referral popup — shows once per app session, only on first marketplace visit ──
   const [showReferralPopup, setShowReferralPopup] = useState(false)
@@ -2176,6 +2178,17 @@ export default function MarketplacePage() {
     return prods
   }, [allProducts, selectedCategory, maxPriceFilter])
 
+  const sortProducts = useCallback((products: any[]) => {
+    const next = [...products]
+    if (sortMode === 'price_asc') return next.sort((a, b) => (a.price || 0) - (b.price || 0))
+    if (sortMode === 'price_desc') return next.sort((a, b) => (b.price || 0) - (a.price || 0))
+    if (sortMode === 'newest') return next.sort((a, b) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0))
+    return next
+  }, [sortMode])
+
+  const sortedFilteredByCategory = useMemo(() => sortProducts(filteredByCategory), [filteredByCategory, sortProducts])
+  const sortedAllProducts = useMemo(() => sortProducts(allProducts), [allProducts, sortProducts])
+
   const productsByCategory = useMemo(() => {
     const map: Record<string, any[]> = {}
     for (const cat of CATEGORIES.slice(1)) {
@@ -2536,9 +2549,21 @@ export default function MarketplacePage() {
                   <button onClick={() => setMaxPriceFilter(null)} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
                 </span>
               )}
-              <span className="ml-auto text-[11px] text-gray-400 font-medium">{filteredByCategory.length} items</span>
+              <div className="ml-auto flex items-center gap-2">
+                <select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as 'relevance' | 'price_asc' | 'price_desc' | 'newest')}
+                  className="text-xs font-semibold border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 outline-none"
+                >
+                  <option value="relevance">Relevance</option>
+                  <option value="newest">Newest</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                </select>
+                <span className="text-[11px] text-gray-400 font-medium">{sortedFilteredByCategory.length} items</span>
+              </div>
             </div>
-            {filteredByCategory.length === 0 ? (
+            {sortedFilteredByCategory.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
                 <ShoppingBag className="w-12 h-12 text-gray-200 mx-auto mb-3" />
                 <p className="text-gray-400 font-semibold mb-4">Nothing here yet</p>
@@ -2548,7 +2573,7 @@ export default function MarketplacePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {filteredByCategory.map((p, i) => (
+                {sortedFilteredByCategory.map((p, i) => (
                   <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 40} />
                 ))}
               </div>
@@ -2558,8 +2583,18 @@ export default function MarketplacePage() {
         ) : viewMode === 'grid' ? (
           /* ── GRID VIEW ── */
           <div>
-            <div className="flex items-center justify-between mb-3 bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-3 bg-white rounded-xl px-4 py-3 border border-gray-100 shadow-sm gap-2">
               <LiveStatsBar count={allProducts.length} />
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as 'relevance' | 'price_asc' | 'price_desc' | 'newest')}
+                className="text-xs font-semibold border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 outline-none"
+              >
+                <option value="relevance">Relevance</option>
+                <option value="newest">Newest</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+              </select>
             </div>
             {peopleLikeYouBought.length > 0 && (
               <div className="mb-4">
@@ -2573,7 +2608,7 @@ export default function MarketplacePage() {
               </div>
             )}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {allProducts.map((p, i) => (
+              {sortedAllProducts.map((p, i) => (
                 <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 30} />
               ))}
             </div>
