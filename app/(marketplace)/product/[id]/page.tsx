@@ -614,6 +614,23 @@ export default function ProductDetailPage() {
   const effectivePrice = matchedVariant?.price ?? product?.price ?? 0
   const effectiveStock = matchedVariant?.stock ?? product?.quantity ?? 0
 
+  // Auto-select locked single-value variant fields
+  useEffect(() => {
+    if (variantKeys.length === 0) return
+    setSelected(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const key of variantKeys) {
+        const vals = variants[key] || []
+        if (vals.length === 1 && next[key] !== vals[0]) {
+          next[key] = vals[0]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [variantKeys.join('|'), JSON.stringify(variants)])
+
   const handleAddToCart = async () => {
     if (!product) return
     if (!allVariantsSelected) {
@@ -954,6 +971,7 @@ export default function ProductDetailPage() {
                 {variantKeys.map(key => {
                   const vals = variants[key]
                   if (!vals || vals.length === 0) return null
+                  const isSingleLocked = vals.length === 1
                   const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
                   return (
                     <div key={key}>
@@ -967,6 +985,7 @@ export default function ProductDetailPage() {
                             key={v}
                             type="button"
                             onClick={() => {
+                              if (isSingleLocked) return
                               setSelected(prev => ({ ...prev, [key]: prev[key] === v ? '' : v }))
                               setVariantError('')
                             }}
@@ -975,6 +994,7 @@ export default function ProductDetailPage() {
                                 ? 'variant-chip-active'
                                 : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300'
                             }`}
+                            disabled={isSingleLocked}
                           >
                             {v}
                           </button>
