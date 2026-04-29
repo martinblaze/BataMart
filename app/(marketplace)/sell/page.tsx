@@ -112,7 +112,21 @@ const SELL_CSS = `
 `
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
-function ConfirmListingModal({ price, onConfirm, onCancel }: { price: number; onConfirm: () => void; onCancel: () => void }) {
+function ConfirmListingModal({
+  price,
+  hasStructuredVariants,
+  minVariantPrice,
+  maxVariantPrice,
+  onConfirm,
+  onCancel,
+}: {
+  price: number
+  hasStructuredVariants: boolean
+  minVariantPrice: number
+  maxVariantPrice: number
+  onConfirm: () => void
+  onCancel: () => void
+}) {
   const [agreed, setAgreed] = useState(false)
   const fmt = (n: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(n)
   const fee = price * 0.05
@@ -134,23 +148,49 @@ function ConfirmListingModal({ price, onConfirm, onCancel }: { price: number; on
 
         <div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-2xl p-4 mb-4 border border-indigo-100">
           <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3">Fee Breakdown</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Your listed price</span>
-              <span className="font-bold text-gray-900">{fmt(price)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Platform fee (5%)</span>
-              <span className="font-bold text-red-500">− {fmt(fee)}</span>
-            </div>
-            <div className="border-t border-indigo-200 pt-2 flex justify-between">
-              <span className="font-bold text-gray-800">You receive</span>
-              <span className="font-black text-emerald-600 text-base">{fmt(receive)}</span>
-            </div>
-          </div>
-          <p className="text-[11px] text-indigo-500 mt-3 bg-white/60 rounded-xl p-2.5 leading-relaxed">
-            💡 To receive exactly <strong>{fmt(price)}</strong>, list at <strong>{fmt(Math.ceil(price / 0.95))}</strong>
-          </p>
+          {!hasStructuredVariants ? (
+            <>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Your listed price</span>
+                  <span className="font-bold text-gray-900">{fmt(price)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Platform fee (5%)</span>
+                  <span className="font-bold text-red-500">− {fmt(fee)}</span>
+                </div>
+                <div className="border-t border-indigo-200 pt-2 flex justify-between">
+                  <span className="font-bold text-gray-800">You receive</span>
+                  <span className="font-black text-emerald-600 text-base">{fmt(receive)}</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-indigo-500 mt-3 bg-white/60 rounded-xl p-2.5 leading-relaxed">
+                💡 To receive exactly <strong>{fmt(price)}</strong>, list at <strong>{fmt(Math.ceil(price / 0.95))}</strong>
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Lowest variant price</span>
+                  <span className="font-bold text-gray-900">{fmt(minVariantPrice)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Highest variant price</span>
+                  <span className="font-bold text-gray-900">{fmt(maxVariantPrice)}</span>
+                </div>
+                <div className="border-t border-indigo-200 pt-2 flex justify-between">
+                  <span className="font-bold text-gray-800">You receive (range)</span>
+                  <span className="font-black text-emerald-600 text-base">
+                    {fmt(minVariantPrice * 0.95)} – {fmt(maxVariantPrice * 0.95)}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-indigo-500 mt-3 bg-white/60 rounded-xl p-2.5 leading-relaxed">
+                💡 Variant rows use their own prices and stock. Base price is fallback only.
+              </p>
+            </>
+          )}
         </div>
 
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-5">
@@ -615,6 +655,15 @@ export default function SellPage() {
     variantKeysForMatrix.map(k => `${k}:${combo[k]}`).join('|')
 
   const hasStructuredVariants = variantCombinations.length > 0
+  const variantPriceNumbers = hasStructuredVariants
+    ? variantCombinations.map(combo => {
+        const row = variantPricing[comboKey(combo)]
+        const val = Number(row?.price || formData.price || 0)
+        return Number.isFinite(val) ? val : 0
+      }).filter(v => v > 0)
+    : []
+  const minVariantPrice = variantPriceNumbers.length ? Math.min(...variantPriceNumbers) : 0
+  const maxVariantPrice = variantPriceNumbers.length ? Math.max(...variantPriceNumbers) : 0
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -706,6 +755,9 @@ export default function SellPage() {
       {showConfirmModal && (
         <ConfirmListingModal
           price={parseFloat(formData.price) || 0}
+          hasStructuredVariants={hasStructuredVariants}
+          minVariantPrice={minVariantPrice}
+          maxVariantPrice={maxVariantPrice}
           onConfirm={handleConfirmListing}
           onCancel={() => setShowConfirmModal(false)}
         />
@@ -740,9 +792,21 @@ export default function SellPage() {
               <Zap className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-sm">
-              <span className="text-gray-500">You'll receive </span>
-              <span className="font-black text-emerald-600">{fmt(parseFloat(formData.price) * 0.95)}</span>
-              <span className="text-gray-400 text-xs"> after 5% fee</span>
+              {!hasStructuredVariants ? (
+                <>
+                  <span className="text-gray-500">You'll receive </span>
+                  <span className="font-black text-emerald-600">{fmt(parseFloat(formData.price) * 0.95)}</span>
+                  <span className="text-gray-400 text-xs"> after 5% fee</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-gray-500">Variant payout range </span>
+                  <span className="font-black text-emerald-600">
+                    {minVariantPrice > 0 ? fmt(minVariantPrice * 0.95) : '—'}{maxVariantPrice > 0 ? ` – ${fmt(maxVariantPrice * 0.95)}` : ''}
+                  </span>
+                  <span className="text-gray-400 text-xs"> after 5% fee</span>
+                </>
+              )}
             </div>
           </div>
         )}
