@@ -983,26 +983,14 @@ export default function SellPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Hostel / Lodge *</label>
-              {hostels.length > 0 ? (
-                <select
-                  value={formData.hostelName}
-                  onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
-                  required
-                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium appearance-none"
-                >
-                  <option value="">Select hostel / lodge</option>
-                  {hostels.map(hostel => <option key={hostel} value={hostel}>{hostel}</option>)}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={formData.hostelName}
-                  onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
-                  required
-                  className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
-                  placeholder="e.g., Python Hall, Aroma Lodge, Block C"
-                />
-              )}
+              <input
+                type="text"
+                value={formData.hostelName}
+                onChange={e => setFormData({ ...formData, hostelName: e.target.value })}
+                required
+                className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
+                placeholder="e.g., Python Hall, Aroma Lodge, Block C"
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Room Number *</label>
