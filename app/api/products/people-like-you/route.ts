@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import { logNormalize, recencyNormalize, computeHybridRecommendationScore } from '@/lib/recommendation-ranking'
 
 type RankedItem = {
   key: string
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     const since = new Date()
     since.setDate(since.getDate() - daysBack)
 
-    const [myOrders, orders] = await Promise.all([
+    const [myOrders, orders, sessionEvents] = await Promise.all([
       prisma.order.findMany({
         where: { buyerId: user.id },
         take: 120,
@@ -88,6 +89,15 @@ export async function GET(request: NextRequest) {
             },
           },
         },
+      }),
+      prisma.userSessionEvent.findMany({
+        where: {
+          OR: [{ userId: user.id }, { sessionId: searchParams.get('sessionId') || undefined }],
+          createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+        },
+        select: { productId: true, eventType: true, meta: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 120,
       }),
     ])
 
@@ -141,6 +151,32 @@ export async function GET(request: NextRequest) {
       if (new Date(o.orderedAt) > p.newestDate) p.newestDate = new Date(o.orderedAt)
     }
 
+    const sessionProductIds = new Set(sessionEvents.map((e) => e.productId).filter(Boolean) as string[])
+    const sessionSearchTerms = sessionEvents
+      .filter((e) => e.eventType === 'search')
+      .flatMap((e) => {
+        const query = e.meta && typeof e.meta === 'object' ? (e.meta as Record<string, unknown>).query : ''
+        return typeof query === 'string' ? query.toLowerCase().split(/\s+/).filter(Boolean) : []
+      })
+    const productIdsFromOrders = Array.from(byProduct.keys())
+    const coViews = productIdsFromOrders.length
+      ? await prisma.productCoView.findMany({
+          where: { productId: { in: productIdsFromOrders } },
+          select: { productId: true, relatedProductId: true, count: true },
+          take: 1000,
+        })
+      : []
+    const coViewMap = new Map<string, number>()
+    for (const row of coViews) {
+      const prev = coViewMap.get(row.relatedProductId) || 0
+      coViewMap.set(row.relatedProductId, prev + row.count)
+    }
+    const maxCoView = Math.max(...Array.from(coViewMap.values()), 1)
+    const maxPopularity = Math.max(
+      ...Array.from(byProduct.values()).map((v) => v.soldCount + v.buyers.size),
+      1,
+    )
+
     let ranked: RankedItem[] = []
 
     if (mode === 'daily') {
@@ -170,10 +206,22 @@ export async function GET(request: NextRequest) {
       })
     } else {
       ranked = Array.from(byProduct.entries()).map(([productId, v]) => {
-        const ageDays = Math.max(0, Math.floor((Date.now() - v.newestDate.getTime()) / (1000 * 60 * 60 * 24)))
-        const recencyBoost = Math.max(0, 14 - ageDays)
-        const prefBoost = preferredCategories.has(v.product.category) ? 10 : 0
-        const score = v.soldCount * 4 + v.buyers.size * 4 + recencyBoost + prefBoost
+        const popularity = logNormalize(v.soldCount + v.buyers.size, maxPopularity)
+        const recency = recencyNormalize(v.newestDate)
+        const coViewScore = logNormalize(coViewMap.get(productId) || 0, maxCoView)
+        const prefBoost = preferredCategories.has(v.product.category) ? 0.8 : 0.2
+        let sessionMatch = sessionProductIds.has(productId) ? 1 : 0
+        const pName = (v.product.name || '').toLowerCase()
+        if (sessionSearchTerms.some((q) => q && pName.includes(q))) sessionMatch = Math.min(1, sessionMatch + 0.5)
+        const score =
+          computeHybridRecommendationScore({
+            coViewScore,
+            attributeSimilarity: prefBoost,
+            sessionMatch,
+            popularity,
+            priceSimilarity: 0.5,
+            recency,
+          }) * 100
         return {
           key: productId,
           dateKey: toDateKey(v.newestDate),

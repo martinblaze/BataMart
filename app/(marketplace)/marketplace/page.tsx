@@ -453,6 +453,7 @@ const CATEGORY_SPOTLIGHTS = [
 ]
 
 const JUST_DROPPED_PAGE_SIZE = 12
+const SESSION_ID_KEY = 'BATAMART_SESSION_ID'
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -504,6 +505,14 @@ function normalizeSearchHistory(raw: unknown): string[] {
       return ''
     })
     .filter(Boolean)
+}
+
+function ensureSessionId(): string {
+  const existing = localStorage.getItem(SESSION_ID_KEY)
+  if (existing) return existing
+  const generated = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  localStorage.setItem(SESSION_ID_KEY, generated)
+  return generated
 }
 
 // ─────────────────────────────────────────────
@@ -2196,6 +2205,11 @@ export default function MarketplacePage() {
       }
     } catch {}
     if (token) {
+      fetch('/api/session-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sessionId: ensureSessionId(), productId: id, eventType: 'click', meta: { from: 'marketplace' } }),
+      }).catch(() => {})
       fetch(`/api/products/${id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {
         enqueueProductView(id)
       })
@@ -2215,6 +2229,16 @@ export default function MarketplacePage() {
       const timed = updated.map((keyword) => ({ keyword, timestamp: now }))
       localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(timed))
       pushFeedActivitySignal('keywords', q)
+    } catch {}
+    try {
+      const token = localStorage.getItem('token')
+      if (token) {
+        fetch('/api/session-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ sessionId: ensureSessionId(), eventType: 'search', meta: { query: q } }),
+        }).catch(() => {})
+      }
     } catch {}
     setShowSuggestions(false)
     router.push(`/search?q=${encodeURIComponent(q)}`)

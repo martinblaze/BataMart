@@ -395,6 +395,7 @@ export default function ProductDetailPage() {
   const [reviews, setReviews] = useState<any[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [showStickyBar, setShowStickyBar] = useState(false)
+  const [sessionId, setSessionId] = useState('')
 
   const { addItem, items } = useCartStore()
   const mainRef = useRef<HTMLDivElement>(null)
@@ -402,6 +403,41 @@ export default function ProductDetailPage() {
   const relatedScrollRef = useRef<HTMLDivElement>(null)
 
   const alreadyInCart = items.some(i => i.productId === productId)
+
+  const ensureSessionId = () => {
+    const key = 'BATAMART_SESSION_ID'
+    const existing = localStorage.getItem(key)
+    if (existing) return existing
+    const generated = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem(key, generated)
+    return generated
+  }
+
+  const trackSessionEvent = (eventType: 'view' | 'click' | 'search', payload?: { productId?: string; meta?: Record<string, any> }) => {
+    try {
+      const token = localStorage.getItem('token') || ''
+      const sid = sessionId || ensureSessionId()
+      if (!sessionId) setSessionId(sid)
+      fetch('/api/session-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          sessionId: sid,
+          productId: payload?.productId || null,
+          eventType,
+          meta: payload?.meta || undefined,
+        }),
+      }).catch(() => {})
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setSessionId(ensureSessionId())
+  }, [])
 
   // ── Sticky CTA bar ──────────────────────────────────────
   useEffect(() => {
@@ -461,6 +497,7 @@ export default function ProductDetailPage() {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {})
+        trackSessionEvent('view', { productId })
         const viewed = JSON.parse(localStorage.getItem('BATAMART-recently-viewed') || '[]')
         const updated = [p, ...viewed.filter((v: any) => v.id !== p.id)].slice(0, 20)
         localStorage.setItem('BATAMART-recently-viewed', JSON.stringify(updated))
@@ -478,7 +515,7 @@ export default function ProductDetailPage() {
   const fetchPeopleLikeYou = async (token: string) => {
     setPeopleLikeLoading(true)
     try {
-      const res = await fetch('/api/products/people-like-you?mode=top&pageSize=10', {
+      const res = await fetch(`/api/products/people-like-you?mode=top&pageSize=10&sessionId=${encodeURIComponent(sessionId || ensureSessionId())}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
@@ -499,7 +536,7 @@ export default function ProductDetailPage() {
     setRelatedLoading(true)
     try {
       const res = await fetch(
-        `/api/products/${productId}/related?limit=${RELATED_PAGE_SIZE}&page=1`,
+        `/api/products/${productId}/related?limit=${RELATED_PAGE_SIZE}&page=1&sessionId=${encodeURIComponent(sessionId || ensureSessionId())}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const data = await res.json()
@@ -508,8 +545,7 @@ export default function ProductDetailPage() {
         const others: RelatedProduct[] = data.related?.others || []
         setRelatedOthers(others)
         setRelatedSourceName(data.sourceProduct?.name || '')
-        const totalOthers = data.related?.totalOthers ?? others.length
-        setRelatedHasMore(others.length === RELATED_PAGE_SIZE && totalOthers > RELATED_PAGE_SIZE)
+        setRelatedHasMore(Boolean(data.hasMore))
         setRelatedPage(1)
       }
     } catch {}
@@ -524,7 +560,7 @@ export default function ProductDetailPage() {
       const token = localStorage.getItem('token') || ''
       const nextPage = relatedPage + 1
       const res = await fetch(
-        `/api/products/${productId}/related?limit=${RELATED_PAGE_SIZE}&page=${nextPage}&othersOnly=true`,
+        `/api/products/${productId}/related?limit=${RELATED_PAGE_SIZE}&page=${nextPage}&othersOnly=true&sessionId=${encodeURIComponent(sessionId || ensureSessionId())}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const data = await res.json()
@@ -532,7 +568,7 @@ export default function ProductDetailPage() {
         const newOthers: RelatedProduct[] = data.related?.others || []
         setRelatedOthers(prev => [...prev, ...newOthers])
         setRelatedPage(nextPage)
-        setRelatedHasMore(newOthers.length === RELATED_PAGE_SIZE)
+        setRelatedHasMore(Boolean(data.hasMore))
         setTimeout(() => {
           if (relatedScrollRef.current) {
             relatedScrollRef.current.scrollBy({ left: 300, behavior: 'smooth' })
@@ -551,7 +587,7 @@ export default function ProductDetailPage() {
       const token = localStorage.getItem('token') || ''
       const nextPage = alsoLikePage + 1
       const res = await fetch(
-        `/api/products/${productId}/related?limit=${ALSO_LIKE_PAGE_SIZE}&page=${nextPage}&category=${encodeURIComponent(product.category)}&gridMode=true`,
+        `/api/products/${productId}/related?limit=${ALSO_LIKE_PAGE_SIZE}&page=${nextPage}&category=${encodeURIComponent(product.category)}&gridMode=true&sessionId=${encodeURIComponent(sessionId || ensureSessionId())}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const data = await res.json()
@@ -722,6 +758,10 @@ export default function ProductDetailPage() {
   }
 
   const navigateRelated = (id: string) => router.push(`/product/${id}`)
+  const navigateRelatedTracked = (id: string) => {
+    trackSessionEvent('click', { productId: id, meta: { from: 'product-related' } })
+    router.push(`/product/${id}`)
+  }
 
   // Description: for new products description is VARIANTS_V2 encoded — show tags instead
   // For legacy products it may have pipe-separated tags as first segment
@@ -1372,7 +1412,7 @@ export default function ProductDetailPage() {
             ) : (
               <div ref={relatedScrollRef} className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
                 {relatedNameRelated.map(p => (
-                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelatedTracked(p.id)} />
                 ))}
                 {relatedNameRelated.length > 0 && relatedOthers.length > 0 && (
                   <div className="flex-shrink-0 flex items-center px-1">
@@ -1380,7 +1420,7 @@ export default function ProductDetailPage() {
                   </div>
                 )}
                 {relatedOthers.map(p => (
-                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelatedTracked(p.id)} />
                 ))}
                 {relatedHasMore && (
                   <SeeMoreCard onClick={loadMoreRelated} loading={relatedLoadingMore} />
@@ -1415,7 +1455,7 @@ export default function ProductDetailPage() {
             ) : (
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3">
                 {peopleLikeYouBought.map(p => (
-                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelated(p.id)} />
+                  <RelatedCard key={p.id} product={p} onClick={() => navigateRelatedTracked(p.id)} />
                 ))}
                 <SeeMoreCard onClick={() => router.push('/most-bought')} loading={false} />
               </div>
@@ -1435,7 +1475,7 @@ export default function ProductDetailPage() {
               {alsoLikeItems.map(p => (
                 <div
                   key={p.id}
-                  onClick={() => navigateRelated(p.id)}
+                  onClick={() => navigateRelatedTracked(p.id)}
                   className="rv-card bg-white rounded-2xl overflow-hidden cursor-pointer"
                   style={{ border: '1px solid #f0f0f0' }}
                 >

@@ -274,6 +274,33 @@ model ProductParseCache {
   @@schema("public")
 }
 
+model ProductCoView {
+  id               String   @id @default(cuid())
+  productId        String
+  relatedProductId String
+  count            Int      @default(1)
+  updatedAt        DateTime @updatedAt
+
+  @@unique([productId, relatedProductId])
+  @@index([productId])
+  @@schema("public")
+}
+
+model UserSessionEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  sessionId String
+  productId String?
+  eventType String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([productId])
+  @@index([createdAt])
+  @@schema("public")
+}
+
 model ProductVariant {
   id          String   @id @default(cuid())
   productId   String
