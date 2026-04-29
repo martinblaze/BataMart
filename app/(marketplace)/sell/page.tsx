@@ -394,6 +394,7 @@ export default function SellPage() {
   const [subcategoryKey, setSubcategoryKey] = useState('')
   const [variantValues, setVariantValues]   = useState<Record<string, string[]>>({})
   const [variantPricing, setVariantPricing] = useState<Record<string, { price: string; stock: string }>>({})
+  const [variantsEnabledToggle, setVariantsEnabledToggle] = useState(false)
   const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttributeDef[]>([])
   const [attributeValues, setAttributeValues] = useState<Record<string, any>>({})
   const [attributeCustomInput, setAttributeCustomInput] = useState<Record<string, string>>({})
@@ -427,6 +428,7 @@ export default function SellPage() {
         if (draft?.subcategoryKey) setSubcategoryKey(draft.subcategoryKey)
         if (draft?.variantValues) setVariantValues(draft.variantValues)
         if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
+        if (typeof draft?.variantsEnabledToggle === 'boolean') setVariantsEnabledToggle(draft.variantsEnabledToggle)
         if (draft?.attributeValues) setAttributeValues(draft.attributeValues)
         if (draft?.manuallyTouchedAttributes) setManuallyTouchedAttributes(draft.manuallyTouchedAttributes)
         if (Array.isArray(draft?.tags)) setTags(draft.tags)
@@ -451,6 +453,7 @@ export default function SellPage() {
           subcategoryKey,
           variantValues,
           variantPricing,
+          variantsEnabledToggle,
           attributeValues,
           manuallyTouchedAttributes,
           tags,
@@ -765,7 +768,7 @@ export default function SellPage() {
   const comboKey = (combo: Record<string, string>) =>
     variantKeysForMatrix.map(k => `${k}:${combo[k]}`).join('|')
 
-  const hasStructuredVariants = variantCombinations.length > 0
+  const hasStructuredVariants = variantsEnabledToggle && variantCombinations.length > 0
   const variantPriceNumbers = hasStructuredVariants
     ? variantCombinations.map(combo => {
         const row = variantPricing[comboKey(combo)]
@@ -1162,18 +1165,39 @@ export default function SellPage() {
         {/* ── STEP 5: Variants ── */}
         {variantFields.length > 0 && (
           <div className="step-card bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
-            <StepHeader num="5" title="Product Variants" subtitle="Tap chips to add, or type custom values" />
-            <div className="space-y-4">
-              {variantFields.map(field => (
-                <VariantRow
-                  key={field.key}
-                  field={field}
-                  values={variantValues[field.key] ?? []}
-                  onChange={vals => setVariantField(field.key, vals)}
-                />
-              ))}
-            </div>
-            {variantCombinations.length > 0 && (
+            <StepHeader num="5" title="Product Variants" subtitle="Turn on if this product has options like color, size or storage" />
+            <button
+              type="button"
+              onClick={() => setVariantsEnabledToggle((v) => !v)}
+              className={`w-full mb-4 rounded-xl border-2 px-4 py-3 text-left transition-all ${
+                variantsEnabledToggle ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 bg-gray-50 hover:border-indigo-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Has variants</p>
+                  <p className="text-xs text-gray-500">
+                    {variantsEnabledToggle ? 'Variant section expanded' : 'Tap to add variants'}
+                  </p>
+                </div>
+                <div className={`w-10 h-6 rounded-full p-0.5 transition-colors ${variantsEnabledToggle ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                  <div className={`h-5 w-5 rounded-full bg-white transition-transform ${variantsEnabledToggle ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+              </div>
+            </button>
+            {variantsEnabledToggle && (
+              <div className="space-y-4">
+                {variantFields.map(field => (
+                  <VariantRow
+                    key={field.key}
+                    field={field}
+                    values={variantValues[field.key] ?? []}
+                    onChange={vals => setVariantField(field.key, vals)}
+                  />
+                ))}
+              </div>
+            )}
+            {variantsEnabledToggle && variantCombinations.length > 0 && (
               <div className="mt-5 border border-gray-100 rounded-2xl overflow-hidden">
                 <div className="px-3 py-2.5 bg-gray-50 border-b border-gray-100">
                   <p className="text-xs font-bold text-gray-600">Variant Inventory</p>
@@ -1232,7 +1256,7 @@ export default function SellPage() {
         {/* ── STEP 5: Images ── */}
         <div className="step-card bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
           <StepHeader
-            num={variantFields.length > 0 ? '5' : '4'}
+            num={variantFields.length > 0 ? '6' : '4'}
             title="Product Photos"
             subtitle="Up to 3 images · JPG, PNG, WEBP · Max 8MB each"
           />
@@ -1295,7 +1319,7 @@ export default function SellPage() {
         {/* ── STEP 6: Tags ── */}
         <div className="step-card bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
           <StepHeader
-            num={variantFields.length > 0 ? '6' : '5'}
+            num={variantFields.length > 0 ? '7' : '5'}
             title="Product Tags"
             subtitle="Auto-generated · helps buyers find your product"
           />
@@ -1336,7 +1360,7 @@ export default function SellPage() {
         {/* ── STEP 7: Location ── */}
         <div className="step-card bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
           <StepHeader
-            num={variantFields.length > 0 ? '7' : '6'}
+            num={variantFields.length > 0 ? '8' : '6'}
             title="Pickup Location"
             subtitle="Where should the rider collect this product?"
           />
