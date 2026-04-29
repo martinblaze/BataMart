@@ -421,9 +421,10 @@ export default function SellPage() {
           if (hostelsList.length > 0 || areas.length > 0) {
             setHostels(hostelsList)
             setDeliveryAreas(areas)
-            if (u.hostelName) setFormData(f => ({ ...f, hostelName: u.hostelName || '' }))
+            const normalized = normalizeLocationFields(u.hostelName || '', u.landmark || '', areas)
+            if (normalized.hostelName) setFormData(f => ({ ...f, hostelName: normalized.hostelName }))
             if (u.roomNumber) setFormData(f => ({ ...f, roomNumber: u.roomNumber || '' }))
-            if (u.landmark)   setFormData(f => ({ ...f, landmark: u.landmark || '' }))
+            if (normalized.landmark) setFormData(f => ({ ...f, landmark: normalized.landmark }))
             setCheckingAuth(false)
             return
           }
@@ -431,14 +432,17 @@ export default function SellPage() {
         const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         if (res.ok) {
           const data = await res.json()
-          setHostels(parseJsonArray(data?.user?.university?.hostels))
-          setDeliveryAreas(parseJsonArray(data?.user?.university?.deliveryAreas))
+          const hostelsList = parseJsonArray(data?.user?.university?.hostels)
+          const areas = parseJsonArray(data?.user?.university?.deliveryAreas)
+          setHostels(hostelsList)
+          setDeliveryAreas(areas)
           if (data.user) {
+            const normalized = normalizeLocationFields(data.user.hostelName || '', data.user.landmark || '', areas)
             setFormData(f => ({
               ...f,
-              hostelName: data.user.hostelName || '',
+              hostelName: normalized.hostelName,
               roomNumber: data.user.roomNumber || '',
-              landmark:   data.user.landmark   || '',
+              landmark: normalized.landmark,
             }))
           }
         }
@@ -479,6 +483,23 @@ export default function SellPage() {
     if (Array.isArray(val)) return val.filter((v): v is string => typeof v === 'string')
     if (typeof val === 'string') { try { return JSON.parse(val) } catch { return [] } }
     return []
+  }
+
+  function normalizeLocationFields(hostelName: string, landmark: string, areas: string[]) {
+    const hostel = String(hostelName || '').trim()
+    const mark = String(landmark || '').trim()
+    const areaSet = new Set((areas || []).map(a => String(a).trim().toLowerCase()))
+    const hostelLooksLikeArea = hostel && areaSet.has(hostel.toLowerCase())
+    const markLooksLikeArea = mark && areaSet.has(mark.toLowerCase())
+
+    if (hostelLooksLikeArea) {
+      return {
+        hostelName: markLooksLikeArea ? '' : mark,
+        landmark: hostel,
+      }
+    }
+
+    return { hostelName: hostel, landmark: mark }
   }
 
   // ── Image upload ──────────────────────────────────────────────────────────
