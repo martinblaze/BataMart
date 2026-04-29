@@ -432,6 +432,7 @@ const CATEGORIES = [
 const TRENDING_SEARCHES  = ['iPhone', 'Sneakers', 'Laptop', 'Jollof Rice', 'Textbooks', 'Earbuds', 'Braids', 'Power Bank']
 const RECENT_SEARCHES_KEY  = 'BATAMART-recent-searches'
 const RECENTLY_VIEWED_KEY  = 'BATAMART-recently-viewed'
+const FEED_ACTIVITY_KEY = 'BATAMART-feed-activity-v1'
 
 const MARKETPLACE_VIEW_QUEUE_KEY = 'batamart_product_view_queue_v1'
 
@@ -486,6 +487,24 @@ function parseTags(description: string): string[] {
 
 const fmt = (p: number) =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
+
+type TimedSignal = { value: string; timestamp: number }
+
+function normalizeSearchHistory(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((entry) => {
+      if (typeof entry === 'string') return entry
+      if (entry && typeof entry === 'object' && typeof (entry as { keyword?: unknown }).keyword === 'string') {
+        return (entry as { keyword: string }).keyword
+      }
+      if (entry && typeof entry === 'object' && typeof (entry as { value?: unknown }).value === 'string') {
+        return (entry as { value: string }).value
+      }
+      return ''
+    })
+    .filter(Boolean)
+}
 
 // ─────────────────────────────────────────────
 // Small UI atoms
@@ -1828,7 +1847,10 @@ export default function MarketplacePage() {
   useEffect(() => {
     setMounted(true)
     try { setRecentlyViewed(JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')) } catch {}
-    try { setRecentSearches(JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')) } catch {}
+    try {
+      const rawSearches = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
+      setRecentSearches(normalizeSearchHistory(rawSearches))
+    } catch {}
 
     fetchFeed()
     fetchPeopleLikeYouBought()
@@ -2004,14 +2026,59 @@ export default function MarketplacePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const buildFeedSignals = () => {
-    let viewed = ''; let searched = ''
+  const pushFeedActivitySignal = (kind: 'categories' | 'keywords', value: string) => {
     try {
-      const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
-      viewed = Array.from(new Set(rv.map((p: any) => p.category).filter(Boolean))).join(',')
+      const clean = (value || '').trim()
+      if (!clean) return
+      const now = Date.now()
+      const current = JSON.parse(localStorage.getItem(FEED_ACTIVITY_KEY) || '{}') as {
+        categories?: TimedSignal[]
+        keywords?: TimedSignal[]
+      }
+      const list = Array.isArray(current[kind]) ? current[kind]! : []
+      const deduped = list.filter((entry) => entry.value.toLowerCase() !== clean.toLowerCase())
+      const next = [{ value: clean, timestamp: now }, ...deduped].slice(0, 20)
+      localStorage.setItem(
+        FEED_ACTIVITY_KEY,
+        JSON.stringify({
+          categories: kind === 'categories' ? next : (current.categories || []),
+          keywords: kind === 'keywords' ? next : (current.keywords || []),
+        }),
+      )
     } catch {}
-    try { searched = (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]') as string[]).join(',') } catch {}
-    return { viewed, searched }
+  }
+
+  const buildFeedSignals = () => {
+    let categories: TimedSignal[] = []
+    let keywords: TimedSignal[] = []
+    try {
+      const raw = JSON.parse(localStorage.getItem(FEED_ACTIVITY_KEY) || '{}') as {
+        categories?: TimedSignal[]
+        keywords?: TimedSignal[]
+      }
+      categories = Array.isArray(raw.categories) ? raw.categories.filter((x) => x?.value) : []
+      keywords = Array.isArray(raw.keywords) ? raw.keywords.filter((x) => x?.value) : []
+    } catch {}
+
+    if (!categories.length) {
+      try {
+        const rv: any[] = JSON.parse(localStorage.getItem(RECENTLY_VIEWED_KEY) || '[]')
+        const seen = new Set<string>()
+        categories = rv
+          .map((p: any) => ({ value: p?.category, timestamp: typeof p?.createdAt === 'string' ? Date.parse(p.createdAt) : undefined }))
+          .filter((entry: any) => entry.value && !seen.has(entry.value) && seen.add(entry.value))
+          .slice(0, 12)
+      } catch {}
+    }
+
+    if (!keywords.length) {
+      try {
+        const rawSearches = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
+        keywords = normalizeSearchHistory(rawSearches).slice(0, 12).map((value) => ({ value }))
+      } catch {}
+    }
+
+    return { categories, keywords }
   }
 
   const fetchFeed = async () => {
@@ -2019,10 +2086,17 @@ export default function MarketplacePage() {
     try {
       const token = localStorage.getItem('token')
       if (!token) return
-      const { viewed, searched } = buildFeedSignals()
+      const { categories, keywords } = buildFeedSignals()
       const params = new URLSearchParams()
-      if (viewed)   params.set('viewed', viewed)
-      if (searched) params.set('searched', searched)
+      if (categories.length) {
+        params.set('categories', categories.map((c) => c.value).join(','))
+        params.set('categorySignals', JSON.stringify(categories))
+      }
+      if (keywords.length) {
+        params.set('keywords', keywords.map((k) => k.value).join(','))
+        params.set('keywordSignals', JSON.stringify(keywords))
+      }
+      params.set('limit', '100')
       const res  = await fetch(`/api/products/feed?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) {
@@ -2118,6 +2192,7 @@ export default function MarketplacePage() {
         const updated = [product, ...viewed.filter((v: any) => v.id !== id)].slice(0, 20)
         localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated))
         setRecentlyViewed(updated)
+        pushFeedActivitySignal('categories', product.categoryKey || product.category)
       }
     } catch {}
     if (token) {
@@ -2136,7 +2211,10 @@ export default function MarketplacePage() {
     try {
       const updated = [q, ...recentSearches.filter(s => s !== q)].slice(0, 8)
       setRecentSearches(updated)
-      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated))
+      const now = Date.now()
+      const timed = updated.map((keyword) => ({ keyword, timestamp: now }))
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(timed))
+      pushFeedActivitySignal('keywords', q)
     } catch {}
     setShowSuggestions(false)
     router.push(`/search?q=${encodeURIComponent(q)}`)

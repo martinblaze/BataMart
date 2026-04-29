@@ -790,7 +790,14 @@ function RecommendedProducts({ isApp }: { isApp: boolean }) {
 function SearchHistory() {
   const [searches, setSearches] = useState<string[]>([])
   const router = useRouter()
-  useEffect(() => { setSearches((JSON.parse(localStorage.getItem('BATAMART-recent-searches') || '[]') as string[]).slice(0, 10)) }, [])
+  useEffect(() => {
+    const raw = JSON.parse(localStorage.getItem('BATAMART-recent-searches') || '[]') as Array<string | { keyword?: string }>
+    const normalized = raw
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.keyword || ''))
+      .filter(Boolean)
+      .slice(0, 10)
+    setSearches(normalized)
+  }, [])
   if (searches.length === 0) return <div className="text-center py-8"><p className="text-gray-400 text-sm font-medium">No search history yet</p></div>
   return (
     <div className="flex flex-wrap gap-2">

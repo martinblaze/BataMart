@@ -1,35 +1,23 @@
-// app/api/products/feed/route.ts
-//
-// PHASE 1 (no/few sales): hot = most viewed products
-// PHASE 2 (sales exist):  hot = most viewed + priced below last confirmed sale
-//
-// isHot, isDeal, hotReason, discountPercent, marketPrice are all written
-// by the engine — this route just reads them from DB.
-
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { updateHotStatus } from '@/lib/marketPrice/engine'
-
-const W = {
-  category: 50,
-  searched: 40,
-  popular: 20,
-  orderCount: 15,
-  sellerGold: 10,
-  sellerSilver: 5,
-  recency: 8,
-}
+import {
+  computeFeedScore,
+  decayWeight,
+  popularityScore,
+  recencyScore,
+  sellerTierScore,
+} from '@/lib/feed-ranking'
+import { keywordMatchScore, normalizeText } from '@/lib/search-utils'
 
 const HOT_BACKFILL_COOLDOWN_MS = 10 * 60 * 1000
 const HOT_BACKFILL_BATCH = 120
 const hotBackfillStateByUniversity = new Map<string, number>()
 
-function normalisedCount(value: number, max: number, weight: number): number {
-  return max === 0 ? 0 : (value / max) * weight
-}
+type ActivitySignal = { value: string; timestamp?: number }
 
 function scheduleBackground(task: () => void) {
   if (typeof setImmediate === 'function') {
@@ -47,9 +35,7 @@ async function backfillExistingHotStatuses(universityId: string): Promise<void> 
       isDeleted: false,
       quantity: { gt: 0 },
     },
-    select: {
-      id: true,
-    },
+    select: { id: true },
     orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
     take: HOT_BACKFILL_BATCH,
   })
@@ -59,16 +45,80 @@ async function backfillExistingHotStatuses(universityId: string): Promise<void> 
   }
 }
 
+function parseList(searchParams: URLSearchParams, primaryKey: string, fallbackKey: string): string[] {
+  const raw = searchParams.get(primaryKey) || searchParams.get(fallbackKey) || ''
+  return raw.split(',').map((v) => v.trim()).filter(Boolean)
+}
+
+function parseActivitySignals(searchParams: URLSearchParams, key: string, fallbackValues: string[]): ActivitySignal[] {
+  const raw = searchParams.get(key)
+  if (!raw) return fallbackValues.map((value) => ({ value }))
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return fallbackValues.map((value) => ({ value }))
+    return parsed
+      .map((entry) => {
+        if (typeof entry === 'string') return { value: entry }
+        if (!entry || typeof entry !== 'object') return null
+        const value = typeof entry.value === 'string' ? entry.value : ''
+        const timestamp = typeof entry.timestamp === 'number' ? entry.timestamp : undefined
+        if (!value) return null
+        return { value, timestamp }
+      })
+      .filter((entry): entry is ActivitySignal => Boolean(entry))
+  } catch {
+    return fallbackValues.map((value) => ({ value }))
+  }
+}
+
+function formatNaira(value: number): string {
+  return `₦${Math.round(value).toLocaleString('en-NG')}`
+}
+
+function addVariantPriceDisplay<T extends { variantsEnabled?: boolean | null; variants?: Array<{ price: number }>; price: number }>(
+  product: T,
+): T & { minPrice: number; maxPrice: number; priceDisplay: string } {
+  if (product.variantsEnabled && Array.isArray(product.variants) && product.variants.length > 0) {
+    const prices = product.variants.map((v) => Number(v.price)).filter((p) => Number.isFinite(p) && p > 0)
+    if (prices.length) {
+      const minPrice = Math.min(...prices)
+      const maxPrice = Math.max(...prices)
+      return {
+        ...product,
+        minPrice,
+        maxPrice,
+        priceDisplay: minPrice === maxPrice ? formatNaira(minPrice) : `${formatNaira(minPrice)} - ${formatNaira(maxPrice)}`,
+      }
+    }
+  }
+  const basePrice = Number(product.price || 0)
+  return { ...product, minPrice: basePrice, maxPrice: basePrice, priceDisplay: formatNaira(basePrice) }
+}
+
+function applyDiversity<T extends { sellerId: string; categoryKey?: string | null; category: string }>(items: T[]): T[] {
+  const seenSellers = new Map<string, number>()
+  const seenCategories = new Map<string, number>()
+  const filtered: T[] = []
+
+  for (const item of items) {
+    const sellerCount = seenSellers.get(item.sellerId) || 0
+    const categoryBucket = item.categoryKey || normalizeText(item.category)
+    const categoryCount = seenCategories.get(categoryBucket) || 0
+    if (sellerCount >= 3) continue
+    if (categoryCount >= 10) continue
+    filtered.push(item)
+    seenSellers.set(item.sellerId, sellerCount + 1)
+    seenCategories.set(categoryBucket, categoryCount + 1)
+  }
+
+  return filtered
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    if (!user.universityId) {
-      return NextResponse.json({ error: 'No university on account' }, { status: 403 })
-    }
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user.universityId) return NextResponse.json({ error: 'No university on account' }, { status: 403 })
 
     const lastBackfillAt = hotBackfillStateByUniversity.get(user.universityId) || 0
     const nowTs = Date.now()
@@ -80,8 +130,16 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const userCategories = (searchParams.get('categories') || '').split(',').filter(Boolean)
-    const userKeywords = (searchParams.get('keywords') || '').split(',').filter(Boolean)
+    const limit = Math.max(50, Math.min(100, Number(searchParams.get('limit') || 100)))
+
+    const categoriesFallback = parseList(searchParams, 'categories', 'viewed')
+    const keywordsFallback = parseList(searchParams, 'keywords', 'searched')
+    const categorySignals = parseActivitySignals(searchParams, 'categorySignals', categoriesFallback)
+    const keywordSignals = parseActivitySignals(searchParams, 'keywordSignals', keywordsFallback)
+
+    const hasCategorySignals = categorySignals.length > 0
+    const hasKeywordSignals = keywordSignals.length > 0
+    const usedFallback = !hasCategorySignals && !hasKeywordSignals
 
     const allProducts = await prisma.product.findMany({
       where: {
@@ -90,7 +148,27 @@ export async function GET(request: NextRequest) {
         isDeleted: false,
         universityId: user.universityId,
       },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        basePrice: true,
+        category: true,
+        subcategory: true,
+        categoryKey: true,
+        sellerId: true,
+        quantity: true,
+        images: true,
+        viewCount: true,
+        createdAt: true,
+        isHot: true,
+        hotReason: true,
+        isDeal: true,
+        discountPercent: true,
+        marketPrice: true,
+        variantsEnabled: true,
+        variants: { select: { price: true } },
         seller: {
           select: {
             id: true,
@@ -104,42 +182,79 @@ export async function GET(request: NextRequest) {
         _count: { select: { orders: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: 500,
+      take: limit,
     })
 
+    if (!allProducts.length) {
+      return NextResponse.json({
+        success: true,
+        products: [],
+        hotProducts: [],
+        forYouProducts: [],
+        newListings: [],
+        discoverProducts: [],
+        meta: { usedFallback },
+      })
+    }
+
+    const maxPopularityLog = Math.max(
+      ...allProducts.map((p) => Math.log1p((p.viewCount || 0) + (p._count?.orders || 0))),
+      1,
+    )
     const now = Date.now()
-    const maxViews = Math.max(...allProducts.map(p => p.viewCount || 0), 1)
-    const maxOrders = Math.max(...allProducts.map(p => p._count.orders || 0), 1)
 
-    const scored = allProducts.map(product => {
-      const ageDays = (now - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-      let score = 0
+    const scored = allProducts.map((rawProduct) => {
+      const product = addVariantPriceDisplay(rawProduct)
+      const recency = recencyScore(product.createdAt, now)
+      const popularity = popularityScore(product.viewCount || 0, product._count?.orders || 0, maxPopularityLog)
+      const tier = sellerTierScore(product.seller?.trustLevel)
+      const categoryToken = normalizeText(product.categoryKey || product.category || '')
+      const haystack = normalizeText(
+        [product.name, product.category, product.subcategory || '', product.description || ''].join(' '),
+      )
 
-      if (userCategories.includes(product.category)) score += W.category
-
-      for (const kw of userKeywords) {
-        if (
-          product.name.toLowerCase().includes(kw.toLowerCase()) ||
-          product.category.toLowerCase().includes(kw.toLowerCase())
-        ) {
-          score += W.searched
-          break
-        }
+      let categoryMatch = 0
+      if (hasCategorySignals) {
+        const score = categorySignals.reduce((best, signal) => {
+          const matchValue = normalizeText(signal.value)
+          if (!matchValue) return best
+          const isMatch = categoryToken === matchValue || haystack.includes(matchValue)
+          if (!isMatch) return best
+          return Math.max(best, decayWeight(signal.timestamp, now))
+        }, 0)
+        categoryMatch = Math.min(1, score)
       }
 
-      score += normalisedCount(product.viewCount || 0, maxViews, W.popular)
-      score += normalisedCount(product._count.orders || 0, maxOrders, W.orderCount)
+      let keywordMatch = 0
+      if (hasKeywordSignals) {
+        keywordMatch = keywordSignals.reduce((best, signal) => {
+          const kw = signal.value
+          if (!kw) return best
+          const base = keywordMatchScore(haystack, kw)
+          if (base <= 0) return best
+          const weighted = base * (signal.timestamp ? decayWeight(signal.timestamp, now) : 1)
+          return Math.max(best, weighted)
+        }, 0)
+        keywordMatch = Math.min(1, keywordMatch)
+      }
 
-      if (product.seller.trustLevel === 'GOLD') score += W.sellerGold
-      else if (product.seller.trustLevel === 'SILVER') score += W.sellerSilver
-
-      if (ageDays < 3) score += W.recency
+      const score = usedFallback
+        ? 0.6 * popularity + 0.4 * recency
+        : computeFeedScore({
+            categoryMatch,
+            keywordMatch,
+            recencyScore: recency,
+            popularityScore: popularity,
+            sellerTierScore: tier,
+          })
 
       return {
         ...product,
         score,
-        isPersonalised: score >= W.category,
-        isNew: ageDays <= 7,
+        popularityScore: popularity,
+        recencyScore: recency,
+        isPersonalised: !usedFallback && score >= 0.45,
+        isNew: (now - new Date(product.createdAt).getTime()) / 86400000 <= 7,
         isHot: product.isHot ?? false,
         hotReason: product.hotReason ?? null,
         isDeal: product.isDeal ?? false,
@@ -148,47 +263,53 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Hot deals — priority: BOTH > DEAL > VIEWS
-    const hotProducts = scored
-      .filter(p => p.isHot)
-      .sort((a, b) => {
-        const priority = { BOTH: 3, DEAL: 2, VIEWS: 1 }
-        const aPri = priority[a.hotReason as keyof typeof priority] || 0
-        const bPri = priority[b.hotReason as keyof typeof priority] || 0
-        if (bPri !== aPri) return bPri - aPri
-        if (a.hotReason !== 'VIEWS' && b.hotReason !== 'VIEWS') {
-          return (b.discountPercent || 0) - (a.discountPercent || 0)
-        }
-        return (b.viewCount || 0) - (a.viewCount || 0)
+    const uniqueById = <T extends { id: string }>(items: T[]) => {
+      const seen = new Set<string>()
+      return items.filter((item) => {
+        if (seen.has(item.id)) return false
+        seen.add(item.id)
+        return true
       })
-      .slice(0, 20)
+    }
 
-    const forYouProducts = scored
-      .filter(p => p.isPersonalised)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 12)
+    const hotProducts = uniqueById(
+      applyDiversity(
+        [...scored]
+          .sort((a, b) => b.popularityScore - a.popularityScore || b.score - a.score)
+          .slice(0, 40),
+      ),
+    ).slice(0, 20)
 
-    const newListings = scored
-      .filter(p => p.isNew)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 12)
+    const forYouSource = usedFallback
+      ? [...scored].sort((a, b) => b.popularityScore - a.popularityScore || b.recencyScore - a.recencyScore)
+      : [...scored].sort((a, b) => b.score - a.score)
 
-    const shownIds = new Set([...hotProducts, ...forYouProducts, ...newListings].map(p => p.id))
-    const discoverProducts = scored
-      .filter(p => !shownIds.has(p.id))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 40)
+    const forYouProducts = uniqueById(applyDiversity(forYouSource)).slice(0, 12)
+
+    const newListings = uniqueById(
+      applyDiversity(
+        [...scored].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+      ),
+    ).slice(0, 12)
+
+    const shownIds = new Set([...hotProducts, ...forYouProducts, ...newListings].map((p) => p.id))
+    const discoverPool = scored.filter((p) => !shownIds.has(p.id))
+    const topDiscover = discoverPool.sort((a, b) => b.score - a.score).slice(0, 60)
+    const shuffledTail = [...topDiscover.slice(20)].sort(() => Math.random() - 0.5)
+    const discoverProducts = uniqueById(applyDiversity([...topDiscover.slice(0, 20), ...shuffledTail])).slice(0, 40)
 
     return NextResponse.json({
       success: true,
-      products: scored,
+      products: scored, // kept for backward compatibility
       hotProducts,
       forYouProducts,
       newListings,
       discoverProducts,
+      meta: { usedFallback },
     })
   } catch (error) {
     console.error('Feed error:', error)
     return NextResponse.json({ error: 'Failed to load feed' }, { status: 500 })
   }
 }
+
