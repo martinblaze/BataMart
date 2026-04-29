@@ -616,6 +616,21 @@ export default function ProductDetailPage() {
   const structuredPriceValues = structuredVariants.map(v => Number(v.price)).filter(v => Number.isFinite(v) && v > 0)
   const minStructuredPrice = structuredPriceValues.length ? Math.min(...structuredPriceValues) : 0
   const maxStructuredPrice = structuredPriceValues.length ? Math.max(...structuredPriceValues) : 0
+  const isStructuredVariantProduct = structuredVariants.length > 0
+
+  const isOptionAvailable = (variantKey: string, value: string) => {
+    if (!isStructuredVariantProduct) return true
+    return structuredVariants.some(v => {
+      const combo = (v.combination || {}) as Record<string, string>
+      if ((combo[variantKey] || '') !== value) return false
+      if ((v.stock || 0) <= 0) return false
+      for (const [k, selVal] of Object.entries(selected)) {
+        if (!selVal || k === variantKey) continue
+        if ((combo[k] || '') !== selVal) return false
+      }
+      return true
+    })
+  }
 
   // Auto-select locked single-value variant fields
   useEffect(() => {
@@ -983,29 +998,39 @@ export default function ProductDetailPage() {
                   const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
                   return (
                     <div key={key}>
-                      <p className="text-xs font-bold text-gray-600 mb-2">
-                        {label}:
-                        {selected[key] && <span className="text-indigo-600 ml-1.5">{selected[key]}</span>}
+                      <p className="text-xs font-black text-gray-700 mb-2">
+                        {label}: {selected[key] ? <span className="text-indigo-700">{selected[key]}</span> : <span className="text-gray-400">Select</span>}
                       </p>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {vals.map(v => (
+                          (() => {
+                            const available = isOptionAvailable(key, v)
+                            const chosen = selected[key] === v
+                            return (
                           <button
                             key={v}
                             type="button"
                             onClick={() => {
-                              if (isSingleLocked) return
-                              setSelected(prev => ({ ...prev, [key]: prev[key] === v ? '' : v }))
+                              if (isSingleLocked || !available) return
+                              setSelected(prev => ({ ...prev, [key]: prev[key] === v ? prev[key] : v }))
                               setVariantError('')
                             }}
-                            className={`variant-chip px-3 py-1.5 rounded-xl border-2 text-xs font-bold ${
-                              selected[key] === v
-                                ? 'variant-chip-active'
-                                : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-300'
+                            className={`variant-chip text-left px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                              chosen
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                : available
+                                ? 'border-gray-200 bg-white text-gray-800 hover:border-indigo-300'
+                                : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
                             }`}
-                            disabled={isSingleLocked}
+                            disabled={isSingleLocked || !available}
                           >
-                            {v}
+                            <span className="block truncate">{v}</span>
+                            <span className={`block text-[10px] mt-0.5 ${chosen ? 'text-indigo-100' : available ? 'text-emerald-600' : 'text-gray-400'}`}>
+                              {isSingleLocked ? 'Auto-selected' : available ? 'Available' : 'Unavailable'}
+                            </span>
                           </button>
+                            )
+                          })()
                         ))}
                       </div>
                     </div>
