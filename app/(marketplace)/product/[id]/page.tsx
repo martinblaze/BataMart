@@ -37,6 +37,14 @@ interface Product {
     sku?: string | null
     imageUrl?: string | null
   }>
+  attributeValues?: Array<{
+    id: string
+    key: string
+    label: string
+    value: any
+    searchable?: boolean
+    filterable?: boolean
+  }>
   quantity: number
   images: string[]
   viewCount: number
@@ -1267,6 +1275,19 @@ export default function ProductDetailPage() {
                     <dd className="text-gray-800 font-semibold text-right max-w-[60%] truncate">{value}</dd>
                   </div>
                 ))}
+                {(product.attributeValues || []).map((attr) => {
+                  const displayValue = Array.isArray(attr.value)
+                    ? attr.value.join(', ')
+                    : typeof attr.value === 'boolean'
+                    ? (attr.value ? 'Yes' : 'No')
+                    : String(attr.value)
+                  return (
+                    <div key={attr.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                      <dt className="text-gray-500 font-medium">{attr.label || attr.key}</dt>
+                      <dd className="text-gray-800 font-semibold text-right max-w-[60%] truncate">{displayValue}</dd>
+                    </div>
+                  )
+                })}
               </dl>
             )}
 

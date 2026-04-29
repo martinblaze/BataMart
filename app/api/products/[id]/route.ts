@@ -28,6 +28,7 @@ export async function GET(
       where: { id: params.id },
       include: {
         variants: true,
+        attributeValues: true,
         seller: {
           select: {
             id: true,

@@ -1,6 +1,7 @@
 // prisma/seed.ts
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { seedCategoryAttributes } from './seed-category-attributes'
 
 const prisma = new PrismaClient()
 
@@ -16,6 +17,7 @@ function generateReferralCode(): string {
 async function main() {
   console.log('🌱 Starting database seeding...')
   await createAdmin()
+  await seedCategoryAttributes(prisma)
   console.log('✅ Seeding completed successfully!')
 }
 

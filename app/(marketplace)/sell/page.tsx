@@ -354,6 +354,20 @@ function VariantRow({
   )
 }
 
+interface CategoryAttributeDef {
+  id: string
+  categoryKey: string
+  subcategoryKey?: string | null
+  key: string
+  label: string
+  type: 'text' | 'select' | 'multi_select' | 'number' | 'boolean'
+  options?: string[] | null
+  required: boolean
+  filterable: boolean
+  searchable: boolean
+  sortOrder: number
+}
+
 // ── Main Sell Page ────────────────────────────────────────────────────────────
 export default function SellPage() {
   const router = useRouter()
@@ -380,6 +394,8 @@ export default function SellPage() {
   const [subcategoryKey, setSubcategoryKey] = useState('')
   const [variantValues, setVariantValues]   = useState<Record<string, string[]>>({})
   const [variantPricing, setVariantPricing] = useState<Record<string, { price: string; stock: string }>>({})
+  const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttributeDef[]>([])
+  const [attributeValues, setAttributeValues] = useState<Record<string, any>>({})
 
   // Images — same structure as original: preview + url + uploading flag
   const [images, setImages] = useState<{ preview: string; url: string; uploading: boolean }[]>([])
@@ -409,6 +425,7 @@ export default function SellPage() {
         if (draft?.subcategoryKey) setSubcategoryKey(draft.subcategoryKey)
         if (draft?.variantValues) setVariantValues(draft.variantValues)
         if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
+        if (draft?.attributeValues) setAttributeValues(draft.attributeValues)
         if (Array.isArray(draft?.tags)) setTags(draft.tags)
         if (Array.isArray(draft?.images)) setImages(draft.images)
       }
@@ -431,12 +448,13 @@ export default function SellPage() {
           subcategoryKey,
           variantValues,
           variantPricing,
+          attributeValues,
           tags,
           images: safeImages,
         })
       )
     } catch {}
-  }, [draftHydrated, formData, categoryKey, subcategoryKey, variantValues, variantPricing, tags, images])
+  }, [draftHydrated, formData, categoryKey, subcategoryKey, variantValues, variantPricing, attributeValues, tags, images])
 
   useEffect(() => {
     if (document.getElementById('sell-anim')) return
@@ -500,13 +518,38 @@ export default function SellPage() {
     if (skipNextCategoryResetRef.current) { skipNextCategoryResetRef.current = false; return }
     setSubcategoryKey('')
     setVariantValues({})
+    setCategoryAttributes([])
+    setAttributeValues({})
   }, [categoryKey])
   useEffect(() => {
     if (!draftHydrated) return
     if (skipNextSubcategoryResetRef.current) { skipNextSubcategoryResetRef.current = false; return }
     setVariantValues({})
     setVariantPricing({})
+    setAttributeValues({})
   }, [subcategoryKey])
+
+  useEffect(() => {
+    const loadCategoryAttributes = async () => {
+      if (!categoryKey) { setCategoryAttributes([]); return }
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        const qs = new URLSearchParams({ categoryKey })
+        if (subcategoryKey) qs.set('subcategoryKey', subcategoryKey)
+        const res = await fetch(`/api/category-attributes?${qs.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (!res.ok) return
+        setCategoryAttributes((data.attributes || []).map((a: any) => ({
+          ...a,
+          options: Array.isArray(a.options) ? a.options : [],
+        })))
+      } catch {}
+    }
+    loadCategoryAttributes()
+  }, [categoryKey, subcategoryKey])
 
   // Auto-generate tags from name + category + variant values
   useEffect(() => {
@@ -637,6 +680,18 @@ export default function SellPage() {
     setVariantValues(prev => ({ ...prev, [key]: vals }))
   }
 
+  const setAttributeValue = (key: string, value: any) => {
+    setAttributeValues((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const toggleMultiSelectAttribute = (key: string, value: string) => {
+    setAttributeValues((prev) => {
+      const current = Array.isArray(prev[key]) ? prev[key] : []
+      const next = current.includes(value) ? current.filter((v: string) => v !== value) : [...current, value]
+      return { ...prev, [key]: next }
+    })
+  }
+
   const variantKeysForMatrix = Object.keys(variantValues).filter(k => (variantValues[k] || []).length > 0)
   const variantCombinations = variantKeysForMatrix.reduce<Record<string, string>[]>(
     (acc, key) => {
@@ -673,6 +728,19 @@ export default function SellPage() {
     if (!subcategoryKey) { setError('Please select a subcategory'); return }
     if (images.length < 1) { setError('Please add at least 1 product image'); return }
     if (!allUploaded) { setError('Please wait for all images to finish uploading'); return }
+    for (const attr of categoryAttributes) {
+      if (!attr.required) continue
+      const value = attributeValues[attr.key]
+      const missing =
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && !value.trim()) ||
+        (Array.isArray(value) && value.length === 0)
+      if (missing) {
+        setError(`${attr.label} is required`)
+        return
+      }
+    }
     if (hasStructuredVariants) {
       for (const combo of variantCombinations) {
         const key = comboKey(combo)
@@ -694,6 +762,21 @@ export default function SellPage() {
       const subLabel = CATEGORY_TREE[categoryKey]?.subcategories[subcategoryKey]?.label ?? subcategoryKey
 
       const description = hasStructuredVariants ? (formData.name.trim() || '') : encodeProductData(variantValues, tags)
+      const attributesPayload = categoryAttributes
+        .map((attr) => {
+          const value = attributeValues[attr.key]
+          if (value === undefined || value === null) return null
+          if (typeof value === 'string' && !value.trim()) return null
+          if (Array.isArray(value) && value.length === 0) return null
+          return {
+            key: attr.key,
+            label: attr.label,
+            value,
+            searchable: attr.searchable,
+            filterable: attr.filterable,
+          }
+        })
+        .filter(Boolean)
       const variantsPayload = hasStructuredVariants
         ? variantCombinations.map(combo => {
             const key = comboKey(combo)
@@ -719,6 +802,7 @@ export default function SellPage() {
           categoryKey,
           subcategory: subLabel,
           subcategoryKey,
+          attributes: attributesPayload,
           variants: variantsPayload,
           images:      images.map(img => img.url),
         }),
@@ -903,10 +987,88 @@ export default function SellPage() {
           </div>
         )}
 
-        {/* ── STEP 4: Variants ── */}
+        {/* ── STEP 4: Category Attributes ── */}
+        {categoryAttributes.length > 0 && (
+          <div className="step-card bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+            <StepHeader num="4" title="Category Details" subtitle="Structured attributes for smarter search and filters" />
+            <div className="space-y-4">
+              {categoryAttributes.map((attr) => {
+                const options = Array.isArray(attr.options) ? attr.options : []
+                const value = attributeValues[attr.key]
+                return (
+                  <div key={attr.id}>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                      {attr.label} {attr.required ? '*' : ''}
+                    </label>
+                    {attr.type === 'select' && (
+                      <select
+                        value={value ?? ''}
+                        onChange={(e) => setAttributeValue(attr.key, e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
+                      >
+                        <option value="">Select {attr.label}</option>
+                        {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    )}
+                    {attr.type === 'multi_select' && (
+                      <div className="flex flex-wrap gap-2">
+                        {options.map((opt) => {
+                          const active = Array.isArray(value) && value.includes(opt)
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => toggleMultiSelectAttribute(attr.key, opt)}
+                              className={`text-xs px-3 py-1.5 rounded-xl border font-semibold transition-all ${
+                                active ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200'
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {attr.type === 'number' && (
+                      <input
+                        type="number"
+                        value={value ?? ''}
+                        onChange={(e) => setAttributeValue(attr.key, e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
+                        placeholder={`Enter ${attr.label.toLowerCase()}`}
+                      />
+                    )}
+                    {attr.type === 'boolean' && (
+                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(value)}
+                          onChange={(e) => setAttributeValue(attr.key, e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        Yes
+                      </label>
+                    )}
+                    {(attr.type === 'text' || (!['select', 'multi_select', 'number', 'boolean'].includes(attr.type))) && (
+                      <input
+                        type="text"
+                        value={value ?? ''}
+                        onChange={(e) => setAttributeValue(attr.key, e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
+                        placeholder={`Enter ${attr.label.toLowerCase()}`}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 5: Variants ── */}
         {variantFields.length > 0 && (
           <div className="step-card bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
-            <StepHeader num="4" title="Product Variants" subtitle="Tap chips to add, or type custom values" />
+            <StepHeader num="5" title="Product Variants" subtitle="Tap chips to add, or type custom values" />
             <div className="space-y-4">
               {variantFields.map(field => (
                 <VariantRow

@@ -168,6 +168,7 @@ model Product {
   hotScore        Int             @default(0)
   cartItems       CartItem[]
   variants        ProductVariant[]
+  attributeValues ProductAttributeValue[]
   orderItems      OrderItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
@@ -190,6 +191,44 @@ model Product {
   @@index([isHot])
   @@index([conditionType])
   @@index([nameKey, conditionType, hasChangedParts, variantKey])
+  @@schema("public")
+}
+
+model CategoryAttribute {
+  id             String   @id @default(cuid())
+  categoryKey    String
+  subcategoryKey String?
+  key            String
+  label          String
+  type           String
+  options        Json?
+  required       Boolean  @default(false)
+  filterable     Boolean  @default(true)
+  searchable     Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([categoryKey])
+  @@index([subcategoryKey])
+  @@unique([categoryKey, subcategoryKey, key])
+  @@schema("public")
+}
+
+model ProductAttributeValue {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  key        String
+  label      String
+  value      Json
+  searchable Boolean  @default(true)
+  filterable Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([productId])
+  @@index([key])
   @@schema("public")
 }
 

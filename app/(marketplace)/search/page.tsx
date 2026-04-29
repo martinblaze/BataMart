@@ -99,9 +99,12 @@ function SearchPage() {
   const [appliedMax, setAppliedMax] = useState<number | null>(null)
   const [showFilter, setShowFilter] = useState(false)
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterSubcategory, setFilterSubcategory] = useState('')
+  const [categoryFilterDefs, setCategoryFilterDefs] = useState<Array<{ key: string; label: string; type: string; options: Array<{ value: string; count: number }> }>>([])
+  const [priceRange, setPriceRange] = useState<{ min: number; max: number }>({ min: 0, max: 0 })
 
-  // Variant filters extracted from search results
-  const [variantFilters, setVariantFilters] = useState<Record<string, string>>({})
+  // Dynamic attribute filters from API
+  const [attributeFilters, setAttributeFilters] = useState<Record<string, string>>({})
 
   const queryTokens = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query])
 
@@ -111,19 +114,49 @@ function SearchPage() {
     document.head.appendChild(s)
   }, [])
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchProducts()
+  }, [query, appliedMin, appliedMax, filterCategory, filterSubcategory, JSON.stringify(attributeFilters)])
 
-  const fetchAll = async () => {
+  const fetchProducts = async () => {
     setLoading(true)
     try {
       const token = localStorage.getItem('token')
       if (!token) { router.push('/login'); return }
-      const res  = await fetch('/api/products', { headers: { Authorization: `Bearer ${token}` } })
+      const qs = new URLSearchParams()
+      if (query.trim()) qs.set('q', query.trim())
+      if (filterCategory) qs.set('categoryKey', filterCategory)
+      if (filterSubcategory) qs.set('subcategoryKey', filterSubcategory)
+      if (appliedMin !== null) qs.set('minPrice', String(appliedMin))
+      if (appliedMax !== null) qs.set('maxPrice', String(appliedMax))
+      Object.entries(attributeFilters).forEach(([k, v]) => { if (v) qs.set(k, v) })
+      const res  = await fetch(`/api/products?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       setProducts(data.products || [])
     } catch {}
     finally { setLoading(false) }
   }
+
+  useEffect(() => {
+    const loadCategoryFilters = async () => {
+      if (!filterCategory) {
+        setCategoryFilterDefs([])
+        return
+      }
+      try {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        const qs = new URLSearchParams({ categoryKey: filterCategory })
+        if (filterSubcategory) qs.set('subcategoryKey', filterSubcategory)
+        const res = await fetch(`/api/product-filters?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        if (!res.ok) return
+        setCategoryFilterDefs(data.filters || [])
+        setPriceRange(data.price || { min: 0, max: 0 })
+      } catch {}
+    }
+    loadCategoryFilters()
+  }, [filterCategory, filterSubcategory])
 
   const fmt = (p: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(p)
 
@@ -131,7 +164,7 @@ function SearchPage() {
     const q = inputVal.trim()
     if (!q) return
     setQuery(q)
-    setVariantFilters({})
+    setAttributeFilters({})
     router.replace(`/search?q=${encodeURIComponent(q)}`, { scroll: false })
   }
 
@@ -143,59 +176,24 @@ function SearchPage() {
 
   const clearFilters = () => {
     setMinPrice(''); setMaxPrice(''); setAppliedMin(null); setAppliedMax(null)
-    setFilterCategory(''); setVariantFilters({}); setShowFilter(false)
+    setFilterCategory(''); setFilterSubcategory(''); setAttributeFilters({}); setShowFilter(false)
   }
 
   // Run search + filters
   const filtered = useMemo(() => {
-    if (!queryTokens.length) return []
-    return products
-      .filter(p => {
-        const blob = buildSearchBlob(p)
-        const matchesTokens = queryTokens.every(token => blob.includes(token))
-        const priceOk = (appliedMin === null || p.price >= appliedMin) && (appliedMax === null || p.price <= appliedMax)
-        const catOk = !filterCategory || p.category === filterCategory
-
-        // Variant filters
-        const { variants } = decodeProductData(p.description || '')
-        const variantOk = Object.entries(variantFilters).every(([key, val]) => {
-          if (!val) return true
-          const productVals = variants[key] ?? []
-          const structuredVals = Array.isArray(p.variants)
-            ? p.variants.map((sv: any) => String((sv?.combination || {})[key] || '')).filter(Boolean)
-            : []
-          return [...productVals, ...structuredVals].some((v: string) => v.toLowerCase().includes(val.toLowerCase()))
+    const base = queryTokens.length
+      ? products.filter((p) => {
+          const blob = buildSearchBlob(p)
+          return queryTokens.every((token) => blob.includes(token))
         })
-
-        return matchesTokens && priceOk && catOk && variantOk
-      })
+      : products
+    return base
       .sort((a, b) => {
         if (sortBy === 'price-low') return a.price - b.price
         if (sortBy === 'price-high') return b.price - a.price
         return 0
       })
-  }, [products, queryTokens, sortBy, appliedMin, appliedMax, filterCategory, variantFilters])
-
-  // Compute available variant keys + values from the result set (for smart filters)
-  const availableVariantKeys = useMemo(() => {
-      const keyMap: Record<string, Set<string>> = {}
-      filtered.forEach(p => {
-        const { variants } = decodeProductData(p.description || '')
-        Object.entries(variants).forEach(([k, vals]) => {
-          if (!keyMap[k]) keyMap[k] = new Set()
-          ;(vals as string[]).forEach(v => keyMap[k].add(v))
-        })
-        if (Array.isArray(p.variants)) {
-          p.variants.forEach((sv: any) => {
-            Object.entries(sv?.combination || {}).forEach(([k, val]) => {
-              if (!keyMap[k]) keyMap[k] = new Set()
-              if (val) keyMap[k].add(String(val))
-            })
-          })
-        }
-      })
-    return Object.fromEntries(Object.entries(keyMap).map(([k, s]) => [k, Array.from(s)]))
-  }, [filtered])
+  }, [products, queryTokens, sortBy])
 
   const handleProductClick = (id: string) => {
     const token = localStorage.getItem('token')
@@ -212,7 +210,7 @@ function SearchPage() {
 
   const priceActive = appliedMin !== null || appliedMax !== null
   const catList = getCategoryList()
-  const activeFilterCount = (priceActive ? 1 : 0) + (filterCategory ? 1 : 0) + Object.values(variantFilters).filter(Boolean).length
+  const activeFilterCount = (priceActive ? 1 : 0) + (filterCategory ? 1 : 0) + (filterSubcategory ? 1 : 0) + Object.values(attributeFilters).filter(Boolean).length
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -236,7 +234,7 @@ function SearchPage() {
                 autoFocus
               />
               {inputVal && (
-                <button onClick={() => { setInputVal(''); setQuery(''); setVariantFilters({}) }}>
+                <button onClick={() => { setInputVal(''); setQuery(''); setAttributeFilters({}) }}>
                   <X className="w-4 h-4 text-gray-400" />
                 </button>
               )}
@@ -268,17 +266,36 @@ function SearchPage() {
                   All
                 </button>
                 {catList.map(c => (
-                  <button key={c.key} onClick={() => setFilterCategory(filterCategory === c.label ? '' : c.label)}
-                    className={`text-xs px-3 py-1.5 rounded-xl border font-semibold transition-all ${filterCategory === c.label ? 'chip-active' : 'border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
+                  <button key={c.key} onClick={() => { setFilterCategory(filterCategory === c.key ? '' : c.key); setFilterSubcategory(''); setAttributeFilters({}) }}
+                    className={`text-xs px-3 py-1.5 rounded-xl border font-semibold transition-all ${filterCategory === c.key ? 'chip-active' : 'border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
                     {c.icon} {c.label}
                   </button>
                 ))}
               </div>
             </div>
 
+            {filterCategory && (
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Subcategory</p>
+                <select
+                  value={filterSubcategory}
+                  onChange={(e) => { setFilterSubcategory(e.target.value); setAttributeFilters({}) }}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-indigo-400"
+                >
+                  <option value="">All subcategories</option>
+                  {Object.entries(CATEGORY_TREE[filterCategory]?.subcategories || {}).map(([key, sub]) => (
+                    <option key={key} value={key}>{sub.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Price filter */}
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Price Range (₦)</p>
+              {priceRange.max > 0 && (
+                <p className="text-[11px] text-gray-400 mb-1">Available: {fmt(priceRange.min)} - {fmt(priceRange.max)}</p>
+              )}
               <div className="flex gap-2">
                 <input type="number" placeholder="Min" value={minPrice} onChange={e => setMinPrice(e.target.value)}
                   className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-indigo-400" />
@@ -288,17 +305,17 @@ function SearchPage() {
             </div>
 
             {/* Smart variant filters from results */}
-            {Object.keys(availableVariantKeys).length > 0 && (
+            {categoryFilterDefs.length > 0 && (
               <div className="space-y-3">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Smart Filters</p>
-                {Object.entries(availableVariantKeys).slice(0, 5).map(([key, vals]) => (
-                  <div key={key}>
-                    <p className="text-xs font-semibold text-gray-600 mb-1.5 capitalize">{key.replace(/_/g, ' ')}</p>
+                {categoryFilterDefs.slice(0, 8).map((def) => (
+                  <div key={def.key}>
+                    <p className="text-xs font-semibold text-gray-600 mb-1.5">{def.label}</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {vals.map(v => (
-                        <button key={v} onClick={() => setVariantFilters(prev => ({ ...prev, [key]: prev[key] === v ? '' : v }))}
-                          className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all ${variantFilters[key] === v ? 'bg-indigo-600 text-white border-transparent' : 'border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
-                          {v}
+                      {def.options.slice(0, 12).map((opt) => (
+                        <button key={opt.value} onClick={() => setAttributeFilters(prev => ({ ...prev, [def.key]: prev[def.key] === opt.value ? '' : opt.value }))}
+                          className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all ${attributeFilters[def.key] === opt.value ? 'bg-indigo-600 text-white border-transparent' : 'border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
+                          {opt.value} <span className="opacity-70">({opt.count})</span>
                         </button>
                       ))}
                     </div>

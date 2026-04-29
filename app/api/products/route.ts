@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
+import { buildAttributeFiltersFromQuery, normalizeAttributeValue } from '@/lib/category-attributes'
 
 const DEFAULT_PAGE_SIZE = 40
 const MAX_PAGE_SIZE     = 100
@@ -24,10 +25,14 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
+    const categoryKey = searchParams.get('categoryKey')
+    const subcategoryKey = searchParams.get('subcategoryKey')
     const hostel   = searchParams.get('hostel')
     const minPrice = searchParams.get('minPrice')
     const maxPrice = searchParams.get('maxPrice')
     const search   = searchParams.get('search')
+    const q        = searchParams.get('q')
+    const queryText = q || search
 
     const page  = Math.max(1, parseInt(searchParams.get('page')  || '1'))
     const limit = Math.min(
@@ -46,6 +51,8 @@ export async function GET(request: NextRequest) {
     if (category && category !== 'All') {
       where.category = category
     }
+    if (categoryKey) where.categoryKey = categoryKey
+    if (subcategoryKey) where.subcategoryKey = subcategoryKey
 
     if (hostel && hostel !== 'All') {
       where.hostelName = { contains: hostel, mode: 'insensitive' }
@@ -57,8 +64,8 @@ export async function GET(request: NextRequest) {
       if (maxPrice) where.price.lte = parseFloat(maxPrice)
     }
 
-    if (search && search.trim()) {
-      const tokens = search.trim().substring(0, 100).split(/\s+/).filter(Boolean)
+    if (queryText && queryText.trim()) {
+      const tokens = queryText.trim().substring(0, 100).split(/\s+/).filter(Boolean)
       where.AND = tokens.map((token: string) => ({
         OR: [
           { name:        { contains: token, mode: 'insensitive' } },
@@ -67,8 +74,55 @@ export async function GET(request: NextRequest) {
           { subcategory: { contains: token, mode: 'insensitive' } },
           { subcategoryKey: { contains: token, mode: 'insensitive' } },
           { description: { contains: token, mode: 'insensitive' } },
+          {
+            attributeValues: {
+              some: {
+                OR: [
+                  { key: { contains: token, mode: 'insensitive' } },
+                  { label: { contains: token, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
         ],
       }))
+    }
+
+    const attributeFilters = buildAttributeFiltersFromQuery(searchParams)
+    const attributeFilterEntries = Object.entries(attributeFilters)
+    if (attributeFilterEntries.length > 0) {
+      where.AND = where.AND || []
+      for (const [key, rawFilter] of attributeFilterEntries) {
+        const filterValue = normalizeAttributeValue(rawFilter)
+        if (filterValue === null) continue
+        if (Array.isArray(filterValue)) {
+          for (const f of filterValue) {
+            where.AND.push({
+              attributeValues: {
+                some: {
+                  key,
+                  OR: [
+                    { value: { array_contains: [f] } },
+                    { value: { equals: f } },
+                  ],
+                },
+              },
+            })
+          }
+          continue
+        }
+        where.AND.push({
+          attributeValues: {
+            some: {
+              key,
+              OR: [
+                { value: { equals: filterValue } },
+                { value: { array_contains: [filterValue] } },
+              ],
+            },
+          },
+        })
+      }
     }
 
     const [products, total] = await Promise.all([
@@ -85,6 +139,7 @@ export async function GET(request: NextRequest) {
             },
           },
           variants: true,
+          attributeValues: true,
         },
         orderBy: { createdAt: 'desc' },
         take:    limit,
@@ -134,6 +189,7 @@ export async function POST(request: NextRequest) {
       quantity,
       images,
       variants,
+      attributes,
       hostelName,
       roomNumber,
       landmark,
@@ -164,6 +220,29 @@ export async function POST(request: NextRequest) {
       : []
 
     const hasStructuredVariants = normalizedVariants.length > 0
+    const normalizedAttributes = Array.isArray(attributes)
+      ? attributes
+          .map((a: any) => {
+            const key = String(a?.key || '').trim()
+            const label = String(a?.label || key).trim()
+            const value = normalizeAttributeValue(a?.value)
+            if (!key || !label || value === null) return null
+            return {
+              key,
+              label,
+              value,
+              searchable: a?.searchable !== false,
+              filterable: a?.filterable !== false,
+            }
+          })
+          .filter(Boolean) as Array<{
+            key: string
+            label: string
+            value: string | number | boolean | string[]
+            searchable: boolean
+            filterable: boolean
+          }>
+      : []
     const basePrice = Number(price)
     const minVariantPrice = hasStructuredVariants
       ? Math.min(...normalizedVariants.map((v: any) => v.price))
@@ -203,8 +282,21 @@ export async function POST(request: NextRequest) {
               },
             }
           : {}),
+        ...(normalizedAttributes.length > 0
+          ? {
+              attributeValues: {
+                create: normalizedAttributes.map((a) => ({
+                  key: a.key,
+                  label: a.label,
+                  value: a.value as any,
+                  searchable: a.searchable,
+                  filterable: a.filterable,
+                })),
+              },
+            }
+          : {}),
       },
-      include: { variants: true },
+      include: { variants: true, attributeValues: true },
     })
 
     return NextResponse.json({ success: true, product }, { status: 201 })
