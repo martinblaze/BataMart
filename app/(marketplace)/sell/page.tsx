@@ -422,9 +422,10 @@ export default function SellPage() {
             setHostels(hostelsList)
             setDeliveryAreas(areas)
             const normalized = normalizeLocationFields(u.hostelName || '', u.landmark || '', areas)
+            const resolvedArea = resolveDeliveryAreaValue(normalized.landmark, areas)
             if (normalized.hostelName) setFormData(f => ({ ...f, hostelName: normalized.hostelName }))
             if (u.roomNumber) setFormData(f => ({ ...f, roomNumber: u.roomNumber || '' }))
-            if (normalized.landmark) setFormData(f => ({ ...f, landmark: normalized.landmark }))
+            if (resolvedArea) setFormData(f => ({ ...f, landmark: resolvedArea }))
             setCheckingAuth(false)
             return
           }
@@ -438,11 +439,12 @@ export default function SellPage() {
           setDeliveryAreas(areas)
           if (data.user) {
             const normalized = normalizeLocationFields(data.user.hostelName || '', data.user.landmark || '', areas)
+            const resolvedArea = resolveDeliveryAreaValue(normalized.landmark, areas)
             setFormData(f => ({
               ...f,
               hostelName: normalized.hostelName,
               roomNumber: data.user.roomNumber || '',
-              landmark: normalized.landmark,
+              landmark: resolvedArea,
             }))
           }
         }
@@ -500,6 +502,23 @@ export default function SellPage() {
     }
 
     return { hostelName: hostel, landmark: mark }
+  }
+
+  function resolveDeliveryAreaValue(rawLandmark: string, areas: string[]) {
+    const raw = String(rawLandmark || '').trim()
+    if (!raw || !Array.isArray(areas) || areas.length === 0) return ''
+
+    const canon = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+    const rawCanon = canon(raw)
+
+    const exact = areas.find(a => canon(String(a)) === rawCanon)
+    if (exact) return exact
+
+    const fuzzy = areas.find(a => {
+      const aCanon = canon(String(a))
+      return aCanon.includes(rawCanon) || rawCanon.includes(aCanon)
+    })
+    return fuzzy || ''
   }
 
   // ── Image upload ──────────────────────────────────────────────────────────
