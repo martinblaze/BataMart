@@ -356,7 +356,7 @@ export default function ProductDetailPage() {
   const [qty, setQty] = useState(1)
   const [addingToCart, setAddingToCart] = useState(false)
   const [cartMsg, setCartMsg] = useState('')
-  const [activeTab, setActiveTab] = useState<'desc' | 'details' | 'reviews'>('desc')
+  const [activeTab, setActiveTab] = useState<'desc' | 'reviews'>('desc')
   const [descExpanded, setDescExpanded] = useState(false)
 
   // ── NEW: Variant state ──────────────────────────────────
@@ -625,6 +625,12 @@ export default function ProductDetailPage() {
   const minStructuredPrice = structuredPriceValues.length ? Math.min(...structuredPriceValues) : 0
   const maxStructuredPrice = structuredPriceValues.length ? Math.max(...structuredPriceValues) : 0
   const isStructuredVariantProduct = structuredVariants.length > 0
+  const normalizedVariantKeys = new Set(variantKeys.map(k => k.trim().toLowerCase()))
+  const specAttributes = (product?.attributeValues || []).filter((attr) => {
+    const key = (attr.key || '').trim().toLowerCase()
+    const label = (attr.label || '').trim().toLowerCase()
+    return !normalizedVariantKeys.has(key) && !normalizedVariantKeys.has(label)
+  })
 
   const isOptionAvailable = (variantKey: string, value: string) => {
     if (!isStructuredVariantProduct) return true
@@ -988,15 +994,17 @@ export default function ProductDetailPage() {
             )}
 
             {/* ── NEW: Variant Selector ──────────────────── */}
-            {variantKeys.length > 0 && (
+            {(variantKeys.length > 0 || specAttributes.length > 0) && (
               <div id="variant-selector" className="bg-white rounded-2xl p-4 ring-1 ring-gray-200 space-y-4">
                 <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-500" />
-                  Select Options
+                  Options & Specs
                 </h3>
-                <p className="text-[11px] text-gray-500 -mt-2">
-                  Pick all required options to unlock exact stock and pricing.
-                </p>
+                {variantKeys.length > 0 && (
+                  <p className="text-[11px] text-gray-500 -mt-2">
+                    Pick all required options to unlock exact stock and pricing.
+                  </p>
+                )}
 
                 {variantError && (
                   <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
@@ -1068,6 +1076,30 @@ export default function ProductDetailPage() {
                         {product?.basePrice ? ` · Base: ${fmt(product.basePrice)}` : ''}
                       </p>
                     )}
+                  </div>
+                )}
+
+                {specAttributes.length > 0 && (
+                  <div className="rounded-xl border border-gray-200 p-3 bg-gray-50/40">
+                    <p className="text-xs font-black text-gray-700 mb-2">Item Specs</p>
+                    <div className="flex flex-wrap gap-2">
+                      {specAttributes.map((attr) => {
+                        const displayValue = Array.isArray(attr.value)
+                          ? attr.value.join(', ')
+                          : typeof attr.value === 'boolean'
+                          ? (attr.value ? 'Yes' : 'No')
+                          : String(attr.value)
+                        return (
+                          <span
+                            key={attr.id}
+                            className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700"
+                          >
+                            <span className="text-gray-500">{attr.label || attr.key}:</span>
+                            <span className="text-gray-900">{displayValue}</span>
+                          </span>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1180,7 +1212,7 @@ export default function ProductDetailPage() {
         {/* ── Tabs: Description · Details · Reviews ─────── */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm fade-up" style={{ border: '1px solid #f0f0f0', animationDelay: '0.1s' }}>
           <div className="flex border-b border-gray-100">
-            {(['desc', 'details', 'reviews'] as const).map(tab => (
+            {(['desc', 'reviews'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => {
@@ -1189,7 +1221,7 @@ export default function ProductDetailPage() {
                 }}
                 className={`tab-btn flex-1 py-3 text-sm font-semibold text-gray-500 transition-all ${activeTab === tab ? 'active' : ''}`}
               >
-                {tab === 'desc' ? 'Description' : tab === 'details' ? 'Details' : 'Reviews'}
+                {tab === 'desc' ? 'Description' : 'Reviews'}
               </button>
             ))}
           </div>
@@ -1257,38 +1289,6 @@ export default function ProductDetailPage() {
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Details tab */}
-            {activeTab === 'details' && (
-              <dl className="space-y-3 text-sm">
-                {[
-                  { label: 'Category', value: product.category },
-                  ...(product.subcategory ? [{ label: 'Subcategory', value: product.subcategory }] : []),
-                  { label: 'In Stock', value: `${product.quantity} units` },
-                  { label: 'Seller', value: product.seller.name },
-                  { label: 'Trust Level', value: product.seller.trustLevel },
-                  { label: 'Listed', value: new Date(product.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                    <dt className="text-gray-500 font-medium">{label}</dt>
-                    <dd className="text-gray-800 font-semibold text-right max-w-[60%] truncate">{value}</dd>
-                  </div>
-                ))}
-                {(product.attributeValues || []).map((attr) => {
-                  const displayValue = Array.isArray(attr.value)
-                    ? attr.value.join(', ')
-                    : typeof attr.value === 'boolean'
-                    ? (attr.value ? 'Yes' : 'No')
-                    : String(attr.value)
-                  return (
-                    <div key={attr.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                      <dt className="text-gray-500 font-medium">{attr.label || attr.key}</dt>
-                      <dd className="text-gray-800 font-semibold text-right max-w-[60%] truncate">{displayValue}</dd>
-                    </div>
-                  )
-                })}
-              </dl>
             )}
 
             {/* Reviews tab */}
