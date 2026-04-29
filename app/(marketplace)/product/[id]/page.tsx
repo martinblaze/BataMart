@@ -613,6 +613,9 @@ export default function ProductDetailPage() {
   )
   const effectivePrice = matchedVariant?.price ?? product?.price ?? 0
   const effectiveStock = matchedVariant?.stock ?? product?.quantity ?? 0
+  const structuredPriceValues = structuredVariants.map(v => Number(v.price)).filter(v => Number.isFinite(v) && v > 0)
+  const minStructuredPrice = structuredPriceValues.length ? Math.min(...structuredPriceValues) : 0
+  const maxStructuredPrice = structuredPriceValues.length ? Math.max(...structuredPriceValues) : 0
 
   // Auto-select locked single-value variant fields
   useEffect(() => {
@@ -1007,6 +1010,17 @@ export default function ProductDetailPage() {
                 {variantSummary && (
                   <div className="bg-indigo-50 rounded-xl px-3 py-2">
                     <p className="text-xs text-indigo-600 font-bold">Selected: {variantSummary}</p>
+                    {matchedVariant && (
+                      <p className="text-xs text-indigo-700 font-extrabold mt-1">
+                        Selected price: {fmt(matchedVariant.price)}
+                      </p>
+                    )}
+                    {structuredVariants.length > 0 && minStructuredPrice > 0 && (
+                      <p className="text-[11px] text-indigo-500 font-semibold mt-1">
+                        Range: {fmt(minStructuredPrice)} – {fmt(maxStructuredPrice)}
+                        {product?.basePrice ? ` · Base: ${fmt(product.basePrice)}` : ''}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
