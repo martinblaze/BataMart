@@ -1,25 +1,9 @@
 export const dynamic = 'force-dynamic'
 // app/api/admin/penalties/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { notifyPenaltyIssued, notifyAccountSuspended } from '@/lib/notification'
-
-async function getUserFromToken(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
-  
-  try {
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
-    return await prisma.user.findUnique({ 
-      where: { id: decoded.userId },
-      select: { id: true, name: true, role: true }
-    })
-  } catch (error) {
-    return null
-  }
-}
+import { getUserFromRequest } from '@/lib/auth/auth'
 
 // Calculate ban duration based on action
 function getBanDuration(action: string): Date | null {
@@ -65,7 +49,7 @@ function getPenaltyPoints(action: string): number {
 // POST: Issue penalty to user
 export async function POST(req: NextRequest) {
   try {
-    const admin = await getUserFromToken(req)
+    const admin = await getUserFromRequest(req)
     if (!admin || admin.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 })
     }
@@ -120,7 +104,7 @@ export async function POST(req: NextRequest) {
       })
 
       // Update user
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         penaltyPoints: { increment: pointsAdded }
       }
 
@@ -196,7 +180,7 @@ export async function POST(req: NextRequest) {
 // GET: Fetch all penalties (admin only)
 export async function GET(req: NextRequest) {
   try {
-    const admin = await getUserFromToken(req)
+    const admin = await getUserFromRequest(req)
     if (!admin || admin.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 })
     }

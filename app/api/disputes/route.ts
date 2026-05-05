@@ -1,31 +1,15 @@
 export const dynamic = 'force-dynamic'
 // app/api/disputes/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { notifyDisputeOpened } from '@/lib/notification'
 import { DISPUTE_WINDOW_MS } from '@/lib/escrow'
-
-async function getUserFromToken(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
-  
-  try {
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
-    return await prisma.user.findUnique({ 
-      where: { id: decoded.userId },
-      select: { id: true, name: true, phone: true, role: true }
-    })
-  } catch (error) {
-    return null
-  }
-}
+import { getUserFromRequest } from '@/lib/auth/auth'
 
 // GET: Fetch user's disputes
 export async function GET(req: NextRequest) {
   try {
-    const user = await getUserFromToken(req)
+    const user = await getUserFromRequest(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -68,7 +52,7 @@ export async function GET(req: NextRequest) {
 // POST: Create a new dispute
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUserFromToken(req)
+    const user = await getUserFromRequest(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
