@@ -2083,7 +2083,7 @@ export default function MarketplacePage() {
     if (!keywords.length) {
       try {
         const rawSearches = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
-        keywords = normalizeSearchHistory(rawSearches).slice(0, 12).map((value) => ({ value }))
+        keywords = normalizeSearchHistory(rawSearches).slice(0, 12).map((value) => ({ value, timestamp: Date.now() }))
       } catch {}
     }
 
