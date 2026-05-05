@@ -2929,22 +2929,7 @@ export default function MarketplacePage() {
             {/* ── Mega Category Grid ── */}
             <MegaCategoryGrid onCategorySelect={handleCategorySelect} />
 
-            {/* ── All Listings ── */}
-            {discoverProducts.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-base font-black text-gray-900 section-header-line">All Listings</h2>
-                    <p className="text-xs text-gray-400 mt-1">Everything currently live in your campus marketplace</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {discoverProducts.map((p, i) => (
-                    <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 25} />
-                  ))}
-                </div>
-              </div>
-            )}
+            
 
             {/* ── Best Sellers: Home & Kitchen ── */}
             {(productsByCategory['Home & Kitchen']?.length > 0) && (
@@ -2978,6 +2963,23 @@ export default function MarketplacePage() {
                 <Link href="/sell" className="btn-press inline-flex items-center gap-2 px-6 py-3 bg-BATAMART-primary text-white rounded-xl font-black text-sm shadow-lg shadow-BATAMART-primary/25">
                   <Sparkles className="w-4 h-4" /> List a Product
                 </Link>
+              </div>
+            )}
+
+            {/* ── All Listings ── */}
+            {discoverProducts.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-black text-gray-900 section-header-line">All Listings</h2>
+                    <p className="text-xs text-gray-400 mt-1">Everything currently live in your campus marketplace</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {discoverProducts.map((p, i) => (
+                    <ProductCard key={p.id} product={p} onClick={() => handleProductClick(p.id)} delay={i * 25} />
+                  ))}
+                </div>
               </div>
             )}
           </div>
