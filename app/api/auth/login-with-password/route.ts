@@ -4,7 +4,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
 import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
-import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
+import { checkRateLimitDistributed, incrementRateLimit, getIpKey } from '@/lib/security/rate-limit'
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+const LOGIN_MAX_FAILURES = 10
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,12 +16,16 @@ export async function POST(request: NextRequest) {
     const originErr = enforceSameOrigin(request)
     if (originErr) return originErr
 
-    const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
+    const ip = getIpKey(
+      request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip')
+    )
+    const rateLimitKey = `login-fail:${ip}`
+
+    // Check if this IP has too many FAILED attempts
     const { allowed, retryAfterSecs } = await checkRateLimitDistributed(
-      `login-with-password:${ip}`,
-      10,
-      15 * 60 * 1000,
-      { requireDistributedInProduction: true }
+      rateLimitKey,
+      LOGIN_MAX_FAILURES,
+      LOGIN_WINDOW_MS
     )
     if (!allowed) {
       return NextResponse.json(
@@ -37,22 +44,23 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({ where: { email } })
 
     if (!user) {
+      // Count as a failure to prevent email enumeration abuse
+      await incrementRateLimit(rateLimitKey, LOGIN_WINDOW_MS)
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
     // Riders have a separate login at /rider/login.
     if (user.role === 'RIDER') {
       return NextResponse.json(
-        {
-          error: 'Rider accounts cannot log in here.',
-          isRider: true,
-        },
+        { error: 'Rider accounts cannot log in here.', isRider: true },
         { status: 403 }
       )
     }
 
     const isValidPassword = await comparePassword(password, user.password)
     if (!isValidPassword) {
+      // Only increment counter on actual wrong password
+      await incrementRateLimit(rateLimitKey, LOGIN_WINDOW_MS)
       return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
     }
 

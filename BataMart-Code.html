@@ -8919,7 +8919,7 @@ export default function MarketplacePage() {
     if (!keywords.length) {
       try {
         const rawSearches = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]')
-        keywords = normalizeSearchHistory(rawSearches).slice(0, 12).map((value) =&gt; ({ value }))
+        keywords = normalizeSearchHistory(rawSearches).slice(0, 12).map((value) =&gt; ({ value, timestamp: Date.now() }))
       } catch {}
     }
 
@@ -9765,22 +9765,7 @@ export default function MarketplacePage() {
             {/* ── Mega Category Grid ── */}
             &lt;MegaCategoryGrid onCategorySelect={handleCategorySelect} /&gt;
 
-            {/* ── All Listings ── */}
-            {discoverProducts.length &gt; 0 &amp;&amp; (
-              &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"&gt;
-                &lt;div className="flex items-center justify-between mb-4"&gt;
-                  &lt;div&gt;
-                    &lt;h2 className="text-base font-black text-gray-900 section-header-line"&gt;All Listings&lt;/h2&gt;
-                    &lt;p className="text-xs text-gray-400 mt-1"&gt;Everything currently live in your campus marketplace&lt;/p&gt;
-                  &lt;/div&gt;
-                &lt;/div&gt;
-                &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
-                  {discoverProducts.map((p, i) =&gt; (
-                    &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 25} /&gt;
-                  ))}
-                &lt;/div&gt;
-              &lt;/div&gt;
-            )}
+            
 
             {/* ── Best Sellers: Home &amp; Kitchen ── */}
             {(productsByCategory['Home &amp; Kitchen']?.length &gt; 0) &amp;&amp; (
@@ -9814,6 +9799,23 @@ export default function MarketplacePage() {
                 &lt;Link href="/sell" className="btn-press inline-flex items-center gap-2 px-6 py-3 bg-BATAMART-primary text-white rounded-xl font-black text-sm shadow-lg shadow-BATAMART-primary/25"&gt;
                   &lt;Sparkles className="w-4 h-4" /&gt; List a Product
                 &lt;/Link&gt;
+              &lt;/div&gt;
+            )}
+
+            {/* ── All Listings ── */}
+            {discoverProducts.length &gt; 0 &amp;&amp; (
+              &lt;div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"&gt;
+                &lt;div className="flex items-center justify-between mb-4"&gt;
+                  &lt;div&gt;
+                    &lt;h2 className="text-base font-black text-gray-900 section-header-line"&gt;All Listings&lt;/h2&gt;
+                    &lt;p className="text-xs text-gray-400 mt-1"&gt;Everything currently live in your campus marketplace&lt;/p&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+                &lt;div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"&gt;
+                  {discoverProducts.map((p, i) =&gt; (
+                    &lt;ProductCard key={p.id} product={p} onClick={() =&gt; handleProductClick(p.id)} delay={i * 25} /&gt;
+                  ))}
+                &lt;/div&gt;
               &lt;/div&gt;
             )}
           &lt;/div&gt;
@@ -11457,17 +11459,7 @@ export default function MyShopPage() {
           &lt;/div&gt;
         )}
       &lt;/div&gt;
-
-      {isSellerMode &amp;&amp; (
-        &lt;Link href="/sell"
-          className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 flex items-center gap-2 text-white px-5 py-3.5 rounded-2xl font-black text-sm shadow-2xl hover:scale-105 transition-all z-50"
-          style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)', boxShadow: '0 20px 50px rgba(99,102,241,0.4)' }}&gt;
-          &lt;Sparkles className="w-4 h-4" /&gt;
-          &lt;span className="hidden sm:inline"&gt;Add Product&lt;/span&gt;
-          &lt;Plus className="w-4 h-4 sm:hidden" /&gt;
-        &lt;/Link&gt;
-      )}
-    &lt;/div&gt;
+   &lt;/div&gt;
   )
 }</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/notifications/page.tsx</div><pre>'use client'
@@ -24911,25 +24903,9 @@ export async function GET(request: NextRequest) {
 <div class='file-block'><div class='file-header'>app/api/admin/penalties/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/admin/penalties/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { notifyPenaltyIssued, notifyAccountSuspended } from '@/lib/notification'
-
-async function getUserFromToken(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
-  
-  try {
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
-    return await prisma.user.findUnique({ 
-      where: { id: decoded.userId },
-      select: { id: true, name: true, role: true }
-    })
-  } catch (error) {
-    return null
-  }
-}
+import { getUserFromRequest } from '@/lib/auth/auth'
 
 // Calculate ban duration based on action
 function getBanDuration(action: string): Date | null {
@@ -24975,7 +24951,7 @@ function getPenaltyPoints(action: string): number {
 // POST: Issue penalty to user
 export async function POST(req: NextRequest) {
   try {
-    const admin = await getUserFromToken(req)
+    const admin = await getUserFromRequest(req)
     if (!admin || admin.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 })
     }
@@ -25030,7 +25006,7 @@ export async function POST(req: NextRequest) {
       })
 
       // Update user
-      const updateData: any = {
+      const updateData: Record&lt;string, unknown&gt; = {
         penaltyPoints: { increment: pointsAdded }
       }
 
@@ -25106,7 +25082,7 @@ export async function POST(req: NextRequest) {
 // GET: Fetch all penalties (admin only)
 export async function GET(req: NextRequest) {
   try {
-    const admin = await getUserFromToken(req)
+    const admin = await getUserFromRequest(req)
     if (!admin || admin.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized - Admin only' }, { status: 401 })
     }
@@ -26440,9 +26416,33 @@ export async function PUT(request: NextRequest) {
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyOTP, hashPassword } from '@/lib/auth/auth'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
+import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
+
+const RATE_LIMIT_MAX = 5
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
+    const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
+    const { allowed, retryAfterSecs } = await checkRateLimitDistributed(
+      `reset-password:${ip}`,
+      RATE_LIMIT_MAX,
+      RATE_LIMIT_WINDOW_MS,
+      { requireDistributedInProduction: true }
+    )
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Too many reset attempts. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) before trying again.` },
+        { status: 429, headers: { 'Retry-After': String(retryAfterSecs) } }
+      )
+    }
+
     const body = await request.json()
     const { email, otpCode, newPassword } = body
 
@@ -27137,31 +27137,15 @@ export async function GET(request: NextRequest) {
 <div class='file-block'><div class='file-header'>app/api/disputes/route.ts</div><pre>export const dynamic = 'force-dynamic'
 // app/api/disputes/route.ts - WITH NOTIFICATIONS
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { notifyDisputeOpened } from '@/lib/notification'
 import { DISPUTE_WINDOW_MS } from '@/lib/escrow'
-
-async function getUserFromToken(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
-  
-  try {
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string }
-    return await prisma.user.findUnique({ 
-      where: { id: decoded.userId },
-      select: { id: true, name: true, phone: true, role: true }
-    })
-  } catch (error) {
-    return null
-  }
-}
+import { getUserFromRequest } from '@/lib/auth/auth'
 
 // GET: Fetch user's disputes
 export async function GET(req: NextRequest) {
   try {
-    const user = await getUserFromToken(req)
+    const user = await getUserFromRequest(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -27204,7 +27188,7 @@ export async function GET(req: NextRequest) {
 // POST: Create a new dispute
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUserFromToken(req)
+    const user = await getUserFromRequest(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
