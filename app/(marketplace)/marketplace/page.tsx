@@ -2985,6 +2985,15 @@ export default function MarketplacePage() {
           </div>
         )}
       </div>
+
+      {/* Floating Sell Button (mobile) */}
+      {!isApp && (
+        <div className="fixed bottom-20 right-4 sm:right-6 z-40">
+          <Link href="/sell" className="btn-press glow-pulse flex items-center gap-2 px-5 py-3 bg-BATAMART-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-BATAMART-primary/40">
+            <Sparkles className="w-4 h-4" /> Sell
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

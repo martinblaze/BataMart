@@ -580,16 +580,6 @@ export default function MyShopPage() {
           </div>
         )}
       </div>
-
-      {isSellerMode && (
-        <Link href="/sell"
-          className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 flex items-center gap-2 text-white px-5 py-3.5 rounded-2xl font-black text-sm shadow-2xl hover:scale-105 transition-all z-50"
-          style={{ background: 'linear-gradient(135deg, #6366f1, #4c1d95)', boxShadow: '0 20px 50px rgba(99,102,241,0.4)' }}>
-          <Sparkles className="w-4 h-4" />
-          <span className="hidden sm:inline">Add Product</span>
-          <Plus className="w-4 h-4 sm:hidden" />
-        </Link>
-      )}
-    </div>
+   </div>
   )
 }
