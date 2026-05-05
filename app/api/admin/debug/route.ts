@@ -1,11 +1,20 @@
 export const dynamic = 'force-dynamic'
 // app/api/admin/debug/route.ts
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
+import { getUserFromRequest } from '@/lib/auth/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    const user = await getUserFromRequest(request)
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Find all admins
     const admins = await prisma.user.findMany({
       where: { role: 'ADMIN' },
@@ -14,17 +23,13 @@ export async function GET() {
         email: true,
         name: true,
         role: true,
-        password: true,
         phone: true
       }
     })
 
     return NextResponse.json({
       adminsFound: admins.length,
-      admins: admins.map(a => ({
-        ...a,
-        password: a.password ? a.password.substring(0, 20) + '...' : 'NO PASSWORD'
-      })),
+      admins,
       message: admins.length === 0 
         ? '❌ No admin found! Run the seed script.' 
         : '✅ Admin exists!'

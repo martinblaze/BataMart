@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOTP, sendEmailOTP } from '@/lib/auth/auth'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
 
 // ── In-memory rate limiter ────────────────────────────────────────────────────
 // Allows 5 OTP requests per IP per 15 minutes.
@@ -39,6 +40,11 @@ setInterval(() => {
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
     // Rate limit by IP
     const ip =
       request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??

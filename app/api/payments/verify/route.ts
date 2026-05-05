@@ -1,7 +1,8 @@
 // app/api/payments/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { createOrders, calculateFees } from '../initialize/route'
+import { createOrders } from '../initialize/route'
+import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,7 @@ function appRedirect(path: string) {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const reference = searchParams.get('reference')
+  const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
 
   console.log('═'.repeat(70))
   console.log('🔥 PAYMENT VERIFICATION STARTED')
@@ -29,6 +31,13 @@ export async function GET(request: NextRequest) {
   if (!reference) {
     console.error('❌ ERROR: No reference in URL')
     return appRedirect('/checkout?error=no_reference')
+  }
+  if (!/^BATAMART-[0-9]{10,}-[A-Za-z0-9_-]{4,20}$/.test(reference)) {
+    return appRedirect('/checkout?error=invalid_reference')
+  }
+  const rate = await checkRateLimitDistributed(`payments:verify:${ip}:${reference}`, 10, 10 * 60 * 1000)
+  if (!rate.allowed) {
+    return appRedirect('/checkout?error=rate_limited')
   }
 
   try {
@@ -107,8 +116,35 @@ export async function GET(request: NextRequest) {
       console.error('❌ Invalid/missing metadata:', JSON.stringify(meta))
       return appRedirect('/checkout?error=invalid_metadata')
     }
+    if (verifyData?.data?.currency && verifyData.data.currency !== 'NGN') {
+      return appRedirect('/checkout?error=payment_failed')
+    }
+    if (!Number.isInteger(meta.perOrderDelivery) || meta.perOrderDelivery < 0 || meta.perOrderDelivery > 5000) {
+      console.error('❌ Invalid perOrderDelivery in metadata:', meta.perOrderDelivery)
+      return appRedirect('/checkout?error=invalid_metadata')
+    }
+    if (!Number.isInteger(meta.distinctSellers) || meta.distinctSellers < 1 || meta.distinctSellers > 100) {
+      console.error('❌ Invalid distinctSellers in metadata:', meta.distinctSellers)
+      return appRedirect('/checkout?error=invalid_metadata')
+    }
+
+    for (const item of meta.cartItems) {
+      if (!item?.productId || !Number.isInteger(item?.quantity) || item.quantity < 1 || item.quantity > 50) {
+        console.error('❌ Invalid cart item in metadata:', item)
+        return appRedirect('/checkout?error=invalid_metadata')
+      }
+    }
 
     console.log('✅ Metadata OK — User:', meta.userId, '| Items:', meta.cartItems.length)
+
+    const distinctSellerCount = new Set(meta.cartItems.map(i => i.sellerId)).size
+    const recomputedSubtotal = meta.cartItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0)
+    const expectedAmountKobo = Math.round((recomputedSubtotal + (distinctSellerCount * meta.perOrderDelivery)) * 100)
+    const paidAmountKobo = Number(verifyData?.data?.amount ?? 0)
+    if (!Number.isFinite(paidAmountKobo) || paidAmountKobo !== expectedAmountKobo) {
+      console.error('❌ Paid amount mismatch', { expectedAmountKobo, paidAmountKobo })
+      return appRedirect('/checkout?error=amount_mismatch')
+    }
 
     // STEP 4: Fetch buyer (include universityId for batch campus-scoping)
     console.log('\n👤 STEP 4: Fetching Buyer')

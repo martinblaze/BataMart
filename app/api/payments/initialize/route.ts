@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyOrderPlaced } from '@/lib/notification'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
+import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,13 +50,40 @@ export function calculateFees(subtotal: number, deliveryFee: number = 800) {
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
     const user = await getUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
+    const rate = await checkRateLimitDistributed(`payments:init:${user.id}:${ip}`, 20, 15 * 60 * 1000)
+    if (!rate.allowed) {
+      return NextResponse.json({ error: 'Too many checkout attempts. Please wait.' }, { status: 429, headers: { 'Retry-After': String(rate.retryAfterSecs) } })
+    }
 
     const body = await request.json()
-    const { productId, cartItems } = body
+    const schema = z.object({
+      productId: z.string().min(1).optional(),
+      variantId: z.string().min(1).optional().nullable(),
+      variantData: z.record(z.string()).optional().nullable(),
+      orderNote: z.string().max(300).optional(),
+      cartItems: z.array(z.object({
+        productId: z.string().min(1),
+        variantId: z.string().min(1).optional().nullable(),
+        variantData: z.record(z.string()).optional().nullable(),
+        quantity: z.number().int().min(1).max(50),
+        orderNote: z.string().max(300).optional(),
+      }).strict()).max(50).optional(),
+    }).strict()
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 })
+    }
+    const { productId, cartItems } = parsed.data
 
     type CartItem = {
       productId:  string
@@ -71,8 +101,15 @@ export async function POST(request: NextRequest) {
     let items: CartItem[] = []
 
     if (cartItems && Array.isArray(cartItems) && cartItems.length > 0) {
+      if (cartItems.length > 50) {
+        return NextResponse.json({ error: 'Too many items in one checkout' }, { status: 400 })
+      }
       // Server always re-fetches price from DB — client-supplied price is IGNORED
       for (const item of cartItems) {
+        const safeQuantity = Number(item?.quantity)
+        if (!Number.isInteger(safeQuantity) || safeQuantity < 1 || safeQuantity > 50) {
+          return NextResponse.json({ error: 'Invalid quantity in cart item' }, { status: 400 })
+        }
         const product = await prisma.product.findUnique({
           where:   { id: item.productId },
           include: { seller: true, variants: true },
@@ -92,7 +129,7 @@ export async function POST(request: NextRequest) {
           resolvedStock = variant.stock
         }
 
-        if (!product.isActive || resolvedStock < item.quantity) {
+        if (!product.isActive || resolvedStock < safeQuantity) {
           return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 })
         }
         if (item.orderNote && String(item.orderNote).length > 300) {
@@ -104,7 +141,7 @@ export async function POST(request: NextRequest) {
           variantData: item.variantData || null,
           name:       product.name,
           price:      resolvedPrice, // ← always from DB, never from client
-          quantity:   item.quantity,
+          quantity:   safeQuantity,
           category:   product.category,
           sellerId:   product.sellerId,
           sellerName: product.seller.name,
@@ -119,15 +156,28 @@ export async function POST(request: NextRequest) {
       if (!product) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
       }
-      if (!product.isActive || product.quantity < 1) {
+      let resolvedPrice = product.price
+      let resolvedStock = product.quantity
+      const variantId = body.variantId || null
+
+      if (variantId) {
+        const variant = product.variants.find(v => v.id === variantId)
+        if (!variant) {
+          return NextResponse.json({ error: `Variant not found for product: ${product.name}` }, { status: 400 })
+        }
+        resolvedPrice = variant.price
+        resolvedStock = variant.stock
+      }
+
+      if (!product.isActive || resolvedStock < 1) {
         return NextResponse.json({ error: 'Product unavailable' }, { status: 400 })
       }
       items = [{
         productId:  product.id,
-        variantId:  body.variantId || null,
+        variantId:  variantId,
         variantData: body.variantData || null,
         name:       product.name,
-        price:      product.price,
+        price:      resolvedPrice,
         quantity:   1,
         category:   product.category,
         sellerId:   product.sellerId,

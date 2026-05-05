@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashPassword } from '@/lib/auth/auth'
 import crypto from 'crypto'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
 
 // Upload ID document to Cloudinary
 async function uploadIdToCloudinary(base64: string): Promise<string | null> {
@@ -47,6 +48,11 @@ function generateReferralCode(name: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
     const body = await request.json()
 
     // ── FIXED: also destructure universityId ─────────────────────────────
@@ -146,8 +152,8 @@ export async function POST(request: NextRequest) {
         role:            'RIDER',
         referralCode,
         riderIdDocument: idDocumentUrl || idDocument,
-        isRiderVerified: true,   // Auto-verified
-        isAvailable:     true,
+        isRiderVerified: false,
+        isAvailable:     false,
         universityId,            // ← THIS is what was missing
       },
     })

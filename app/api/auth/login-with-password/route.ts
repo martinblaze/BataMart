@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
 
 // ── In-memory rate limiter ─────────────────────────────────────────────────
 const loginRateMap = new Map<string, { count: number; resetAt: number }>()
@@ -34,6 +35,11 @@ setInterval(() => {
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
     const ip =
       request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
       request.headers.get('x-real-ip') ??

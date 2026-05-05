@@ -3,6 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { OrderStatus } from '@prisma/client';
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request';
+
+const ORDER_STATUS_VALUES: OrderStatus[] = [
+  'PENDING',
+  'RIDER_ASSIGNED',
+  'PICKED_UP',
+  'ON_THE_WAY',
+  'DELIVERED',
+  'COMPLETED',
+  'CANCELLED',
+]
 
 async function getUserFromToken(req: NextRequest) {
   try {
@@ -105,6 +116,11 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const jsonErr = enforceJsonRequest(req);
+    if (jsonErr) return jsonErr;
+    const originErr = enforceSameOrigin(req);
+    if (originErr) return originErr;
+
     const user = await getUserFromToken(req);
     if (!user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -112,6 +128,9 @@ export async function PATCH(
 
     const body = await req.json();
     const { status } = body;
+    if (!ORDER_STATUS_VALUES.includes(status as OrderStatus)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
 
     const existingOrder = await prisma.order.findUnique({
       where: { id: params.id },
@@ -149,6 +168,32 @@ export async function PATCH(
         { error: `Cannot transition from ${currentStatus} to ${status}` },
         { status: 400 }
       );
+    }
+
+    const nextStatus = status as OrderStatus;
+    // Actor-specific controls to prevent privilege abuse.
+    if (!isAdmin) {
+      const actorAllowed = (
+        (isRider && (
+          (currentStatus === 'RIDER_ASSIGNED' && nextStatus === 'PICKED_UP') ||
+          (currentStatus === 'PICKED_UP' && nextStatus === 'ON_THE_WAY') ||
+          (currentStatus === 'ON_THE_WAY' && nextStatus === 'DELIVERED')
+        )) ||
+        (isBuyer && (
+          (currentStatus === 'PENDING' && nextStatus === 'CANCELLED') ||
+          (currentStatus === 'DELIVERED' && nextStatus === 'COMPLETED')
+        )) ||
+        (isSeller && (
+          currentStatus === 'PENDING' && nextStatus === 'CANCELLED'
+        ))
+      );
+
+      if (!actorAllowed) {
+        return NextResponse.json(
+          { error: `You are not allowed to set status to ${nextStatus} from ${currentStatus}` },
+          { status: 403 }
+        );
+      }
     }
 
     const updatedOrder = await prisma.order.update({

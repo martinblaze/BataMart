@@ -4,9 +4,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
+import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(req)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(req)
+    if (originErr) return originErr
+
+    const ip = getIpKey(req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip'))
+    const rate = await checkRateLimitDistributed(`admin:login:${ip}`, 10, 15 * 60 * 1000)
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Try again later.' },
+        { status: 429, headers: { 'Retry-After': String(rate.retryAfterSecs) } }
+      )
+    }
+
     const { email, password } = await req.json()
 
     if (!email || !password) {

@@ -3,9 +3,15 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { comparePassword, generateToken } from '@/lib/auth/auth'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
     const { email, password } = await request.json()
 
     if (!email || !password) {
@@ -22,6 +28,10 @@ export async function POST(request: NextRequest) {
     // Must be a rider
     if (rider.role !== 'RIDER') {
       return NextResponse.json({ error: 'This account is not a rider account' }, { status: 403 })
+    }
+
+    if (!rider.isRiderVerified) {
+      return NextResponse.json({ error: 'Rider account pending verification' }, { status: 403 })
     }
 
     // Check if suspended

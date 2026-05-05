@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { getUserFromRequest } from '@/lib/auth/auth'
 import bcrypt from 'bcryptjs'
 import { releaseMaturedSellerEscrowForUser } from '@/lib/escrow'
+import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +47,11 @@ setInterval(() => {
 
 export async function POST(request: NextRequest) {
   try {
+    const jsonErr = enforceJsonRequest(request)
+    if (jsonErr) return jsonErr
+    const originErr = enforceSameOrigin(request)
+    if (originErr) return originErr
+
     const user = await getUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -70,7 +77,19 @@ export async function POST(request: NextRequest) {
     lastWithdrawAttempt.set(user.id, Date.now())
 
     const body = await request.json()
-    const { amount, bankCode, accountNumber, accountName, pin } = body
+    const schema = z.object({
+      amount: z.number().int().min(MIN_WITHDRAWAL).max(MAX_WITHDRAWAL),
+      bankCode: z.string().trim().min(2).max(20),
+      accountNumber: z.string().trim().min(6).max(20),
+      accountName: z.string().trim().min(2).max(100),
+      pin: z.string().regex(/^\d{6}$/),
+    }).strict()
+    const parsed = schema.safeParse(body)
+    if (!parsed.success) {
+      lastWithdrawAttempt.delete(user.id)
+      return NextResponse.json({ error: 'Invalid withdrawal payload' }, { status: 400 })
+    }
+    const { amount, bankCode, accountNumber, accountName, pin } = parsed.data
 
     // ── Input validation with min AND max amount ───────────────────────────
     if (
@@ -103,16 +122,7 @@ export async function POST(request: NextRequest) {
 
     // PIN must be sent with every withdrawal request — never trust a prior verify call.
     // See verify-pin/route.ts for the security contract explaining why.
-    if (!pin || !/^\d{6}$/.test(String(pin))) {
-      lastWithdrawAttempt.delete(user.id)
-      return NextResponse.json({ error: 'A valid 6-digit PIN is required' }, { status: 400 })
-    }
-
-    // Prevent bloat / injection via bank detail fields
-    if (String(accountName).length > 100 || String(accountNumber).length > 20) {
-      lastWithdrawAttempt.delete(user.id)
-      return NextResponse.json({ error: 'Invalid bank details' }, { status: 400 })
-    }
+    // zod already validated pin and bank field shape/length.
 
     // ── Fetch user record (single DB call) ────────────────────────────────
     const currentUser = await prisma.user.findUnique({

@@ -5934,7 +5934,7 @@ export default function CheckoutPage() {
     const variantNote = formatVariantSelection(item.selectedVariants || {})
     const extra = orderNotes[item.productId]?.trim() || ''
     const parts = []
-    if (variantNote) parts.push(`[Order: ${variantNote}]`)
+    if (!item.variantId &amp;&amp; variantNote) parts.push(`[Order: ${variantNote}]`)
     if (extra) parts.push(extra)
     return parts.join(' — ')
   }
@@ -5953,6 +5953,8 @@ export default function CheckoutPage() {
         // ── FIX #5: We send productId and quantity only.
         // The server MUST re-fetch the price from the DB.
         productId: item.productId,
+        variantId: item.variantId || null,
+        variantData: item.selectedVariants || null,
         quantity: item.quantity,
         orderNote: buildOrderNote(item),
         // We include name/image for display in emails only — NOT for pricing
@@ -6340,7 +6342,8 @@ export default function CheckoutPage() {
       &lt;/div&gt;
     &lt;/div&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/dispute/select-order/page.tsx</div><pre>// app/(marketplace)/rider-dashboard/page.tsx
 // ── FIX #7 (race condition): acceptOrder uses authFetch which handles 409
 //    conflict responses from the server. The server must use a DB transaction
@@ -13850,12 +13853,18 @@ function StarRating({ rating }: { rating: number }) {
 function buildSearchBlob(p: any): string {
   const { variants, tags } = decodeProductData(p.description || '')
   const variantValues = Object.values(variants).flat()
+  const structuredVariantValues = Array.isArray(p.variants)
+    ? p.variants.flatMap((v: any) =&gt; Object.values(v?.combination || {}))
+    : []
   return [
     p.name,
     p.category,
+    p.categoryKey ?? '',
     p.subcategory ?? '',
+    p.subcategoryKey ?? '',
     ...tags,
     ...variantValues,
+    ...structuredVariantValues,
   ].join(' ').toLowerCase()
 }
 
@@ -13937,7 +13946,10 @@ function SearchPage() {
         const variantOk = Object.entries(variantFilters).every(([key, val]) =&gt; {
           if (!val) return true
           const productVals = variants[key] ?? []
-          return productVals.some((v: string) =&gt; v.toLowerCase().includes(val.toLowerCase()))
+          const structuredVals = Array.isArray(p.variants)
+            ? p.variants.map((sv: any) =&gt; String((sv?.combination || {})[key] || '')).filter(Boolean)
+            : []
+          return [...productVals, ...structuredVals].some((v: string) =&gt; v.toLowerCase().includes(val.toLowerCase()))
         })
 
         return matchesTokens &amp;&amp; priceOk &amp;&amp; catOk &amp;&amp; variantOk
@@ -13951,14 +13963,22 @@ function SearchPage() {
 
   // Compute available variant keys + values from the result set (for smart filters)
   const availableVariantKeys = useMemo(() =&gt; {
-    const keyMap: Record&lt;string, Set&lt;string&gt;&gt; = {}
-    filtered.forEach(p =&gt; {
-      const { variants } = decodeProductData(p.description || '')
-      Object.entries(variants).forEach(([k, vals]) =&gt; {
-        if (!keyMap[k]) keyMap[k] = new Set()
-        ;(vals as string[]).forEach(v =&gt; keyMap[k].add(v))
+      const keyMap: Record&lt;string, Set&lt;string&gt;&gt; = {}
+      filtered.forEach(p =&gt; {
+        const { variants } = decodeProductData(p.description || '')
+        Object.entries(variants).forEach(([k, vals]) =&gt; {
+          if (!keyMap[k]) keyMap[k] = new Set()
+          ;(vals as string[]).forEach(v =&gt; keyMap[k].add(v))
+        })
+        if (Array.isArray(p.variants)) {
+          p.variants.forEach((sv: any) =&gt; {
+            Object.entries(sv?.combination || {}).forEach(([k, val]) =&gt; {
+              if (!keyMap[k]) keyMap[k] = new Set()
+              if (val) keyMap[k].add(String(val))
+            })
+          })
+        }
       })
-    })
     return Object.fromEntries(Object.entries(keyMap).map(([k, s]) =&gt; [k, Array.from(s)]))
   }, [filtered])
 
@@ -14207,7 +14227,8 @@ export default function SearchPageWrapper() {
       &lt;SearchPage /&gt;
     &lt;/Suspense&gt;
   )
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/(marketplace)/sell/page.tsx</div><pre>'use client'
 
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
@@ -14322,7 +14343,21 @@ const SELL_CSS = `
 `
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
-function ConfirmListingModal({ price, onConfirm, onCancel }: { price: number; onConfirm: () =&gt; void; onCancel: () =&gt; void }) {
+function ConfirmListingModal({
+  price,
+  hasStructuredVariants,
+  minVariantPrice,
+  maxVariantPrice,
+  onConfirm,
+  onCancel,
+}: {
+  price: number
+  hasStructuredVariants: boolean
+  minVariantPrice: number
+  maxVariantPrice: number
+  onConfirm: () =&gt; void
+  onCancel: () =&gt; void
+}) {
   const [agreed, setAgreed] = useState(false)
   const fmt = (n: number) =&gt; new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(n)
   const fee = price * 0.05
@@ -14344,23 +14379,49 @@ function ConfirmListingModal({ price, onConfirm, onCancel }: { price: number; on
 
         &lt;div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-2xl p-4 mb-4 border border-indigo-100"&gt;
           &lt;p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3"&gt;Fee Breakdown&lt;/p&gt;
-          &lt;div className="space-y-2 text-sm"&gt;
-            &lt;div className="flex justify-between"&gt;
-              &lt;span className="text-gray-500"&gt;Your listed price&lt;/span&gt;
-              &lt;span className="font-bold text-gray-900"&gt;{fmt(price)}&lt;/span&gt;
-            &lt;/div&gt;
-            &lt;div className="flex justify-between"&gt;
-              &lt;span className="text-gray-500"&gt;Platform fee (5%)&lt;/span&gt;
-              &lt;span className="font-bold text-red-500"&gt;− {fmt(fee)}&lt;/span&gt;
-            &lt;/div&gt;
-            &lt;div className="border-t border-indigo-200 pt-2 flex justify-between"&gt;
-              &lt;span className="font-bold text-gray-800"&gt;You receive&lt;/span&gt;
-              &lt;span className="font-black text-emerald-600 text-base"&gt;{fmt(receive)}&lt;/span&gt;
-            &lt;/div&gt;
-          &lt;/div&gt;
-          &lt;p className="text-[11px] text-indigo-500 mt-3 bg-white/60 rounded-xl p-2.5 leading-relaxed"&gt;
-            💡 To receive exactly &lt;strong&gt;{fmt(price)}&lt;/strong&gt;, list at &lt;strong&gt;{fmt(Math.ceil(price / 0.95))}&lt;/strong&gt;
-          &lt;/p&gt;
+          {!hasStructuredVariants ? (
+            &lt;&gt;
+              &lt;div className="space-y-2 text-sm"&gt;
+                &lt;div className="flex justify-between"&gt;
+                  &lt;span className="text-gray-500"&gt;Your listed price&lt;/span&gt;
+                  &lt;span className="font-bold text-gray-900"&gt;{fmt(price)}&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div className="flex justify-between"&gt;
+                  &lt;span className="text-gray-500"&gt;Platform fee (5%)&lt;/span&gt;
+                  &lt;span className="font-bold text-red-500"&gt;− {fmt(fee)}&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div className="border-t border-indigo-200 pt-2 flex justify-between"&gt;
+                  &lt;span className="font-bold text-gray-800"&gt;You receive&lt;/span&gt;
+                  &lt;span className="font-black text-emerald-600 text-base"&gt;{fmt(receive)}&lt;/span&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;p className="text-[11px] text-indigo-500 mt-3 bg-white/60 rounded-xl p-2.5 leading-relaxed"&gt;
+                💡 To receive exactly &lt;strong&gt;{fmt(price)}&lt;/strong&gt;, list at &lt;strong&gt;{fmt(Math.ceil(price / 0.95))}&lt;/strong&gt;
+              &lt;/p&gt;
+            &lt;/&gt;
+          ) : (
+            &lt;&gt;
+              &lt;div className="space-y-2 text-sm"&gt;
+                &lt;div className="flex justify-between"&gt;
+                  &lt;span className="text-gray-500"&gt;Lowest variant price&lt;/span&gt;
+                  &lt;span className="font-bold text-gray-900"&gt;{fmt(minVariantPrice)}&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div className="flex justify-between"&gt;
+                  &lt;span className="text-gray-500"&gt;Highest variant price&lt;/span&gt;
+                  &lt;span className="font-bold text-gray-900"&gt;{fmt(maxVariantPrice)}&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div className="border-t border-indigo-200 pt-2 flex justify-between"&gt;
+                  &lt;span className="font-bold text-gray-800"&gt;You receive (range)&lt;/span&gt;
+                  &lt;span className="font-black text-emerald-600 text-base"&gt;
+                    {fmt(minVariantPrice * 0.95)} – {fmt(maxVariantPrice * 0.95)}
+                  &lt;/span&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;p className="text-[11px] text-indigo-500 mt-3 bg-white/60 rounded-xl p-2.5 leading-relaxed"&gt;
+                💡 Variant rows use their own prices and stock. Base price is fallback only.
+              &lt;/p&gt;
+            &lt;/&gt;
+          )}
         &lt;/div&gt;
 
         &lt;div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-5"&gt;
@@ -14528,11 +14589,15 @@ function VariantRow({
 export default function SellPage() {
   const router = useRouter()
   const tagInputRef = useRef&lt;HTMLInputElement&gt;(null)
+  const skipNextCategoryResetRef = useRef(true)
+  const skipNextSubcategoryResetRef = useRef(true)
+  const SELL_DRAFT_KEY = 'BATAMART_SELL_DRAFT_V1'
 
   // Auth state
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [isBuyer, setIsBuyer]           = useState(false)
   const [appMode, setAppMode]           = useState(false)
+  const [hostels, setHostels]           = useState&lt;string[]&gt;([])
   const [deliveryAreas, setDeliveryAreas] = useState&lt;string[]&gt;([])
 
   // Form state
@@ -14545,6 +14610,7 @@ export default function SellPage() {
   const [categoryKey, setCategoryKey]       = useState('')
   const [subcategoryKey, setSubcategoryKey] = useState('')
   const [variantValues, setVariantValues]   = useState&lt;Record&lt;string, string[]&gt;&gt;({})
+  const [variantPricing, setVariantPricing] = useState&lt;Record&lt;string, { price: string; stock: string }&gt;&gt;({})
 
   // Images — same structure as original: preview + url + uploading flag
   const [images, setImages] = useState&lt;{ preview: string; url: string; uploading: boolean }[]&gt;([])
@@ -14557,10 +14623,51 @@ export default function SellPage() {
   const [loading, setLoading]               = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [error, setError]                   = useState('')
+  const [draftHydrated, setDraftHydrated]   = useState(false)
 
   const categories    = getCategoryList()
   const subcategories = categoryKey ? getSubcategoryList(categoryKey) : []
   const variantFields = (categoryKey &amp;&amp; subcategoryKey) ? getVariantFields(categoryKey, subcategoryKey) : []
+
+  // Restore draft after refresh/network issues
+  useEffect(() =&gt; {
+    try {
+      const raw = localStorage.getItem(SELL_DRAFT_KEY)
+      if (raw) {
+        const draft = JSON.parse(raw)
+        if (draft?.formData) setFormData(draft.formData)
+        if (draft?.categoryKey) setCategoryKey(draft.categoryKey)
+        if (draft?.subcategoryKey) setSubcategoryKey(draft.subcategoryKey)
+        if (draft?.variantValues) setVariantValues(draft.variantValues)
+        if (draft?.variantPricing) setVariantPricing(draft.variantPricing)
+        if (Array.isArray(draft?.tags)) setTags(draft.tags)
+        if (Array.isArray(draft?.images)) setImages(draft.images)
+      }
+    } catch {}
+    finally { setDraftHydrated(true) }
+  }, [])
+
+  // Persist draft continuously
+  useEffect(() =&gt; {
+    if (!draftHydrated) return
+    try {
+      const safeImages = images
+        .filter(img =&gt; !img.uploading &amp;&amp; !!img.url)
+        .map(img =&gt; ({ preview: img.url, url: img.url, uploading: false }))
+      localStorage.setItem(
+        SELL_DRAFT_KEY,
+        JSON.stringify({
+          formData,
+          categoryKey,
+          subcategoryKey,
+          variantValues,
+          variantPricing,
+          tags,
+          images: safeImages,
+        })
+      )
+    } catch {}
+  }, [draftHydrated, formData, categoryKey, subcategoryKey, variantValues, variantPricing, tags, images])
 
   useEffect(() =&gt; {
     if (document.getElementById('sell-anim')) return
@@ -14580,12 +14687,16 @@ export default function SellPage() {
         const cached = localStorage.getItem('user')
         if (cached) {
           const u = JSON.parse(cached)
+          const hostelsList = parseJsonArray(u?.university?.hostels)
           const areas = parseJsonArray(u?.university?.deliveryAreas)
-          if (areas.length &gt; 0) {
+          if (hostelsList.length &gt; 0 || areas.length &gt; 0) {
+            setHostels(hostelsList)
             setDeliveryAreas(areas)
-            if (u.hostelName) setFormData(f =&gt; ({ ...f, hostelName: u.hostelName || '' }))
+            const normalized = normalizeLocationFields(u.hostelName || '', u.landmark || '', areas)
+            const resolvedArea = resolveDeliveryAreaValue(normalized.landmark, areas)
+            if (normalized.hostelName) setFormData(f =&gt; ({ ...f, hostelName: normalized.hostelName }))
             if (u.roomNumber) setFormData(f =&gt; ({ ...f, roomNumber: u.roomNumber || '' }))
-            if (u.landmark)   setFormData(f =&gt; ({ ...f, landmark: u.landmark || '' }))
+            if (resolvedArea) setFormData(f =&gt; ({ ...f, landmark: resolvedArea }))
             setCheckingAuth(false)
             return
           }
@@ -14593,13 +14704,18 @@ export default function SellPage() {
         const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         if (res.ok) {
           const data = await res.json()
-          setDeliveryAreas(parseJsonArray(data?.user?.university?.deliveryAreas))
+          const hostelsList = parseJsonArray(data?.user?.university?.hostels)
+          const areas = parseJsonArray(data?.user?.university?.deliveryAreas)
+          setHostels(hostelsList)
+          setDeliveryAreas(areas)
           if (data.user) {
+            const normalized = normalizeLocationFields(data.user.hostelName || '', data.user.landmark || '', areas)
+            const resolvedArea = resolveDeliveryAreaValue(normalized.landmark, areas)
             setFormData(f =&gt; ({
               ...f,
-              hostelName: data.user.hostelName || '',
+              hostelName: normalized.hostelName,
               roomNumber: data.user.roomNumber || '',
-              landmark:   data.user.landmark   || '',
+              landmark: resolvedArea,
             }))
           }
         }
@@ -14610,8 +14726,18 @@ export default function SellPage() {
   }, [router])
 
   // Reset subcategory + variants when category changes
-  useEffect(() =&gt; { setSubcategoryKey(''); setVariantValues({}) }, [categoryKey])
-  useEffect(() =&gt; { setVariantValues({}) }, [subcategoryKey])
+  useEffect(() =&gt; {
+    if (!draftHydrated) return
+    if (skipNextCategoryResetRef.current) { skipNextCategoryResetRef.current = false; return }
+    setSubcategoryKey('')
+    setVariantValues({})
+  }, [categoryKey])
+  useEffect(() =&gt; {
+    if (!draftHydrated) return
+    if (skipNextSubcategoryResetRef.current) { skipNextSubcategoryResetRef.current = false; return }
+    setVariantValues({})
+    setVariantPricing({})
+  }, [subcategoryKey])
 
   // Auto-generate tags from name + category + variant values
   useEffect(() =&gt; {
@@ -14630,6 +14756,40 @@ export default function SellPage() {
     if (Array.isArray(val)) return val.filter((v): v is string =&gt; typeof v === 'string')
     if (typeof val === 'string') { try { return JSON.parse(val) } catch { return [] } }
     return []
+  }
+
+  function normalizeLocationFields(hostelName: string, landmark: string, areas: string[]) {
+    const hostel = String(hostelName || '').trim()
+    const mark = String(landmark || '').trim()
+    const areaSet = new Set((areas || []).map(a =&gt; String(a).trim().toLowerCase()))
+    const hostelLooksLikeArea = hostel &amp;&amp; areaSet.has(hostel.toLowerCase())
+    const markLooksLikeArea = mark &amp;&amp; areaSet.has(mark.toLowerCase())
+
+    if (hostelLooksLikeArea) {
+      return {
+        hostelName: markLooksLikeArea ? '' : mark,
+        landmark: hostel,
+      }
+    }
+
+    return { hostelName: hostel, landmark: mark }
+  }
+
+  function resolveDeliveryAreaValue(rawLandmark: string, areas: string[]) {
+    const raw = String(rawLandmark || '').trim()
+    if (!raw || !Array.isArray(areas) || areas.length === 0) return ''
+
+    const canon = (s: string) =&gt; s.toLowerCase().replace(/\s+/g, ' ').trim()
+    const rawCanon = canon(raw)
+
+    const exact = areas.find(a =&gt; canon(String(a)) === rawCanon)
+    if (exact) return exact
+
+    const fuzzy = areas.find(a =&gt; {
+      const aCanon = canon(String(a))
+      return aCanon.includes(rawCanon) || rawCanon.includes(aCanon)
+    })
+    return fuzzy || ''
   }
 
   // ── Image upload ──────────────────────────────────────────────────────────
@@ -14708,6 +14868,34 @@ export default function SellPage() {
     setVariantValues(prev =&gt; ({ ...prev, [key]: vals }))
   }
 
+  const variantKeysForMatrix = Object.keys(variantValues).filter(k =&gt; (variantValues[k] || []).length &gt; 0)
+  const variantCombinations = variantKeysForMatrix.reduce&lt;Record&lt;string, string&gt;[]&gt;(
+    (acc, key) =&gt; {
+      const values = variantValues[key] || []
+      if (acc.length === 0) return values.map(v =&gt; ({ [key]: v }))
+      const out: Record&lt;string, string&gt;[] = []
+      for (const row of acc) {
+        for (const v of values) out.push({ ...row, [key]: v })
+      }
+      return out
+    },
+    []
+  )
+
+  const comboKey = (combo: Record&lt;string, string&gt;) =&gt;
+    variantKeysForMatrix.map(k =&gt; `${k}:${combo[k]}`).join('|')
+
+  const hasStructuredVariants = variantCombinations.length &gt; 0
+  const variantPriceNumbers = hasStructuredVariants
+    ? variantCombinations.map(combo =&gt; {
+        const row = variantPricing[comboKey(combo)]
+        const val = Number(row?.price || formData.price || 0)
+        return Number.isFinite(val) ? val : 0
+      }).filter(v =&gt; v &gt; 0)
+    : []
+  const minVariantPrice = variantPriceNumbers.length ? Math.min(...variantPriceNumbers) : 0
+  const maxVariantPrice = variantPriceNumbers.length ? Math.max(...variantPriceNumbers) : 0
+
   const handleSubmit = (e: React.FormEvent) =&gt; {
     e.preventDefault()
     if (!formData.name.trim()) { setError('Product name is required'); return }
@@ -14716,6 +14904,16 @@ export default function SellPage() {
     if (!subcategoryKey) { setError('Please select a subcategory'); return }
     if (images.length &lt; 1) { setError('Please add at least 1 product image'); return }
     if (!allUploaded) { setError('Please wait for all images to finish uploading'); return }
+    if (hasStructuredVariants) {
+      for (const combo of variantCombinations) {
+        const key = comboKey(combo)
+        const row = variantPricing[key]
+        const rowPrice = Number(row?.price || formData.price)
+        const rowStock = Number(row?.stock || formData.quantity || 0)
+        if (!Number.isFinite(rowPrice) || rowPrice &lt;= 0) { setError('Each variant must have a valid price'); return }
+        if (!Number.isFinite(rowStock) || rowStock &lt; 0) { setError('Each variant must have valid stock'); return }
+      }
+    }
     setError(''); setShowConfirmModal(true)
   }
 
@@ -14726,7 +14924,18 @@ export default function SellPage() {
       const catLabel = CATEGORY_TREE[categoryKey]?.label ?? categoryKey
       const subLabel = CATEGORY_TREE[categoryKey]?.subcategories[subcategoryKey]?.label ?? subcategoryKey
 
-      const description = encodeProductData(variantValues, tags)
+      const description = hasStructuredVariants ? (formData.name.trim() || '') : encodeProductData(variantValues, tags)
+      const variantsPayload = hasStructuredVariants
+        ? variantCombinations.map(combo =&gt; {
+            const key = comboKey(combo)
+            const row = variantPricing[key]
+            return {
+              combination: combo,
+              price: Number(row?.price || formData.price),
+              stock: Number(row?.stock || formData.quantity || 0),
+            }
+          })
+        : []
 
       const response = await fetch('/api/products', {
         method: 'POST',
@@ -14738,12 +14947,16 @@ export default function SellPage() {
           price:       parseFloat(formData.price),
           quantity:    parseInt(formData.quantity) || 1,
           category:    catLabel,
+          categoryKey,
           subcategory: subLabel,
+          subcategoryKey,
+          variants: variantsPayload,
           images:      images.map(img =&gt; img.url),
         }),
       })
       const data = await response.json()
       if (response.ok) {
+        localStorage.removeItem(SELL_DRAFT_KEY)
         router.push('/my-shop')
       } else {
         setError(data.error || 'Failed to create product')
@@ -14773,6 +14986,9 @@ export default function SellPage() {
       {showConfirmModal &amp;&amp; (
         &lt;ConfirmListingModal
           price={parseFloat(formData.price) || 0}
+          hasStructuredVariants={hasStructuredVariants}
+          minVariantPrice={minVariantPrice}
+          maxVariantPrice={maxVariantPrice}
           onConfirm={handleConfirmListing}
           onCancel={() =&gt; setShowConfirmModal(false)}
         /&gt;
@@ -14807,9 +15023,21 @@ export default function SellPage() {
               &lt;Zap className="w-4 h-4 text-emerald-600" /&gt;
             &lt;/div&gt;
             &lt;div className="text-sm"&gt;
-              &lt;span className="text-gray-500"&gt;You'll receive &lt;/span&gt;
-              &lt;span className="font-black text-emerald-600"&gt;{fmt(parseFloat(formData.price) * 0.95)}&lt;/span&gt;
-              &lt;span className="text-gray-400 text-xs"&gt; after 5% fee&lt;/span&gt;
+              {!hasStructuredVariants ? (
+                &lt;&gt;
+                  &lt;span className="text-gray-500"&gt;You'll receive &lt;/span&gt;
+                  &lt;span className="font-black text-emerald-600"&gt;{fmt(parseFloat(formData.price) * 0.95)}&lt;/span&gt;
+                  &lt;span className="text-gray-400 text-xs"&gt; after 5% fee&lt;/span&gt;
+                &lt;/&gt;
+              ) : (
+                &lt;&gt;
+                  &lt;span className="text-gray-500"&gt;Variant payout range &lt;/span&gt;
+                  &lt;span className="font-black text-emerald-600"&gt;
+                    {minVariantPrice &gt; 0 ? fmt(minVariantPrice * 0.95) : '—'}{maxVariantPrice &gt; 0 ? ` – ${fmt(maxVariantPrice * 0.95)}` : ''}
+                  &lt;/span&gt;
+                  &lt;span className="text-gray-400 text-xs"&gt; after 5% fee&lt;/span&gt;
+                &lt;/&gt;
+              )}
             &lt;/div&gt;
           &lt;/div&gt;
         )}
@@ -14831,7 +15059,9 @@ export default function SellPage() {
             &lt;/div&gt;
             &lt;div className="grid grid-cols-2 gap-3"&gt;
               &lt;div&gt;
-                &lt;label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"&gt;Price (₦) *&lt;/label&gt;
+                &lt;label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"&gt;
+                  {hasStructuredVariants ? 'Base Price (Fallback) (₦) *' : 'Price (₦) *'}
+                &lt;/label&gt;
                 &lt;input
                   type="number"
                   value={formData.price}
@@ -14840,6 +15070,11 @@ export default function SellPage() {
                   className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:border-indigo-400 focus:bg-white focus:outline-none transition-all text-sm font-medium"
                   placeholder="50000"
                 /&gt;
+                {hasStructuredVariants &amp;&amp; (
+                  &lt;p className="text-[11px] text-gray-400 mt-1"&gt;
+                    Variant row prices are used at checkout. This is only fallback/base.
+                  &lt;/p&gt;
+                )}
               &lt;/div&gt;
               &lt;div&gt;
                 &lt;label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"&gt;Qty in Stock *&lt;/label&gt;
@@ -14913,6 +15148,59 @@ export default function SellPage() {
                 /&gt;
               ))}
             &lt;/div&gt;
+            {variantCombinations.length &gt; 0 &amp;&amp; (
+              &lt;div className="mt-5 border border-gray-100 rounded-2xl overflow-hidden"&gt;
+                &lt;div className="px-3 py-2.5 bg-gray-50 border-b border-gray-100"&gt;
+                  &lt;p className="text-xs font-bold text-gray-600"&gt;Variant Inventory&lt;/p&gt;
+                &lt;/div&gt;
+                &lt;div className="overflow-x-auto"&gt;
+                  &lt;table className="w-full text-xs"&gt;
+                    &lt;thead&gt;
+                      &lt;tr className="bg-white border-b border-gray-100"&gt;
+                        {variantKeysForMatrix.map(key =&gt; (
+                          &lt;th key={key} className="text-left px-3 py-2 font-bold text-gray-500 capitalize"&gt;{key.replace(/_/g, ' ')}&lt;/th&gt;
+                        ))}
+                        &lt;th className="text-left px-3 py-2 font-bold text-gray-500"&gt;Price&lt;/th&gt;
+                        &lt;th className="text-left px-3 py-2 font-bold text-gray-500"&gt;Stock&lt;/th&gt;
+                      &lt;/tr&gt;
+                    &lt;/thead&gt;
+                    &lt;tbody&gt;
+                      {variantCombinations.map((combo) =&gt; {
+                        const key = comboKey(combo)
+                        const row = variantPricing[key] || { price: formData.price, stock: formData.quantity || '1' }
+                        return (
+                          &lt;tr key={key} className="border-b border-gray-50 last:border-0"&gt;
+                            {variantKeysForMatrix.map(k =&gt; (
+                              &lt;td key={`${key}-${k}`} className="px-3 py-2 font-semibold text-gray-700"&gt;{combo[k]}&lt;/td&gt;
+                            ))}
+                            &lt;td className="px-3 py-2"&gt;
+                              &lt;input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.price}
+                                onChange={e =&gt; setVariantPricing(prev =&gt; ({ ...prev, [key]: { ...row, price: e.target.value } }))}
+                                className="w-24 px-2 py-1 rounded-lg border border-gray-200 focus:outline-none focus:border-indigo-400"
+                              /&gt;
+                            &lt;/td&gt;
+                            &lt;td className="px-3 py-2"&gt;
+                              &lt;input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={row.stock}
+                                onChange={e =&gt; setVariantPricing(prev =&gt; ({ ...prev, [key]: { ...row, stock: e.target.value } }))}
+                                className="w-20 px-2 py-1 rounded-lg border border-gray-200 focus:outline-none focus:border-indigo-400"
+                              /&gt;
+                            &lt;/td&gt;
+                          &lt;/tr&gt;
+                        )
+                      })}
+                    &lt;/tbody&gt;
+                  &lt;/table&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            )}
           &lt;/div&gt;
         )}
 
@@ -27630,6 +27918,8 @@ export async function POST(request: NextRequest) {
 
     type CartItem = {
       productId:  string
+      variantId?: string | null
+      variantData?: Record&lt;string, string&gt; | null
       name:       string
       price:      number
       quantity:   number
@@ -27646,12 +27936,24 @@ export async function POST(request: NextRequest) {
       for (const item of cartItems) {
         const product = await prisma.product.findUnique({
           where:   { id: item.productId },
-          include: { seller: true },
+          include: { seller: true, variants: true },
         })
         if (!product) {
           return NextResponse.json({ error: `Product not found: ${item.name}` }, { status: 404 })
         }
-        if (!product.isActive || product.quantity &lt; item.quantity) {
+        let resolvedPrice = product.price
+        let resolvedStock = product.quantity
+
+        if (item.variantId) {
+          const variant = product.variants.find(v =&gt; v.id === item.variantId)
+          if (!variant) {
+            return NextResponse.json({ error: `Variant not found for product: ${product.name}` }, { status: 400 })
+          }
+          resolvedPrice = variant.price
+          resolvedStock = variant.stock
+        }
+
+        if (!product.isActive || resolvedStock &lt; item.quantity) {
           return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 })
         }
         if (item.orderNote &amp;&amp; String(item.orderNote).length &gt; 300) {
@@ -27659,8 +27961,10 @@ export async function POST(request: NextRequest) {
         }
         items.push({
           productId:  product.id,
+          variantId:  item.variantId || null,
+          variantData: item.variantData || null,
           name:       product.name,
-          price:      product.price, // ← always from DB, never from client
+          price:      resolvedPrice, // ← always from DB, never from client
           quantity:   item.quantity,
           category:   product.category,
           sellerId:   product.sellerId,
@@ -27671,7 +27975,7 @@ export async function POST(request: NextRequest) {
     } else if (productId) {
       const product = await prisma.product.findUnique({
         where:   { id: productId },
-        include: { seller: true },
+        include: { seller: true, variants: true },
       })
       if (!product) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
@@ -27681,6 +27985,8 @@ export async function POST(request: NextRequest) {
       }
       items = [{
         productId:  product.id,
+        variantId:  body.variantId || null,
+        variantData: body.variantData || null,
         name:       product.name,
         price:      product.price,
         quantity:   1,
@@ -27782,6 +28088,8 @@ export async function POST(request: NextRequest) {
 export async function createOrders(
   items: {
     productId:  string
+    variantId?: string | null
+    variantData?: Record&lt;string, string&gt; | null
     name:       string
     price:      number
     quantity:   number
@@ -27885,6 +28193,15 @@ export async function createOrders(
             isPaid:             true,
             status:             'PENDING' as const,
             orderNote,
+            items: {
+              create: sellerItems.map(item =&gt; ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                variantData: item.variantData || null,
+                quantity: Number(item.quantity),
+                price: Number(item.price),
+              })),
+            },
             payment: {
               create: {
                 amount:        Number(orderFees.totalAmount),
@@ -27899,33 +28216,59 @@ export async function createOrders(
 
         // TOCTOU-safe stock decrement
         for (const item of sellerItems) {
-          const updated = await tx.product.updateMany({
-            where: {
-              id:       item.productId,
-              quantity: { gte: Number(item.quantity) },
-            },
-            data: { quantity: { decrement: Number(item.quantity) } },
-          })
-
-          if (updated.count === 0) {
-            throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
-          }
-
-          const afterUpdate = await tx.product.findUnique({
-            where:  { id: item.productId },
-            select: { id: true, name: true, quantity: true },
-          })
-
-          if (afterUpdate &amp;&amp; afterUpdate.quantity &lt;= 0) {
+          if (item.variantId) {
+            const updatedVariant = await tx.productVariant.updateMany({
+              where: {
+                id: item.variantId,
+                productId: item.productId,
+                stock: { gte: Number(item.quantity) },
+              },
+              data: { stock: { decrement: Number(item.quantity) } },
+            })
+            if (updatedVariant.count === 0) {
+              throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
+            }
+            const remainingVariants = await tx.productVariant.findMany({
+              where: { productId: item.productId },
+              select: { stock: true },
+            })
+            const totalStock = remainingVariants.reduce((sum, v) =&gt; sum + v.stock, 0)
             await tx.product.update({
               where: { id: item.productId },
-              data:  { isActive: false },
+              data: {
+                quantity: totalStock,
+                isActive: totalStock &gt; 0,
+              },
             })
-            outOfStockAlerts.push({
-              sellerId,
-              productId:   afterUpdate.id,
-              productName: afterUpdate.name,
+          } else {
+            const updated = await tx.product.updateMany({
+              where: {
+                id:       item.productId,
+                quantity: { gte: Number(item.quantity) },
+              },
+              data: { quantity: { decrement: Number(item.quantity) } },
             })
+
+            if (updated.count === 0) {
+              throw new Error(`STOCK_GONE:${item.productId}:${item.name}`)
+            }
+
+            const afterUpdate = await tx.product.findUnique({
+              where:  { id: item.productId },
+              select: { id: true, name: true, quantity: true },
+            })
+
+            if (afterUpdate &amp;&amp; afterUpdate.quantity &lt;= 0) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data:  { isActive: false },
+              })
+              outOfStockAlerts.push({
+                sellerId,
+                productId:   afterUpdate.id,
+                productName: afterUpdate.name,
+              })
+            }
           }
         }
 
@@ -28088,7 +28431,8 @@ async function notifySellerOutOfStock(sellerId: string, productId: string, produ
   }
 
   await Promise.allSettled(tasks)
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/payments/verify/route.ts</div><pre>// app/api/payments/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -28176,6 +28520,8 @@ export async function GET(request: NextRequest) {
 
     type CartItem = {
       productId:  string
+      variantId?: string | null
+      variantData?: Record&lt;string, string&gt; | null
       name:       string
       price:      number
       quantity:   number
@@ -28229,7 +28575,7 @@ export async function GET(request: NextRequest) {
     for (const item of meta.cartItems) {
       const product = await prisma.product.findUnique({
         where:  { id: item.productId },
-        select: { id: true, name: true, quantity: true, isActive: true },
+        include: { variants: true },
       })
 
       if (!product) {
@@ -28238,10 +28584,17 @@ export async function GET(request: NextRequest) {
       if (!product.isActive) {
         return appRedirect(`/checkout?error=product_inactive&amp;product=${encodeURIComponent(item.name)}`)
       }
-      if (product.quantity &lt; item.quantity) {
+      const variant = item.variantId
+        ? product.variants.find(v =&gt; v.id === item.variantId)
+        : null
+      if (item.variantId &amp;&amp; !variant) {
+        return appRedirect(`/checkout?error=product_inactive&amp;product=${encodeURIComponent(item.name)}`)
+      }
+      const availableStock = variant ? variant.stock : product.quantity
+      if (availableStock &lt; item.quantity) {
         return appRedirect(`/checkout?error=out_of_stock&amp;product=${encodeURIComponent(item.name)}`)
       }
-      console.log(`✅ ${item.name}: OK (stock: ${product.quantity})`)
+      console.log(`✅ ${item.name}: OK (stock: ${availableStock})`)
     }
 
     // STEP 6: Create orders + DeliveryBatch
@@ -28481,7 +28834,8 @@ async function notifySellerOfNewOrder(
   }
 
   await Promise.allSettled(tasks)
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/route.ts</div><pre>// app/api/products/route.ts
 export const dynamic = 'force-dynamic'
 
@@ -28547,6 +28901,9 @@ export async function GET(request: NextRequest) {
         OR: [
           { name:        { contains: token, mode: 'insensitive' } },
           { category:    { contains: token, mode: 'insensitive' } },
+          { categoryKey: { contains: token, mode: 'insensitive' } },
+          { subcategory: { contains: token, mode: 'insensitive' } },
+          { subcategoryKey: { contains: token, mode: 'insensitive' } },
           { description: { contains: token, mode: 'insensitive' } },
         ],
       }))
@@ -28565,6 +28922,7 @@ export async function GET(request: NextRequest) {
               completedOrders: true,
             },
           },
+          variants: true,
         },
         orderBy: { createdAt: 'desc' },
         take:    limit,
@@ -28608,9 +28966,12 @@ export async function POST(request: NextRequest) {
       description,
       price,
       category,
+      categoryKey,
       subcategory,
+      subcategoryKey,
       quantity,
       images,
+      variants,
       hostelName,
       roomNumber,
       landmark,
@@ -28628,24 +28989,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 })
     }
 
+    const normalizedVariants = Array.isArray(variants)
+      ? variants
+          .map((v: any) =&gt; ({
+            combination: v?.combination &amp;&amp; typeof v.combination === 'object' ? v.combination : null,
+            price: Number(v?.price),
+            stock: Number(v?.stock),
+            sku: v?.sku ? String(v.sku) : null,
+            imageUrl: v?.imageUrl ? String(v.imageUrl) : null,
+          }))
+          .filter((v: any) =&gt; v.combination &amp;&amp; Number.isFinite(v.price) &amp;&amp; v.price &gt; 0 &amp;&amp; Number.isFinite(v.stock) &amp;&amp; v.stock &gt;= 0)
+      : []
+
+    const hasStructuredVariants = normalizedVariants.length &gt; 0
+    const basePrice = Number(price)
+    const minVariantPrice = hasStructuredVariants
+      ? Math.min(...normalizedVariants.map((v: any) =&gt; v.price))
+      : basePrice
+    const totalVariantStock = hasStructuredVariants
+      ? normalizedVariants.reduce((sum: number, v: any) =&gt; sum + v.stock, 0)
+      : Number(quantity)
+
     const product = await prisma.product.create({
       data: {
         name:        String(name).trim().substring(0, 200),
         description: description ? String(description).trim().substring(0, 5000) : '',
-        price:       Number(price),
+        price:       minVariantPrice,
+        basePrice,
         category:    String(category),
-        // subcategory is stored as a JSON field if it exists in schema,
-        // otherwise appended to category string for backward compat
-        // NOTE: Add `subcategory String?` to schema if not present
+        ...(categoryKey ? { categoryKey: String(categoryKey) } : {}),
         ...(subcategory ? { subcategory: String(subcategory) } : {}),
-        quantity:    Number(quantity),
+        ...(subcategoryKey ? { subcategoryKey: String(subcategoryKey) } : {}),
+        variantsEnabled: hasStructuredVariants,
+        quantity:    totalVariantStock,
         images:      Array.isArray(images) ? images : [],
         seller:      { connect: { id: user.id } },
         hostelName:  hostelName ? String(hostelName).trim() : (user.hostelName || ''),
         roomNumber:  roomNumber  ? String(roomNumber).trim()  : (user.roomNumber  || ''),
         landmark:    landmark    ? String(landmark).trim()    : (user.landmark    || ''),
         university:  { connect: { id: user.universityId } },
+        ...(hasStructuredVariants
+          ? {
+              variants: {
+                create: normalizedVariants.map((v: any) =&gt; ({
+                  combination: v.combination,
+                  price: v.price,
+                  stock: v.stock,
+                  ...(v.sku ? { sku: v.sku } : {}),
+                  ...(v.imageUrl ? { imageUrl: v.imageUrl } : {}),
+                })),
+              },
+            }
+          : {}),
       },
+      include: { variants: true },
     })
 
     return NextResponse.json({ success: true, product }, { status: 201 })
@@ -28653,7 +29050,8 @@ export async function POST(request: NextRequest) {
     console.error('Create product error:', error)
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
   }
-}</pre></div>
+}
+</pre></div>
 <div class='file-block'><div class='file-header'>app/api/products/feed/route.ts</div><pre>// app/api/products/feed/route.ts
 //
 // PHASE 1 (no/few sales): hot = most viewed products
@@ -32905,6 +33303,7 @@ import { persist } from 'zustand/middleware'
 export interface CartItem {
   id: string
   productId: string
+  variantId?: string
   name: string
   price: number
   quantity: number
@@ -32937,14 +33336,14 @@ export const useCartStore = create&lt;CartState&gt;()(
 
       addItem: (item) =&gt; {
         const { items } = get()
-        const existingItem = items.find((i) =&gt; i.productId === item.productId)
+        const existingItem = items.find((i) =&gt; i.productId === item.productId &amp;&amp; (i.variantId || '') === (item.variantId || ''))
 
         if (existingItem) {
           const newQuantity = existingItem.quantity + (item.quantity || 1)
           if (newQuantity &lt;= item.maxQuantity) {
             set({
               items: items.map((i) =&gt;
-                i.productId === item.productId
+                i.productId === item.productId &amp;&amp; (i.variantId || '') === (item.variantId || '')
                   ? { ...i, quantity: newQuantity, selectedVariants: item.selectedVariants ?? i.selectedVariants }
                   : i
               ),
@@ -32995,7 +33394,8 @@ export const useCartStore = create&lt;CartState&gt;()(
     }),
     { name: 'BATAMART-cart-storage' }
   )
-)</pre></div>
+)
+</pre></div>
 <div class='file-block'><div class='file-header'>lib/client-cache.ts</div><pre>type CacheRecord&lt;T&gt; = {
   value: T
   expiresAt: number
@@ -36263,8 +36663,10 @@ model Product {
   name         String
   description  String
   price        Float
+  basePrice    Float?
   images       String[]
   category     String
+  categoryKey  String?
   quantity     Int             @default(1)
   hostelName   String
   roomNumber   String
@@ -36280,6 +36682,8 @@ model Product {
   isDeleted    Boolean         @default(false)
   universityId String?
   subcategory     String?
+  subcategoryKey  String?
+  variantsEnabled Boolean       @default(false)
   marketPrice     Float?          // Last confirmed campus sale price for this product type
   discountPercent Int?            // % cheaper than last confirmed sale price; null = not a deal
   isDeal          Boolean         @default(false)
@@ -36291,6 +36695,8 @@ model Product {
   hotReason       String?         // "VIEWS" | "DEAL" | "BOTH"
   hotScore        Int             @default(0)
   cartItems       CartItem[]
+  variants        ProductVariant[]
+  orderItems      OrderItem[]
   orders       Order[]
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   university   University?     @relation(fields: [universityId], references: [id])
@@ -36300,6 +36706,9 @@ model Product {
   @@index([sellerId])
   @@index([category])
   @@index([subcategory])
+  @@index([categoryKey])
+  @@index([subcategoryKey])
+  @@index([variantsEnabled])
   @@index([isActive])
   @@index([isDeleted])
   @@index([createdAt])
@@ -36309,6 +36718,23 @@ model Product {
   @@index([isHot])
   @@index([conditionType])
   @@index([nameKey, conditionType, hasChangedParts, variantKey])
+  @@schema("public")
+}
+
+model ProductVariant {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  combination Json
+  price       Float
+  stock       Int      @default(0)
+  sku         String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  orderItems  OrderItem[]
+
+  @@index([productId])
+  @@index([stock])
   @@schema("public")
 }
 
@@ -36371,6 +36797,7 @@ model Order {
   referralReward     ReferralReward?
   reports            Report[]
   reviews            Review[]
+  items              OrderItem[]
 
   @@index([buyerId])
   @@index([sellerId])
@@ -36381,6 +36808,25 @@ model Order {
   @@index([orderedAt])
   @@index([sellerId, status])
   @@index([riderId, status])
+  @@schema("public")
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  variantData Json?
+  quantity    Int
+  price       Float
+  createdAt   DateTime        @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
   @@schema("public")
 }
 
