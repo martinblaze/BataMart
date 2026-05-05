@@ -181,8 +181,10 @@ export default function CheckoutPage() {
     </div>
   )
 
-  // ── FIX #4: Show server fee if available, else show a placeholder ──
-  const deliveryFee   = serverDeliveryFee ?? 800
+  // ── FIX: Delivery fee is ₦800 per unique seller (server remains source of truth). ──
+  const uniqueSellers = Math.max(1, new Set(cartItems.map(item => item.sellerId)).size)
+  const fallbackDeliveryFee = uniqueSellers * 800
+  const deliveryFee   = serverDeliveryFee ?? fallbackDeliveryFee
   const subtotal      = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const totalAmount   = subtotal + deliveryFee
   const platformFee   = subtotal * 0.05
@@ -436,9 +438,9 @@ export default function CheckoutPage() {
                   <span className="text-gray-500 flex items-center gap-1.5">
                     <Truck className="w-3.5 h-3.5" /> Delivery Fee
                   </span>
-                  {/* ── FIX #4: Shows server fee or placeholder ── */}
+                  {/* Shows server fee or seller-based fallback placeholder */}
                   <span className="font-bold text-gray-900">
-                    {serverDeliveryFee !== null ? formatPrice(serverDeliveryFee) : formatPrice(800)}
+                    {serverDeliveryFee !== null ? formatPrice(serverDeliveryFee) : formatPrice(fallbackDeliveryFee)}
                   </span>
                 </div>
               </div>

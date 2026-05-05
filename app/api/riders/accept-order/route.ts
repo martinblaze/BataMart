@@ -99,18 +99,25 @@ export async function POST(request: NextRequest) {
 
     // ── Atomic assignment ─────────────────────────────────────────────────
     await prisma.$transaction(async (tx) => {
-      // Assign rider to the batch
-      await tx.deliveryBatch.update({
-        where: { id: batchId },
-        data:  {
+      // Claim batch only if still unassigned and pending (race-safe).
+      const claim = await tx.deliveryBatch.updateMany({
+        where: {
+          id: batchId,
+          riderId: null,
+          status: 'PENDING',
+        },
+        data: {
           riderId: user.id,
           status:  'RIDER_ASSIGNED',
         },
       })
+      if (claim.count !== 1) {
+        throw new Error('BATCH_ALREADY_CLAIMED')
+      }
 
       // Assign rider to every order in the batch + flip to RIDER_ASSIGNED
       await tx.order.updateMany({
-        where: { batchId },
+        where: { batchId, riderId: null, status: 'PENDING' },
         data:  {
           riderId:         user.id,
           status:          'RIDER_ASSIGNED',
@@ -184,6 +191,9 @@ export async function POST(request: NextRequest) {
       orderCount:  batch.orders.length,
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'BATCH_ALREADY_CLAIMED') {
+      return NextResponse.json({ error: 'Batch already assigned to another rider' }, { status: 409 })
+    }
     console.error('Accept batch error:', error)
     return NextResponse.json({
       error:   'Failed to accept batch',

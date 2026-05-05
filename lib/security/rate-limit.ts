@@ -27,8 +27,15 @@ export async function checkRateLimitDistributed(
   key: string,
   max: number,
   windowMs: number,
+  options?: { requireDistributedInProduction?: boolean }
 ): Promise<{ allowed: boolean; retryAfterSecs: number }> {
+  const requireDistributedInProduction = options?.requireDistributedInProduction ?? false
+  const isProd = process.env.NODE_ENV === 'production'
   if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+    if (isProd && requireDistributedInProduction) {
+      // Fail closed for critical abuse-sensitive endpoints in production.
+      return { allowed: false, retryAfterSecs: 60 }
+    }
     return checkRateLimit(key, max, windowMs)
   }
 

@@ -39,7 +39,12 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
-    const limit = await checkRateLimitDistributed(`upload:${user.id}:${ip}`, 20, 15 * 60 * 1000)
+    const limit = await checkRateLimitDistributed(
+      `upload:${user.id}:${ip}`,
+      20,
+      15 * 60 * 1000,
+      { requireDistributedInProduction: true },
+    )
     if (!limit.allowed) {
       return NextResponse.json(
         { error: 'Too many uploads. Try again later.' },

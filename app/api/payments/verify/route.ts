@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
   if (!/^BATAMART-[0-9]{10,}-[A-Za-z0-9_-]{4,20}$/.test(reference)) {
     return appRedirect('/checkout?error=invalid_reference')
   }
-  const rate = await checkRateLimitDistributed(`payments:verify:${ip}:${reference}`, 10, 10 * 60 * 1000)
+  const rate = await checkRateLimitDistributed(
+    `payments:verify:${ip}:${reference}`,
+    10,
+    10 * 60 * 1000,
+    { requireDistributedInProduction: true },
+  )
   if (!rate.allowed) {
     return appRedirect('/checkout?error=rate_limited')
   }

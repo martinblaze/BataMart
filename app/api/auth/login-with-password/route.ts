@@ -4,34 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateToken, comparePassword } from '@/lib/auth/auth'
 import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
-
-// ── In-memory rate limiter ─────────────────────────────────────────────────
-const loginRateMap = new Map<string, { count: number; resetAt: number }>()
-const LOGIN_LIMIT     = 10
-const LOGIN_WINDOW_MS = 15 * 60 * 1000
-
-function checkLoginRateLimit(ip: string): { allowed: boolean; retryAfterSecs: number } {
-  const now   = Date.now()
-  const entry = loginRateMap.get(ip)
-
-  if (!entry || now > entry.resetAt) {
-    loginRateMap.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
-    return { allowed: true, retryAfterSecs: 0 }
-  }
-  if (entry.count >= LOGIN_LIMIT) {
-    return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
-  }
-  entry.count++
-  return { allowed: true, retryAfterSecs: 0 }
-}
-
-setInterval(() => {
-  const now = Date.now()
-  Array.from(loginRateMap.entries()).forEach(([key, val]) => {
-    if (now > val.resetAt) loginRateMap.delete(key)
-  })
-}, 60_000)
-// ──────────────────────────────────────────────────────────────────────────
+import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,12 +13,13 @@ export async function POST(request: NextRequest) {
     const originErr = enforceSameOrigin(request)
     if (originErr) return originErr
 
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
-      request.headers.get('x-real-ip') ??
-      'unknown'
-
-    const { allowed, retryAfterSecs } = checkLoginRateLimit(ip)
+    const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
+    const { allowed, retryAfterSecs } = await checkRateLimitDistributed(
+      `login-with-password:${ip}`,
+      10,
+      15 * 60 * 1000,
+      { requireDistributedInProduction: true }
+    )
     if (!allowed) {
       return NextResponse.json(
         { error: `Too many login attempts. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) and try again.` },
@@ -66,8 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    // ── BLOCK RIDER ACCOUNTS from the main login ────────────────────────────
-    // Riders have a separate login at /rider/login — they must never come through here.
+    // Riders have a separate login at /rider/login.
     if (user.role === 'RIDER') {
       return NextResponse.json(
         {
@@ -110,11 +83,11 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       user: {
-        id:         user.id,
-        name:       user.name,
-        phone:      user.phone,
-        email:      user.email,
-        role:       user.role,
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
         hostelName: user.hostelName,
       },
     })

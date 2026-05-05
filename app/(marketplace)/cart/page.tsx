@@ -92,10 +92,10 @@ export default function CartPage() {
     </div>
   )
 
-  const deliveryFee   = 800
+  const uniqueSellers = new Set(items.map(i => i.sellerId)).size
+  const deliveryFee   = 800 * Math.max(1, uniqueSellers)
   const subtotal      = getTotalPrice()
   const total         = subtotal + deliveryFee
-  const uniqueSellers = new Set(items.map(i => i.sellerId)).size
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] pb-24">

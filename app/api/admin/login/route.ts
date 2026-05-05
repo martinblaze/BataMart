@@ -15,7 +15,12 @@ export async function POST(req: NextRequest) {
     if (originErr) return originErr
 
     const ip = getIpKey(req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip'))
-    const rate = await checkRateLimitDistributed(`admin:login:${ip}`, 10, 15 * 60 * 1000)
+    const rate = await checkRateLimitDistributed(
+      `admin:login:${ip}`,
+      10,
+      15 * 60 * 1000,
+      { requireDistributedInProduction: true },
+    )
     if (!rate.allowed) {
       return NextResponse.json(
         { error: 'Too many login attempts. Try again later.' },

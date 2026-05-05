@@ -60,7 +60,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
-    const rate = await checkRateLimitDistributed(`payments:init:${user.id}:${ip}`, 20, 15 * 60 * 1000)
+    const rate = await checkRateLimitDistributed(
+      `payments:init:${user.id}:${ip}`,
+      20,
+      15 * 60 * 1000,
+      { requireDistributedInProduction: true },
+    )
     if (!rate.allowed) {
       return NextResponse.json({ error: 'Too many checkout attempts. Please wait.' }, { status: 429, headers: { 'Retry-After': String(rate.retryAfterSecs) } })
     }

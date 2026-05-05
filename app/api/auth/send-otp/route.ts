@@ -3,40 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOTP, sendEmailOTP } from '@/lib/auth/auth'
 import { enforceJsonRequest, enforceSameOrigin } from '@/lib/security/request'
-
-// ── In-memory rate limiter ────────────────────────────────────────────────────
-// Allows 5 OTP requests per IP per 15 minutes.
-// For multi-instance deployments swap this for Redis (e.g. @upstash/ratelimit).
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
+import { checkRateLimitDistributed, getIpKey } from '@/lib/security/rate-limit'
 
 const RATE_LIMIT_MAX = 5
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
-
-function checkRateLimit(key: string): { allowed: boolean; retryAfterSecs: number } {
-  const now = Date.now()
-  const entry = rateLimitMap.get(key)
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
-    return { allowed: true, retryAfterSecs: 0 }
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return { allowed: false, retryAfterSecs: Math.ceil((entry.resetAt - now) / 1000) }
-  }
-
-  entry.count++
-  return { allowed: true, retryAfterSecs: 0 }
-}
-
-// Periodically clear stale entries to prevent memory leak
-setInterval(() => {
-  const now = Date.now()
-  Array.from(rateLimitMap.entries()).forEach(([key, val]) => {
-    if (now > val.resetAt) rateLimitMap.delete(key)
-  })
-}, 60 * 1000)
-// ─────────────────────────────────────────────────────────────────────────────
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,13 +15,13 @@ export async function POST(request: NextRequest) {
     const originErr = enforceSameOrigin(request)
     if (originErr) return originErr
 
-    // Rate limit by IP
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
-      request.headers.get('x-real-ip') ??
-      'unknown'
-
-    const { allowed, retryAfterSecs } = checkRateLimit(`send-otp:${ip}`)
+    const ip = getIpKey(request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip'))
+    const { allowed, retryAfterSecs } = await checkRateLimitDistributed(
+      `send-otp:${ip}`,
+      RATE_LIMIT_MAX,
+      RATE_LIMIT_WINDOW_MS,
+      { requireDistributedInProduction: true }
+    )
     if (!allowed) {
       return NextResponse.json(
         { error: `Too many requests. Please wait ${Math.ceil(retryAfterSecs / 60)} minute(s) before trying again.` },
@@ -72,7 +42,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For login: check user exists
     if (isLogin) {
       const user = await prisma.user.findUnique({ where: { email } })
       if (!user) {
@@ -82,7 +51,6 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // For signup: check user doesn't already exist
       const existingUser = await prisma.user.findUnique({ where: { email } })
       if (existingUser) {
         return NextResponse.json(
@@ -92,10 +60,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate and save OTP
     const otpCode = await createOTP(email)
-
-    // Send OTP via email (Resend in prod, console log in dev)
     const sent = await sendEmailOTP(email, otpCode)
 
     if (!sent) {
